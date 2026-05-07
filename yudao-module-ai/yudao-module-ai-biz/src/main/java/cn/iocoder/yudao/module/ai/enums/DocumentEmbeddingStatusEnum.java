@@ -10,7 +10,7 @@ import lombok.Getter;
 @AllArgsConstructor
 public enum DocumentEmbeddingStatusEnum {
 
-    WAITING(0, "等待向量化"),
+    PENDING(0, "等待向量化"),
     EMBEDDING(10, "向量化中"),
     SUCCESS(20, "向量化成功"),
     FAILED(30, "向量化失败");

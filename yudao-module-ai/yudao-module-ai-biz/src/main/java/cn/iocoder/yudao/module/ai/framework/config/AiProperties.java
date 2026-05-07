@@ -329,6 +329,11 @@ public class AiProperties {
          */
         private Integer maxFileSizeMb = 50;
 
+        /**
+         * 文档上传本地存储目录。生产环境应切换为对象存储实现，例如 MinIO。
+         */
+        private String storageBasePath = ".data/ai-documents";
+
         public Integer getDefaultChunkSize() {
             return defaultChunkSize;
         }
@@ -351,6 +356,14 @@ public class AiProperties {
 
         public void setMaxFileSizeMb(Integer maxFileSizeMb) {
             this.maxFileSizeMb = maxFileSizeMb;
+        }
+
+        public String getStorageBasePath() {
+            return storageBasePath;
+        }
+
+        public void setStorageBasePath(String storageBasePath) {
+            this.storageBasePath = storageBasePath;
         }
     }
 }

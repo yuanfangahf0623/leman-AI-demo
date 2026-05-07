@@ -17,7 +17,9 @@ import static cn.iocoder.yudao.module.ai.enums.AiKnowledgeErrorCodeConstants.KNO
 import static cn.iocoder.yudao.module.ai.enums.AiKnowledgeErrorCodeConstants.KNOWLEDGE_NOT_EXISTS;
 
 /**
- * AI knowledge service implementation.
+ * AI 知识库 Service 实现。
+ *
+ * <p>负责知识库 CRUD 的业务编排，包括租户边界、code 唯一性和逻辑删除入口。</p>
  */
 @Service
 @RequiredArgsConstructor
@@ -31,11 +33,14 @@ public class AiKnowledgeServiceImpl implements AiKnowledgeService {
     @Override
     @Transactional(rollbackFor = Exception.class)
     public Long createKnowledge(AiKnowledgeCreateReqVO createReqVO) {
+        // 当前租户是知识库唯一性和数据隔离的边界。
         Long tenantId = AiTenantContextHolder.getTenantId();
+        // 同一租户内知识库 code 不允许重复。
         validateCodeUnique(tenantId, null, createReqVO.getCode());
 
         AiKnowledgeBaseDO knowledgeBase = AiKnowledgeConvert.INSTANCE.convert(createReqVO);
         knowledgeBase.setTenantId(tenantId);
+        // 新建知识库时初始化状态和统计字段，文档/切片数量后续由文档流程维护。
         knowledgeBase.setStatus(knowledgeBase.getStatus() != null ? knowledgeBase.getStatus() : DEFAULT_STATUS);
         knowledgeBase.setDocumentCount(DEFAULT_COUNT);
         knowledgeBase.setChunkCount(DEFAULT_COUNT);
@@ -47,11 +52,14 @@ public class AiKnowledgeServiceImpl implements AiKnowledgeService {
     @Transactional(rollbackFor = Exception.class)
     public void updateKnowledge(AiKnowledgeUpdateReqVO updateReqVO) {
         Long tenantId = AiTenantContextHolder.getTenantId();
+        // 更新前先确认当前租户下记录存在，避免跨租户更新。
         AiKnowledgeBaseDO oldKnowledge = validateKnowledgeExists(updateReqVO.getId(), tenantId);
+        // 允许保持自身 code 不变，但不允许改成同租户已有 code。
         validateCodeUnique(tenantId, updateReqVO.getId(), updateReqVO.getCode());
 
         AiKnowledgeBaseDO updateObj = AiKnowledgeConvert.INSTANCE.convert(updateReqVO);
         updateObj.setTenantId(oldKnowledge.getTenantId());
+        // 统计字段不由知识库基础信息更新接口直接修改。
         updateObj.setDocumentCount(oldKnowledge.getDocumentCount());
         updateObj.setChunkCount(oldKnowledge.getChunkCount());
         knowledgeBaseMapper.updateById(updateObj);
@@ -62,6 +70,7 @@ public class AiKnowledgeServiceImpl implements AiKnowledgeService {
     public void deleteKnowledge(Long id) {
         Long tenantId = AiTenantContextHolder.getTenantId();
         validateKnowledgeExists(id, tenantId);
+        // 依赖 MyBatis Plus @TableLogic 执行逻辑删除，不物理删除知识库及向量数据。
         knowledgeBaseMapper.deleteById(id);
     }
 
@@ -76,6 +85,7 @@ public class AiKnowledgeServiceImpl implements AiKnowledgeService {
     }
 
     private AiKnowledgeBaseDO validateKnowledgeExists(Long id, Long tenantId) {
+        // 查询时显式带上 tenantId，保证租户隔离。
         AiKnowledgeBaseDO knowledgeBase = knowledgeBaseMapper.selectByIdAndTenantId(id, tenantId);
         if (knowledgeBase == null) {
             throw new ServiceException(KNOWLEDGE_NOT_EXISTS, "知识库不存在");
@@ -84,6 +94,7 @@ public class AiKnowledgeServiceImpl implements AiKnowledgeService {
     }
 
     private void validateCodeUnique(Long tenantId, Long id, String code) {
+        // code 唯一性只在当前租户范围内校验。
         AiKnowledgeBaseDO knowledgeBase = knowledgeBaseMapper.selectByTenantIdAndCode(tenantId, code);
         if (knowledgeBase == null || knowledgeBase.getId().equals(id)) {
             return;

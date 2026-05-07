@@ -10,7 +10,7 @@ import lombok.Getter;
 @AllArgsConstructor
 public enum DocumentParseStatusEnum {
 
-    WAITING(0, "等待解析"),
+    PENDING(0, "等待解析"),
     PARSING(10, "解析中"),
     SUCCESS(20, "解析成功"),
     FAILED(30, "解析失败");
