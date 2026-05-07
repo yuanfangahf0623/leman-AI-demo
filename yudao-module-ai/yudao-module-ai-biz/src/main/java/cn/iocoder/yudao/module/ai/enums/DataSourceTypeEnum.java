@@ -10,12 +10,22 @@ import lombok.Getter;
 @AllArgsConstructor
 public enum DataSourceTypeEnum {
 
-    FILE("file", "文件"),
-    DATABASE("database", "数据库"),
-    API("api", "API"),
-    WEB("web", "网页");
+    FILE("FILE", "文件"),
+    DATABASE("DATABASE", "数据库"),
+    API("API", "API"),
+    WIKI("WIKI", "Wiki"),
+    GIT("GIT", "Git");
 
     private final String code;
     private final String name;
+
+    public static boolean isValidCode(String code) {
+        for (DataSourceTypeEnum value : values()) {
+            if (value.getCode().equals(code)) {
+                return true;
+            }
+        }
+        return false;
+    }
 
 }

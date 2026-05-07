@@ -10,10 +10,20 @@ import lombok.Getter;
 @AllArgsConstructor
 public enum SyncModeEnum {
 
-    FULL("full", "全量同步"),
-    INCREMENTAL("incremental", "增量同步");
+    MANUAL("MANUAL", "手动同步"),
+    SCHEDULED("SCHEDULED", "定时同步"),
+    INCREMENTAL("INCREMENTAL", "增量同步");
 
     private final String code;
     private final String name;
+
+    public static boolean isValidCode(String code) {
+        for (SyncModeEnum value : values()) {
+            if (value.getCode().equals(code)) {
+                return true;
+            }
+        }
+        return false;
+    }
 
 }

@@ -38,6 +38,12 @@ public class AiKnowledgeBaseDO {
     private String vectorStoreType;
     @TableField("embedding_model")
     private String embeddingModel;
+    @TableField("chunk_size")
+    private Integer chunkSize;
+    @TableField("chunk_overlap")
+    private Integer chunkOverlap;
+    @TableField("top_k")
+    private Integer topK;
     @TableField("document_count")
     private Integer documentCount;
     @TableField("chunk_count")

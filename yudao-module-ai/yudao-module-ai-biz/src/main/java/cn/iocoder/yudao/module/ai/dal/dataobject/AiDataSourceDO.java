@@ -32,6 +32,8 @@ public class AiDataSourceDO {
     private String name;
     @TableField("type")
     private String type;
+    @TableField("sync_mode")
+    private String syncMode;
     @TableField("config_json")
     private String configJson;
     @TableField("sync_enabled")
