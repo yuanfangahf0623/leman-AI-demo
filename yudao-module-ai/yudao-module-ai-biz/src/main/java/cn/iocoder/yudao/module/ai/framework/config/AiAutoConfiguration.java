@@ -1,5 +1,6 @@
 package cn.iocoder.yudao.module.ai.framework.config;
 
+import org.mybatis.spring.annotation.MapperScan;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 
@@ -10,5 +11,6 @@ import org.springframework.boot.context.properties.EnableConfigurationProperties
  */
 @AutoConfiguration
 @EnableConfigurationProperties(AiProperties.class)
+@MapperScan("cn.iocoder.yudao.module.ai.dal.mysql")
 public class AiAutoConfiguration {
 }
