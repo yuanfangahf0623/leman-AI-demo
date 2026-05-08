@@ -5,6 +5,8 @@ import com.baomidou.mybatisplus.core.mapper.BaseMapper;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import org.apache.ibatis.annotations.Mapper;
 
+import java.util.List;
+
 /**
  * AI 文档切片 Mapper。
  */
@@ -13,6 +15,36 @@ public interface AiDocumentChunkMapper extends BaseMapper<AiDocumentChunkDO> {
 
     default int deleteByDocumentIdAndTenantId(Long documentId, Long knowledgeBaseId, Long tenantId) {
         return delete(Wrappers.lambdaQuery(AiDocumentChunkDO.class)
+                .eq(AiDocumentChunkDO::getDocumentId, documentId)
+                .eq(AiDocumentChunkDO::getKnowledgeBaseId, knowledgeBaseId)
+                .eq(AiDocumentChunkDO::getTenantId, tenantId));
+    }
+
+    default List<AiDocumentChunkDO> selectListByDocumentIdAndTenantId(Long documentId, Long knowledgeBaseId,
+                                                                      Long tenantId) {
+        return selectList(Wrappers.lambdaQuery(AiDocumentChunkDO.class)
+                .eq(AiDocumentChunkDO::getDocumentId, documentId)
+                .eq(AiDocumentChunkDO::getKnowledgeBaseId, knowledgeBaseId)
+                .eq(AiDocumentChunkDO::getTenantId, tenantId)
+                .orderByAsc(AiDocumentChunkDO::getChunkIndex));
+    }
+
+    default int updateEmbeddingSuccessByIdAndTenantId(Long id, Long tenantId, String vectorId,
+                                                      String embeddingModel, Integer status) {
+        return update(null, Wrappers.lambdaUpdate(AiDocumentChunkDO.class)
+                .set(AiDocumentChunkDO::getVectorId, vectorId)
+                .set(AiDocumentChunkDO::getEmbeddingModel, embeddingModel)
+                .set(AiDocumentChunkDO::getStatus, status)
+                .eq(AiDocumentChunkDO::getId, id)
+                .eq(AiDocumentChunkDO::getTenantId, tenantId));
+    }
+
+    default int updateEmbeddingFailedByDocumentIdAndTenantId(Long documentId, Long knowledgeBaseId, Long tenantId,
+                                                             Integer status) {
+        return update(null, Wrappers.lambdaUpdate(AiDocumentChunkDO.class)
+                .set(AiDocumentChunkDO::getVectorId, null)
+                .set(AiDocumentChunkDO::getEmbeddingModel, null)
+                .set(AiDocumentChunkDO::getStatus, status)
                 .eq(AiDocumentChunkDO::getDocumentId, documentId)
                 .eq(AiDocumentChunkDO::getKnowledgeBaseId, knowledgeBaseId)
                 .eq(AiDocumentChunkDO::getTenantId, tenantId));

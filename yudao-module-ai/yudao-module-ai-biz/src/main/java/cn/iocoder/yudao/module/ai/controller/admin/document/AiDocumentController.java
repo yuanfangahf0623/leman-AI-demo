@@ -66,6 +66,14 @@ public class AiDocumentController {
         return CommonResult.success(true);
     }
 
+    @PostMapping("/embed")
+    @PreAuthorize("@ss.hasPermission('ai:document:embed')")
+    public CommonResult<Boolean> embedDocument(@RequestParam("id") @NotNull(message = "文档编号不能为空") Long id) {
+        // 第一阶段同步执行向量化，后续可在 Service 内改成投递 MQ 异步任务。
+        documentService.embedDocument(id);
+        return CommonResult.success(true);
+    }
+
     @DeleteMapping("/delete")
     @PreAuthorize("@ss.hasPermission('ai:document:delete')")
     public CommonResult<Boolean> deleteDocument(@RequestParam("id") @NotNull(message = "文档编号不能为空") Long id) {

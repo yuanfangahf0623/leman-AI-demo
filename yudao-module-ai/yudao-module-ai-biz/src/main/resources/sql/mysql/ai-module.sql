@@ -82,6 +82,7 @@ CREATE TABLE IF NOT EXISTS `ai_document_chunk` (
   `content_hash` varchar(128) COLLATE utf8mb4_unicode_ci DEFAULT NULL COMMENT '内容哈希',
   `token_count` int NOT NULL DEFAULT 0 COMMENT 'Token 数量',
   `vector_id` varchar(128) COLLATE utf8mb4_unicode_ci DEFAULT NULL COMMENT '向量编号',
+  `embedding_model` varchar(128) COLLATE utf8mb4_unicode_ci DEFAULT NULL COMMENT 'Embedding 模型',
   `metadata_json` text COLLATE utf8mb4_unicode_ci COMMENT '元数据',
   `status` tinyint NOT NULL DEFAULT 0 COMMENT '状态',
   `creator` varchar(64) COLLATE utf8mb4_unicode_ci DEFAULT '' COMMENT '创建者',

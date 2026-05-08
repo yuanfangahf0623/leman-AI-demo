@@ -90,6 +90,16 @@ public class AiProperties {
          */
         private String embeddingModel = "text-embedding-3-small";
 
+        /**
+         * 外部模型服务连接超时时间，单位秒。
+         */
+        private Integer connectTimeoutSeconds = 10;
+
+        /**
+         * 外部模型服务请求超时时间，单位秒。
+         */
+        private Integer readTimeoutSeconds = 60;
+
         public String getProvider() {
             return provider;
         }
@@ -128,6 +138,22 @@ public class AiProperties {
 
         public void setEmbeddingModel(String embeddingModel) {
             this.embeddingModel = embeddingModel;
+        }
+
+        public Integer getConnectTimeoutSeconds() {
+            return connectTimeoutSeconds;
+        }
+
+        public void setConnectTimeoutSeconds(Integer connectTimeoutSeconds) {
+            this.connectTimeoutSeconds = connectTimeoutSeconds;
+        }
+
+        public Integer getReadTimeoutSeconds() {
+            return readTimeoutSeconds;
+        }
+
+        public void setReadTimeoutSeconds(Integer readTimeoutSeconds) {
+            this.readTimeoutSeconds = readTimeoutSeconds;
         }
     }
 
@@ -330,6 +356,11 @@ public class AiProperties {
         private Integer maxFileSizeMb = 50;
 
         /**
+         * 文档向量化批量大小，避免一次处理过多 chunk。
+         */
+        private Integer embeddingBatchSize = 32;
+
+        /**
          * 文档上传本地存储目录。生产环境应切换为对象存储实现，例如 MinIO。
          */
         private String storageBasePath = ".data/ai-documents";
@@ -356,6 +387,14 @@ public class AiProperties {
 
         public void setMaxFileSizeMb(Integer maxFileSizeMb) {
             this.maxFileSizeMb = maxFileSizeMb;
+        }
+
+        public Integer getEmbeddingBatchSize() {
+            return embeddingBatchSize;
+        }
+
+        public void setEmbeddingBatchSize(Integer embeddingBatchSize) {
+            this.embeddingBatchSize = embeddingBatchSize;
         }
 
         public String getStorageBasePath() {

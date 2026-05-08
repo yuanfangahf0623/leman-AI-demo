@@ -11,6 +11,8 @@ import lombok.Getter;
 public enum ChunkStatusEnum {
 
     PENDING(0, "等待向量化"),
+    RUNNING(5, "向量化中"),
+    SUCCESS(10, "向量化成功"),
     NORMAL(10, "正常"),
     DISABLED(20, "禁用"),
     ERROR(30, "异常");

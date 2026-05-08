@@ -42,13 +42,14 @@ public class ChunkServiceImpl implements ChunkService {
     @Transactional(rollbackFor = Exception.class)
     public List<AiDocumentChunkDO> recreateChunks(AiKnowledgeBaseDO knowledgeBase, AiDocumentDO document,
                                                   ParsedDocument parsedDocument) {
-        // 重新解析同一文档时，先逻辑删除旧 chunk，保证不会存在重复有效 chunk。
-        documentChunkMapper.deleteByDocumentIdAndTenantId(document.getId(), knowledgeBase.getId(),
-                document.getTenantId());
-
+        // 先完成配置校验、切片和元数据构造，再替换旧 chunk，避免配置非法时误删旧数据。
         List<String> chunkContents = documentChunkSplitter.split(parsedDocument.getContent(),
                 knowledgeBase.getChunkSize(), knowledgeBase.getChunkOverlap());
         List<AiDocumentChunkDO> chunks = buildChunks(knowledgeBase, document, parsedDocument, chunkContents);
+
+        // 重新解析同一文档时，先逻辑删除旧 chunk，保证不会存在重复有效 chunk。
+        documentChunkMapper.deleteByDocumentIdAndTenantId(document.getId(), knowledgeBase.getId(),
+                document.getTenantId());
         for (AiDocumentChunkDO chunk : chunks) {
             documentChunkMapper.insert(chunk);
         }

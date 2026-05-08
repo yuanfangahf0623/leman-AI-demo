@@ -40,6 +40,8 @@ public class AiDocumentChunkDO {
     private Integer tokenCount;
     @TableField("vector_id")
     private String vectorId;
+    @TableField("embedding_model")
+    private String embeddingModel;
     @TableField("metadata_json")
     private String metadataJson;
     @TableField("status")
