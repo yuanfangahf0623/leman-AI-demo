@@ -3,28 +3,52 @@ package cn.iocoder.yudao.module.ai.service.document;
 import cn.iocoder.yudao.framework.common.exception.ServiceException;
 import cn.iocoder.yudao.framework.common.pojo.PageResult;
 import cn.iocoder.yudao.module.ai.controller.admin.document.vo.AiDocumentPageReqVO;
+import cn.iocoder.yudao.module.ai.dal.dataobject.AiDocumentChunkDO;
 import cn.iocoder.yudao.module.ai.dal.dataobject.AiDocumentDO;
+import cn.iocoder.yudao.module.ai.dal.dataobject.AiKnowledgeBaseDO;
 import cn.iocoder.yudao.module.ai.dal.mysql.AiDocumentChunkMapper;
 import cn.iocoder.yudao.module.ai.dal.mysql.AiDocumentMapper;
+import cn.iocoder.yudao.module.ai.enums.ChunkStatusEnum;
 import cn.iocoder.yudao.module.ai.enums.DocumentEmbeddingStatusEnum;
 import cn.iocoder.yudao.module.ai.enums.DocumentParseStatusEnum;
 import cn.iocoder.yudao.module.ai.framework.config.AiProperties;
 import cn.iocoder.yudao.module.ai.framework.file.FileStorageResult;
 import cn.iocoder.yudao.module.ai.framework.file.FileStorageService;
+import cn.iocoder.yudao.module.ai.framework.parser.DocumentParseContext;
+import cn.iocoder.yudao.module.ai.framework.parser.DocumentParseException;
+import cn.iocoder.yudao.module.ai.framework.parser.DocumentParseUtils;
+import cn.iocoder.yudao.module.ai.framework.parser.DocumentParserFactory;
+import cn.iocoder.yudao.module.ai.framework.parser.ParsedDocument;
 import cn.iocoder.yudao.module.ai.framework.tenant.AiTenantContextHolder;
+import cn.iocoder.yudao.module.ai.framework.vector.KnowledgeVector;
+import cn.iocoder.yudao.module.ai.framework.vector.KnowledgeVectorStore;
+import cn.iocoder.yudao.module.ai.service.chunk.ChunkService;
+import cn.iocoder.yudao.module.ai.service.embedding.AiEmbeddingService;
 import cn.iocoder.yudao.module.ai.service.knowledge.AiKnowledgeService;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
+import java.io.InputStream;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.time.Duration;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 
+import static cn.iocoder.yudao.module.ai.enums.AiDocumentErrorCodeConstants.DOCUMENT_EMBED_CHUNK_EMPTY;
+import static cn.iocoder.yudao.module.ai.enums.AiDocumentErrorCodeConstants.DOCUMENT_EMBED_FAILED;
 import static cn.iocoder.yudao.module.ai.enums.AiDocumentErrorCodeConstants.DOCUMENT_FILE_CONTENT_INVALID;
 import static cn.iocoder.yudao.module.ai.enums.AiDocumentErrorCodeConstants.DOCUMENT_FILE_EMPTY;
 import static cn.iocoder.yudao.module.ai.enums.AiDocumentErrorCodeConstants.DOCUMENT_FILE_NAME_INVALID;
@@ -33,6 +57,8 @@ import static cn.iocoder.yudao.module.ai.enums.AiDocumentErrorCodeConstants.DOCU
 import static cn.iocoder.yudao.module.ai.enums.AiDocumentErrorCodeConstants.DOCUMENT_FILE_TYPE_UNSUPPORTED;
 import static cn.iocoder.yudao.module.ai.enums.AiDocumentErrorCodeConstants.DOCUMENT_KNOWLEDGE_NOT_EXISTS;
 import static cn.iocoder.yudao.module.ai.enums.AiDocumentErrorCodeConstants.DOCUMENT_NOT_EXISTS;
+import static cn.iocoder.yudao.module.ai.enums.AiDocumentErrorCodeConstants.DOCUMENT_PARSE_FAILED;
+import static cn.iocoder.yudao.module.ai.enums.AiDocumentErrorCodeConstants.DOCUMENT_PARSE_NOT_SUCCESS;
 
 /**
  * AI 文档 Service 实现。
@@ -41,17 +67,31 @@ import static cn.iocoder.yudao.module.ai.enums.AiDocumentErrorCodeConstants.DOCU
  * 当前阶段不在请求链路内执行解析和向量化。</p>
  */
 @Service
+@Slf4j
 @RequiredArgsConstructor
 public class AiDocumentServiceImpl implements AiDocumentService {
 
-    private static final Set<String> SUPPORTED_EXTENSIONS = Set.of("txt", "pdf", "md");
+    private static final Set<String> SUPPORTED_EXTENSIONS = Set.of("txt", "md", "pdf", "doc", "docx", "wps",
+            "xls", "xlsx", "xlsb", "ppt", "pptx", "pptm");
+    private static final Set<String> TEXT_EXTENSIONS = Set.of("txt", "md");
+    private static final Set<String> OLE2_EXTENSIONS = Set.of("doc", "xls", "ppt");
+    private static final Set<String> ZIP_EXTENSIONS = Set.of("docx", "xlsx", "xlsb", "pptx", "pptm");
     private static final int TEXT_CHECK_BYTES = 4096;
     private static final Integer DEFAULT_COUNT = 0;
+    private static final int ERROR_MESSAGE_MAX_LENGTH = 1024;
+    private static final int DEFAULT_EMBEDDING_BATCH_SIZE = 32;
+    private static final TypeReference<Map<String, Object>> CHUNK_METADATA_TYPE = new TypeReference<>() {
+    };
 
     private final AiDocumentMapper documentMapper;
     private final AiDocumentChunkMapper documentChunkMapper;
     private final AiKnowledgeService knowledgeService;
+    private final ChunkService chunkService;
+    private final AiEmbeddingService aiEmbeddingService;
+    private final KnowledgeVectorStore knowledgeVectorStore;
     private final FileStorageService fileStorageService;
+    private final DocumentParserFactory documentParserFactory;
+    private final ObjectMapper objectMapper;
     private final AiProperties aiProperties;
 
     @Override
@@ -111,6 +151,109 @@ public class AiDocumentServiceImpl implements AiDocumentService {
     }
 
     @Override
+    public ParsedDocument parseDocument(Long id) {
+        AiDocumentDO document = validateDocumentExists(id);
+        // 解析前校验当前用户仍然有文档所属知识库权限。
+        AiKnowledgeBaseDO knowledgeBase = validateKnowledgeExists(document.getKnowledgeBaseId());
+        documentMapper.updateParseStatusByIdAndTenantId(id, document.getTenantId(),
+                DocumentParseStatusEnum.RUNNING.getCode(), null);
+
+        DocumentParseContext context = buildParseContext(document);
+        try (InputStream inputStream = fileStorageService.load(document.getObjectKey())) {
+            ParsedDocument parsedDocument = documentParserFactory.parse(inputStream, context);
+            // 解析成功后只生成 chunk，不做 embedding；重新解析时由 ChunkService 逻辑删除旧 chunk。
+            chunkService.recreateChunks(knowledgeBase, document, parsedDocument);
+            documentMapper.updateParseStatusByIdAndTenantId(id, document.getTenantId(),
+                    DocumentParseStatusEnum.SUCCESS.getCode(), null);
+            return parsedDocument;
+        } catch (ServiceException ex) {
+            String errorMessage = toSafeErrorMessage(ex);
+            documentMapper.updateParseStatusByIdAndTenantId(id, document.getTenantId(),
+                    DocumentParseStatusEnum.FAILED.getCode(), errorMessage);
+            // 保留底层业务异常错误码，例如 chunkOverlap 配置非法，方便前端展示明确原因。
+            log.warn("文档解析失败, documentId={}, tenantId={}, knowledgeBaseId={}, fileType={}, reason={}",
+                    document.getId(), document.getTenantId(), document.getKnowledgeBaseId(),
+                    document.getFileType(), errorMessage);
+            throw ex;
+        } catch (DocumentParseException | IOException ex) {
+            String errorMessage = toSafeErrorMessage(ex);
+            documentMapper.updateParseStatusByIdAndTenantId(id, document.getTenantId(),
+                    DocumentParseStatusEnum.FAILED.getCode(), errorMessage);
+            // 日志只记录业务标识、文件类型和安全错误摘要，不输出文件路径、objectKey 或文件内容。
+            log.warn("文档解析失败, documentId={}, tenantId={}, knowledgeBaseId={}, fileType={}, reason={}",
+                    document.getId(), document.getTenantId(), document.getKnowledgeBaseId(),
+                    document.getFileType(), errorMessage);
+            throw new ServiceException(DOCUMENT_PARSE_FAILED, "文档解析失败");
+        }
+    }
+
+    @Override
+    public void embedDocument(Long id) {
+        long startNanos = System.nanoTime();
+        AiDocumentDO document = validateDocumentExists(id);
+        // 向量化前校验当前用户仍然有文档所属知识库权限。
+        AiKnowledgeBaseDO knowledgeBase = validateKnowledgeExists(document.getKnowledgeBaseId());
+        validateDocumentParsed(document);
+
+        List<AiDocumentChunkDO> chunks = getEffectiveChunks(document);
+        if (chunks.isEmpty()) {
+            documentMapper.updateEmbeddingStatusByIdAndTenantId(id, document.getTenantId(),
+                    DocumentEmbeddingStatusEnum.FAILED.getCode(), "文档没有可向量化的切片");
+            throw new ServiceException(DOCUMENT_EMBED_CHUNK_EMPTY, "文档没有可向量化的切片");
+        }
+
+        documentMapper.updateEmbeddingStatusByIdAndTenantId(id, document.getTenantId(),
+                DocumentEmbeddingStatusEnum.RUNNING.getCode(), null);
+        String embeddingModel = resolveEmbeddingModel(knowledgeBase);
+        int batchSize = resolveEmbeddingBatchSize();
+        List<ChunkVectorResult> chunkVectorResults = new ArrayList<>(chunks.size());
+
+        try {
+            int embeddedCount = 0;
+            for (int from = 0; from < chunks.size(); from += batchSize) {
+                List<AiDocumentChunkDO> batchChunks = chunks.subList(from, Math.min(from + batchSize, chunks.size()));
+                List<String> texts = batchChunks.stream().map(AiDocumentChunkDO::getContent).toList();
+                List<List<Double>> embeddings = aiEmbeddingService.embedBatch(texts);
+                validateEmbeddingResult(batchChunks, embeddings);
+
+                List<KnowledgeVector> vectors = new ArrayList<>(batchChunks.size());
+                for (int i = 0; i < batchChunks.size(); i++) {
+                    AiDocumentChunkDO chunk = batchChunks.get(i);
+                    String vectorId = buildVectorId(document, chunk);
+                    vectors.add(buildKnowledgeVector(document, chunk, vectorId, embeddingModel, embeddings.get(i)));
+                    chunkVectorResults.add(new ChunkVectorResult(chunk.getId(), vectorId));
+                }
+                knowledgeVectorStore.upsert(vectors);
+                embeddedCount += vectors.size();
+            }
+
+            for (ChunkVectorResult result : chunkVectorResults) {
+                documentChunkMapper.updateEmbeddingSuccessByIdAndTenantId(result.chunkId(), document.getTenantId(),
+                        result.vectorId(), embeddingModel, ChunkStatusEnum.SUCCESS.getCode());
+            }
+            documentMapper.updateEmbeddingStatusByIdAndTenantId(id, document.getTenantId(),
+                    DocumentEmbeddingStatusEnum.SUCCESS.getCode(), null);
+            log.info("文档向量化成功, documentId={}, tenantId={}, knowledgeBaseId={}, chunkCount={}, batchSize={}, elapsedMs={}",
+                    document.getId(), document.getTenantId(), document.getKnowledgeBaseId(), embeddedCount,
+                    batchSize, elapsedMillis(startNanos));
+        } catch (Exception ex) {
+            String errorMessage = toSafeErrorMessage(ex);
+            cleanupFailedEmbedding(document);
+            documentChunkMapper.updateEmbeddingFailedByDocumentIdAndTenantId(document.getId(),
+                    document.getKnowledgeBaseId(), document.getTenantId(), ChunkStatusEnum.ERROR.getCode());
+            documentMapper.updateEmbeddingStatusByIdAndTenantId(id, document.getTenantId(),
+                    DocumentEmbeddingStatusEnum.FAILED.getCode(), errorMessage);
+            log.warn("文档向量化失败, documentId={}, tenantId={}, knowledgeBaseId={}, chunkCount={}, elapsedMs={}, reason={}",
+                    document.getId(), document.getTenantId(), document.getKnowledgeBaseId(), chunks.size(),
+                    elapsedMillis(startNanos), errorMessage);
+            if (ex instanceof ServiceException serviceException) {
+                throw serviceException;
+            }
+            throw new ServiceException(DOCUMENT_EMBED_FAILED, "文档向量化失败");
+        }
+    }
+
+    @Override
     @Transactional(rollbackFor = Exception.class)
     public void deleteDocument(Long id) {
         AiDocumentDO document = validateDocumentExists(id);
@@ -124,6 +267,91 @@ public class AiDocumentServiceImpl implements AiDocumentService {
         // TODO 后续接入 VectorStore 后，在异步任务中删除对应向量库数据。
     }
 
+    private void validateDocumentParsed(AiDocumentDO document) {
+        if (!DocumentParseStatusEnum.SUCCESS.getCode().equals(document.getParseStatus())) {
+            throw new ServiceException(DOCUMENT_PARSE_NOT_SUCCESS, "文档尚未解析成功");
+        }
+    }
+
+    private List<AiDocumentChunkDO> getEffectiveChunks(AiDocumentDO document) {
+        return documentChunkMapper.selectListByDocumentIdAndTenantId(document.getId(), document.getKnowledgeBaseId(),
+                        document.getTenantId())
+                .stream()
+                .filter(chunk -> !ChunkStatusEnum.DISABLED.getCode().equals(chunk.getStatus()))
+                .toList();
+    }
+
+    private String resolveEmbeddingModel(AiKnowledgeBaseDO knowledgeBase) {
+        if (knowledgeBase.getEmbeddingModel() != null && !knowledgeBase.getEmbeddingModel().isBlank()) {
+            return knowledgeBase.getEmbeddingModel().trim();
+        }
+        String embeddingModel = aiProperties.getModel().getEmbeddingModel();
+        return embeddingModel == null ? "" : embeddingModel.trim();
+    }
+
+    private int resolveEmbeddingBatchSize() {
+        Integer batchSize = aiProperties.getDocument().getEmbeddingBatchSize();
+        return batchSize == null || batchSize <= 0 ? DEFAULT_EMBEDDING_BATCH_SIZE : batchSize;
+    }
+
+    private void validateEmbeddingResult(List<AiDocumentChunkDO> chunks, List<List<Double>> embeddings) {
+        if (embeddings == null || embeddings.size() != chunks.size()) {
+            throw new ServiceException(DOCUMENT_EMBED_FAILED, "Embedding 返回数量与切片数量不一致");
+        }
+        if (embeddings.stream().anyMatch(embedding -> embedding == null || embedding.isEmpty())) {
+            throw new ServiceException(DOCUMENT_EMBED_FAILED, "Embedding 返回向量为空");
+        }
+    }
+
+    private KnowledgeVector buildKnowledgeVector(AiDocumentDO document, AiDocumentChunkDO chunk, String vectorId,
+                                                 String embeddingModel, List<Double> embedding) {
+        Map<String, Object> metadata = parseChunkMetadata(chunk.getMetadataJson());
+        metadata.put("embeddingModel", embeddingModel);
+        metadata.put("contentHash", chunk.getContentHash());
+        metadata.put("tokenCount", chunk.getTokenCount());
+        return KnowledgeVector.builder()
+                .vectorId(vectorId)
+                .tenantId(document.getTenantId())
+                .knowledgeBaseId(document.getKnowledgeBaseId())
+                .documentId(document.getId())
+                .chunkId(chunk.getId())
+                .chunkNo(chunk.getChunkIndex())
+                .content(chunk.getContent())
+                .embedding(embedding)
+                .metadata(metadata)
+                .build();
+    }
+
+    private Map<String, Object> parseChunkMetadata(String metadataJson) {
+        if (metadataJson == null || metadataJson.isBlank()) {
+            return new LinkedHashMap<>();
+        }
+        try {
+            return new LinkedHashMap<>(objectMapper.readValue(metadataJson, CHUNK_METADATA_TYPE));
+        } catch (JsonProcessingException ex) {
+            return new LinkedHashMap<>();
+        }
+    }
+
+    private String buildVectorId(AiDocumentDO document, AiDocumentChunkDO chunk) {
+        return document.getTenantId() + ":" + document.getKnowledgeBaseId() + ":" + document.getId() + ":"
+                + chunk.getId();
+    }
+
+    private void cleanupFailedEmbedding(AiDocumentDO document) {
+        try {
+            knowledgeVectorStore.deleteByDocumentId(document.getId());
+        } catch (Exception cleanupEx) {
+            log.warn("清理失败向量数据失败, documentId={}, tenantId={}, knowledgeBaseId={}, reason={}",
+                    document.getId(), document.getTenantId(), document.getKnowledgeBaseId(),
+                    toSafeErrorMessage(cleanupEx));
+        }
+    }
+
+    private long elapsedMillis(long startNanos) {
+        return Duration.ofNanos(System.nanoTime() - startNanos).toMillis();
+    }
+
     private AiDocumentDO validateDocumentExists(Long id) {
         AiDocumentDO document = documentMapper.selectByIdAndTenantId(id, AiTenantContextHolder.getTenantId());
         if (document == null) {
@@ -132,11 +360,13 @@ public class AiDocumentServiceImpl implements AiDocumentService {
         return document;
     }
 
-    private void validateKnowledgeExists(Long knowledgeBaseId) {
+    private AiKnowledgeBaseDO validateKnowledgeExists(Long knowledgeBaseId) {
         // 复用知识库查询的租户过滤能力，知识库不存在或无权限都按不可访问处理。
-        if (knowledgeService.getKnowledge(knowledgeBaseId) == null) {
+        AiKnowledgeBaseDO knowledgeBase = knowledgeService.getKnowledge(knowledgeBaseId);
+        if (knowledgeBase == null) {
             throw new ServiceException(DOCUMENT_KNOWLEDGE_NOT_EXISTS, "知识库不存在或无权限访问");
         }
+        return knowledgeBase;
     }
 
     private void validateFileNotEmpty(MultipartFile file) {
@@ -177,7 +407,7 @@ public class AiDocumentServiceImpl implements AiDocumentService {
     }
 
     private String getSupportedExtension(String fileName) {
-        // 第一阶段只支持 txt、pdf、md，类型判断不依赖浏览器传入的 Content-Type。
+        // 上传类型以解析器支持范围为准，类型判断不依赖浏览器传入的 Content-Type。
         int dotIndex = fileName.lastIndexOf('.');
         if (dotIndex <= 0 || dotIndex == fileName.length() - 1) {
             throw new ServiceException(DOCUMENT_FILE_TYPE_UNSUPPORTED, "上传文件类型不支持");
@@ -203,7 +433,23 @@ public class AiDocumentServiceImpl implements AiDocumentService {
             validatePdfHeader(content);
             return;
         }
-        validateTextContent(content);
+        if (TEXT_EXTENSIONS.contains(extension)) {
+            validateTextContent(content);
+            return;
+        }
+        if (OLE2_EXTENSIONS.contains(extension)) {
+            validateOle2Header(content);
+            return;
+        }
+        if (ZIP_EXTENSIONS.contains(extension)) {
+            validateZipHeader(content);
+            return;
+        }
+        if ("wps".equals(extension)) {
+            validateWpsHeader(content);
+            return;
+        }
+        throw new ServiceException(DOCUMENT_FILE_TYPE_UNSUPPORTED, "上传文件类型不支持");
     }
 
     private void validatePdfHeader(byte[] content) {
@@ -222,6 +468,43 @@ public class AiDocumentServiceImpl implements AiDocumentService {
                 throw new ServiceException(DOCUMENT_FILE_CONTENT_INVALID, "文本文件内容非法");
             }
         }
+    }
+
+    private void validateOle2Header(byte[] content) {
+        if (!DocumentParseUtils.isOle2(content)) {
+            throw new ServiceException(DOCUMENT_FILE_CONTENT_INVALID, "Office 文件内容非法");
+        }
+    }
+
+    private void validateZipHeader(byte[] content) {
+        if (!DocumentParseUtils.isZip(content)) {
+            throw new ServiceException(DOCUMENT_FILE_CONTENT_INVALID, "Office 文件内容非法");
+        }
+    }
+
+    private void validateWpsHeader(byte[] content) {
+        // WPS 文档存在 OLE2 和 OOXML 兼容形态，当前只接收这两类可解析容器。
+        if (!DocumentParseUtils.isOle2(content) && !DocumentParseUtils.isZip(content)) {
+            throw new ServiceException(DOCUMENT_FILE_CONTENT_INVALID, "WPS 文件内容非法");
+        }
+    }
+
+    private DocumentParseContext buildParseContext(AiDocumentDO document) {
+        return DocumentParseContext.builder()
+                .documentId(document.getId())
+                .tenantId(document.getTenantId())
+                .knowledgeBaseId(document.getKnowledgeBaseId())
+                .filename(document.getFileName())
+                .fileType(document.getFileType())
+                .build();
+    }
+
+    private String toSafeErrorMessage(Exception ex) {
+        String message = ex.getMessage();
+        if (message == null || message.isBlank()) {
+            message = ex.getClass().getSimpleName();
+        }
+        return DocumentParseUtils.abbreviate(message, ERROR_MESSAGE_MAX_LENGTH);
     }
 
     private String buildObjectKey(Long tenantId, Long knowledgeBaseId, String extension) {
@@ -246,6 +529,9 @@ public class AiDocumentServiceImpl implements AiDocumentService {
         } catch (NoSuchAlgorithmException ex) {
             throw new ServiceException(DOCUMENT_FILE_CONTENT_INVALID, "计算文件哈希失败");
         }
+    }
+
+    private record ChunkVectorResult(Long chunkId, String vectorId) {
     }
 
 }

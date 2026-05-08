@@ -6,6 +6,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
 import java.io.IOException;
+import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -26,13 +27,7 @@ public class LocalFileStorageService implements FileStorageService {
 
     @Override
     public FileStorageResult store(String objectKey, byte[] content) {
-        // basePath 来源于配置，统一规范化后再拼接 objectKey。
-        Path basePath = Paths.get(aiProperties.getDocument().getStorageBasePath()).toAbsolutePath().normalize();
-        Path targetPath = basePath.resolve(objectKey).normalize();
-        // 防止 objectKey 中出现路径穿越导致文件写出存储根目录。
-        if (!targetPath.startsWith(basePath)) {
-            throw new ServiceException(DOCUMENT_FILE_STORAGE_FAILED, "文件存储路径非法");
-        }
+        Path targetPath = resolveObjectKey(objectKey);
         try {
             // CREATE_NEW 避免覆盖已有文件；objectKey 使用 UUID，正常不会冲突。
             Files.createDirectories(targetPath.getParent());
@@ -41,6 +36,33 @@ public class LocalFileStorageService implements FileStorageService {
         } catch (IOException ex) {
             throw new ServiceException(DOCUMENT_FILE_STORAGE_FAILED, "文件存储失败");
         }
+    }
+
+    @Override
+    public InputStream load(String objectKey) {
+        Path sourcePath = resolveObjectKey(objectKey);
+        try {
+            if (!Files.isRegularFile(sourcePath)) {
+                throw new ServiceException(DOCUMENT_FILE_STORAGE_FAILED, "文件不存在或无法读取");
+            }
+            return Files.newInputStream(sourcePath, StandardOpenOption.READ);
+        } catch (IOException ex) {
+            throw new ServiceException(DOCUMENT_FILE_STORAGE_FAILED, "读取文件失败");
+        }
+    }
+
+    private Path resolveObjectKey(String objectKey) {
+        if (objectKey == null || objectKey.isBlank()) {
+            throw new ServiceException(DOCUMENT_FILE_STORAGE_FAILED, "文件存储 Key 为空");
+        }
+        // basePath 来源于配置，统一规范化后再拼接 objectKey。
+        Path basePath = Paths.get(aiProperties.getDocument().getStorageBasePath()).toAbsolutePath().normalize();
+        Path targetPath = basePath.resolve(objectKey).normalize();
+        // 防止 objectKey 中出现路径穿越导致文件写出或读出存储根目录。
+        if (!targetPath.startsWith(basePath)) {
+            throw new ServiceException(DOCUMENT_FILE_STORAGE_FAILED, "文件存储路径非法");
+        }
+        return targetPath;
     }
 
 }

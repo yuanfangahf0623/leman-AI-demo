@@ -1,5 +1,7 @@
 package cn.iocoder.yudao.module.ai.framework.file;
 
+import java.io.InputStream;
+
 /**
  * 文件存储服务抽象。
  *
@@ -16,5 +18,13 @@ public interface FileStorageService {
      * @return 文件存储结果
      */
     FileStorageResult store(String objectKey, byte[] content);
+
+    /**
+     * 按 objectKey 读取文件内容。
+     *
+     * @param objectKey 服务端生成的对象 Key
+     * @return 文件输入流，由调用方负责关闭
+     */
+    InputStream load(String objectKey);
 
 }

@@ -28,6 +28,31 @@ public interface AiDocumentMapper extends BaseMapper<AiDocumentDO> {
                 .eq(AiDocumentDO::getTenantId, tenantId));
     }
 
+    default int updateParseStatusByIdAndTenantId(Long id, Long tenantId, Integer parseStatus, String errorMessage) {
+        return update(null, Wrappers.lambdaUpdate(AiDocumentDO.class)
+                .set(AiDocumentDO::getParseStatus, parseStatus)
+                .set(AiDocumentDO::getErrorMessage, errorMessage)
+                .eq(AiDocumentDO::getId, id)
+                .eq(AiDocumentDO::getTenantId, tenantId));
+    }
+
+    default int updateEmbeddingStatusByIdAndTenantId(Long id, Long tenantId, Integer embeddingStatus,
+                                                     String errorMessage) {
+        return update(null, Wrappers.lambdaUpdate(AiDocumentDO.class)
+                .set(AiDocumentDO::getEmbeddingStatus, embeddingStatus)
+                .set(AiDocumentDO::getErrorMessage, errorMessage)
+                .eq(AiDocumentDO::getId, id)
+                .eq(AiDocumentDO::getTenantId, tenantId));
+    }
+
+    default int updateChunkSummaryByIdAndTenantId(Long id, Long tenantId, Integer chunkCount, Integer tokenCount) {
+        return update(null, Wrappers.lambdaUpdate(AiDocumentDO.class)
+                .set(AiDocumentDO::getChunkCount, chunkCount)
+                .set(AiDocumentDO::getTokenCount, tokenCount)
+                .eq(AiDocumentDO::getId, id)
+                .eq(AiDocumentDO::getTenantId, tenantId));
+    }
+
     default PageResult<AiDocumentDO> selectPage(AiDocumentPageReqVO reqVO, Long tenantId) {
         IPage<AiDocumentDO> page = selectPage(new Page<>(reqVO.getPageNo(), reqVO.getPageSize()),
                 Wrappers.lambdaQuery(AiDocumentDO.class)
