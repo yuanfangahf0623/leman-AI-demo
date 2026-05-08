@@ -58,6 +58,14 @@ public class AiDocumentController {
         return CommonResult.success(documentService.uploadDocument(knowledgeBaseId, file));
     }
 
+    @PostMapping("/parse")
+    @PreAuthorize("@ss.hasPermission('ai:document:parse')")
+    public CommonResult<Boolean> parseDocument(@RequestParam("id") @NotNull(message = "文档编号不能为空") Long id) {
+        // 第一阶段同步执行解析和切片，后续可在 Service 内改成投递 MQ 异步任务。
+        documentService.parseDocument(id);
+        return CommonResult.success(true);
+    }
+
     @DeleteMapping("/delete")
     @PreAuthorize("@ss.hasPermission('ai:document:delete')")
     public CommonResult<Boolean> deleteDocument(@RequestParam("id") @NotNull(message = "文档编号不能为空") Long id) {

@@ -10,9 +10,10 @@ import lombok.Getter;
 @AllArgsConstructor
 public enum ChunkStatusEnum {
 
-    NORMAL(0, "正常"),
-    DISABLED(1, "禁用"),
-    ERROR(2, "异常");
+    PENDING(0, "等待向量化"),
+    NORMAL(10, "正常"),
+    DISABLED(20, "禁用"),
+    ERROR(30, "异常");
 
     private final Integer code;
     private final String name;
