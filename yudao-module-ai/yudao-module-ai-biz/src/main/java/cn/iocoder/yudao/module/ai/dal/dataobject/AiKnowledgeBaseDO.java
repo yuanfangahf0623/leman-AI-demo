@@ -34,6 +34,8 @@ public class AiKnowledgeBaseDO {
     private String description;
     @TableField("status")
     private Integer status;
+    @TableField("department_ids")
+    private String departmentIds;
     @TableField("vector_store_type")
     private String vectorStoreType;
     @TableField("embedding_model")

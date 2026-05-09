@@ -28,6 +28,11 @@ public class KnowledgeHit {
 
     private Integer chunkNo;
 
+    /**
+     * 文档标题，用于 RAG Prompt 来源展示。
+     */
+    private String documentTitle;
+
     private String content;
 
     /**

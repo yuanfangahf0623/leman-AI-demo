@@ -22,6 +22,7 @@ class MockKnowledgeVectorStoreTest {
 
         List<KnowledgeHit> hits = store.search(KnowledgeSearchRequest.builder()
                 .tenantId(1L)
+                .departmentId(20L)
                 .knowledgeBaseId(10L)
                 .queryEmbedding(List.of(1.0D, 0.0D))
                 .topK(5)
@@ -42,6 +43,7 @@ class MockKnowledgeVectorStoreTest {
 
         List<KnowledgeHit> hits = store.search(KnowledgeSearchRequest.builder()
                 .tenantId(1L)
+                .departmentId(20L)
                 .knowledgeBaseId(10L)
                 .queryEmbedding(List.of(0.0D, 1.0D))
                 .topK(5)

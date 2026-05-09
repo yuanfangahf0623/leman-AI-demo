@@ -15,6 +15,7 @@ public class AiKnowledgeRespVO {
     private String code;
     private String description;
     private Integer status;
+    private String departmentIds;
     private String vectorStoreType;
     private String embeddingModel;
     private Integer chunkSize;

@@ -26,6 +26,9 @@ public class AiKnowledgeBaseVO {
 
     private Integer status;
 
+    @Size(max = 512, message = "可访问部门编号不能超过 512 个字符")
+    private String departmentIds;
+
     @NotBlank(message = "向量库类型不能为空")
     @Size(max = 32, message = "向量库类型不能超过 32 个字符")
     private String vectorStoreType;

@@ -26,6 +26,8 @@ public class AiChatConversationDO {
     private Long id;
     @TableField("tenant_id")
     private Long tenantId;
+    @TableField("department_id")
+    private Long departmentId;
     @TableField("knowledge_base_id")
     private Long knowledgeBaseId;
     @TableField("user_id")

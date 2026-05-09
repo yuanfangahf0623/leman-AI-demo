@@ -5,6 +5,9 @@ import cn.iocoder.yudao.module.ai.framework.vector.KnowledgeVectorStore;
 import cn.iocoder.yudao.module.ai.framework.vector.MockKnowledgeVectorStore;
 import cn.iocoder.yudao.module.ai.framework.vector.pgvector.PgVectorKnowledgeVectorStore;
 import cn.iocoder.yudao.module.ai.framework.vector.qdrant.QdrantKnowledgeVectorStore;
+import cn.iocoder.yudao.module.ai.service.chatmodel.AiChatModelService;
+import cn.iocoder.yudao.module.ai.service.chatmodel.MockChatModelService;
+import cn.iocoder.yudao.module.ai.service.chatmodel.OpenAiCompatibleChatModelService;
 import cn.iocoder.yudao.module.ai.service.embedding.AiEmbeddingService;
 import cn.iocoder.yudao.module.ai.service.embedding.MockEmbeddingService;
 import cn.iocoder.yudao.module.ai.service.embedding.OpenAiCompatibleEmbeddingService;
@@ -18,6 +21,7 @@ import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.context.annotation.Bean;
 import org.springframework.jdbc.core.JdbcTemplate;
 
+import static cn.iocoder.yudao.module.ai.enums.AiChatModelErrorCodeConstants.CHAT_MODEL_PROVIDER_UNSUPPORTED;
 import static cn.iocoder.yudao.module.ai.enums.AiEmbeddingErrorCodeConstants.EMBEDDING_PROVIDER_UNSUPPORTED;
 import static cn.iocoder.yudao.module.ai.enums.AiVectorStoreErrorCodeConstants.VECTOR_STORE_CONFIG_INVALID;
 
@@ -56,6 +60,19 @@ public class AiAutoConfiguration {
             return new OpenAiCompatibleEmbeddingService(aiProperties);
         }
         throw new ServiceException(EMBEDDING_PROVIDER_UNSUPPORTED, "Embedding 模型供应商不支持");
+    }
+
+    @Bean
+    public AiChatModelService aiChatModelService(AiProperties aiProperties) {
+        String provider = aiProperties.getModel().getProvider();
+        // RAG 测试和本地开发可通过 mock 聊天模型规避外部 API 依赖。
+        if (MODEL_PROVIDER_MOCK.equalsIgnoreCase(provider)) {
+            return new MockChatModelService();
+        }
+        if (MODEL_PROVIDER_OPENAI_COMPATIBLE.equalsIgnoreCase(provider)) {
+            return new OpenAiCompatibleChatModelService(aiProperties);
+        }
+        throw new ServiceException(CHAT_MODEL_PROVIDER_UNSUPPORTED, "Chat Model 供应商不支持");
     }
 
     @Bean

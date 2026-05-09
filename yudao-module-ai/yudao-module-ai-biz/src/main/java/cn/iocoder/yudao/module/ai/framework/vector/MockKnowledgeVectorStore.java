@@ -76,7 +76,8 @@ public class MockKnowledgeVectorStore implements KnowledgeVectorStore {
     }
 
     private void validateSearchRequest(KnowledgeSearchRequest request) {
-        if (request == null || request.getTenantId() == null || request.getKnowledgeBaseId() == null
+        if (request == null || request.getTenantId() == null || request.getDepartmentId() == null
+                || request.getKnowledgeBaseId() == null
                 || request.getQueryEmbedding() == null || request.getQueryEmbedding().isEmpty()
                 || request.getTopK() == null || request.getTopK() <= 0
                 || request.getScoreThreshold() == null) {
@@ -113,10 +114,25 @@ public class MockKnowledgeVectorStore implements KnowledgeVectorStore {
                 .documentId(vector.getDocumentId())
                 .chunkId(vector.getChunkId())
                 .chunkNo(vector.getChunkNo())
+                .documentTitle(extractDocumentTitle(vector.getMetadata()))
                 .content(vector.getContent())
                 .score(score)
                 .metadata(vector.getMetadata())
                 .build();
+    }
+
+    private String extractDocumentTitle(Map<String, Object> metadata) {
+        if (metadata == null || metadata.isEmpty()) {
+            return null;
+        }
+        Object value = metadata.get("documentTitle");
+        if (value == null) {
+            value = metadata.get("title");
+        }
+        if (value == null) {
+            value = metadata.get("filename");
+        }
+        return value == null ? null : value.toString();
     }
 
     private double cosineSimilarity(List<Double> left, List<Double> right) {

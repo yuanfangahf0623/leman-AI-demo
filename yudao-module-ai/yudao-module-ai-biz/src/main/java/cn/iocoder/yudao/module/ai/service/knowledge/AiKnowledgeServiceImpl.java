@@ -27,6 +27,7 @@ public class AiKnowledgeServiceImpl implements AiKnowledgeService {
 
     private static final Integer DEFAULT_STATUS = 0;
     private static final Integer DEFAULT_COUNT = 0;
+    private static final String DEFAULT_DEPARTMENT_IDS = "*";
 
     private final AiKnowledgeBaseMapper knowledgeBaseMapper;
 
@@ -42,6 +43,7 @@ public class AiKnowledgeServiceImpl implements AiKnowledgeService {
         knowledgeBase.setTenantId(tenantId);
         // 新建知识库时初始化状态和统计字段，文档/切片数量后续由文档流程维护。
         knowledgeBase.setStatus(knowledgeBase.getStatus() != null ? knowledgeBase.getStatus() : DEFAULT_STATUS);
+        knowledgeBase.setDepartmentIds(normalizeDepartmentIds(knowledgeBase.getDepartmentIds()));
         knowledgeBase.setDocumentCount(DEFAULT_COUNT);
         knowledgeBase.setChunkCount(DEFAULT_COUNT);
         knowledgeBaseMapper.insert(knowledgeBase);
@@ -59,6 +61,8 @@ public class AiKnowledgeServiceImpl implements AiKnowledgeService {
 
         AiKnowledgeBaseDO updateObj = AiKnowledgeConvert.INSTANCE.convert(updateReqVO);
         updateObj.setTenantId(oldKnowledge.getTenantId());
+        updateObj.setDepartmentIds(normalizeDepartmentIds(updateObj.getDepartmentIds() != null
+                ? updateObj.getDepartmentIds() : oldKnowledge.getDepartmentIds()));
         // 统计字段不由知识库基础信息更新接口直接修改。
         updateObj.setDocumentCount(oldKnowledge.getDocumentCount());
         updateObj.setChunkCount(oldKnowledge.getChunkCount());
@@ -100,6 +104,10 @@ public class AiKnowledgeServiceImpl implements AiKnowledgeService {
             return;
         }
         throw new ServiceException(KNOWLEDGE_CODE_DUPLICATE, "知识库编码在当前租户下已存在");
+    }
+
+    private String normalizeDepartmentIds(String departmentIds) {
+        return departmentIds == null || departmentIds.isBlank() ? DEFAULT_DEPARTMENT_IDS : departmentIds.trim();
     }
 
 }

@@ -26,6 +26,8 @@ public class AiChatMessageDO {
     private Long id;
     @TableField("tenant_id")
     private Long tenantId;
+    @TableField("department_id")
+    private Long departmentId;
     @TableField("conversation_id")
     private Long conversationId;
     @TableField("user_id")
@@ -34,12 +36,16 @@ public class AiChatMessageDO {
     private String role;
     @TableField("content")
     private String content;
+    @TableField("model")
+    private String model;
     @TableField("prompt_tokens")
     private Integer promptTokens;
     @TableField("completion_tokens")
     private Integer completionTokens;
     @TableField("total_tokens")
     private Integer totalTokens;
+    @TableField("latency_ms")
+    private Long latencyMs;
     @TableField("status")
     private Integer status;
     @TableField("error_message")

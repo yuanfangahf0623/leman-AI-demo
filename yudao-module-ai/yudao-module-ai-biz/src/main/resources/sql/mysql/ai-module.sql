@@ -7,6 +7,7 @@ CREATE TABLE IF NOT EXISTS `ai_knowledge_base` (
   `code` varchar(64) COLLATE utf8mb4_unicode_ci NOT NULL COMMENT '知识库编码',
   `description` varchar(512) COLLATE utf8mb4_unicode_ci DEFAULT NULL COMMENT '知识库描述',
   `status` tinyint NOT NULL DEFAULT 0 COMMENT '状态',
+  `department_ids` varchar(512) COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT '*' COMMENT '可访问部门编号，逗号分隔，* 表示租户内全部部门',
   `vector_store_type` varchar(32) COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'pgvector' COMMENT '向量库类型',
   `embedding_model` varchar(128) COLLATE utf8mb4_unicode_ci DEFAULT NULL COMMENT 'Embedding 模型',
   `chunk_size` int NOT NULL DEFAULT 800 COMMENT '默认切片大小',
@@ -26,6 +27,7 @@ CREATE TABLE IF NOT EXISTS `ai_knowledge_base` (
 CREATE TABLE IF NOT EXISTS `ai_data_source` (
   `id` bigint NOT NULL AUTO_INCREMENT COMMENT '编号',
   `tenant_id` bigint NOT NULL DEFAULT 0 COMMENT '租户编号',
+  `department_id` bigint NOT NULL DEFAULT 0 COMMENT '部门编号',
   `knowledge_base_id` bigint NOT NULL COMMENT '知识库编号',
   `name` varchar(128) COLLATE utf8mb4_unicode_ci NOT NULL COMMENT '数据源名称',
   `type` varchar(32) COLLATE utf8mb4_unicode_ci NOT NULL COMMENT '数据源类型',
@@ -159,19 +161,23 @@ CREATE TABLE IF NOT EXISTS `ai_chat_conversation` (
   `deleted` bit(1) NOT NULL DEFAULT b'0' COMMENT '是否删除',
   PRIMARY KEY (`id`) USING BTREE,
   KEY `idx_ai_conversation_user_kb_tenant` (`user_id`, `knowledge_base_id`, `tenant_id`) USING BTREE,
-  KEY `idx_ai_conversation_kb_tenant` (`knowledge_base_id`, `tenant_id`) USING BTREE
+  KEY `idx_ai_conversation_kb_tenant` (`knowledge_base_id`, `tenant_id`) USING BTREE,
+  KEY `idx_ai_conversation_tenant_dept` (`tenant_id`, `department_id`) USING BTREE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='问答会话表，用于记录用户发起的问答会话信息';
 
 CREATE TABLE IF NOT EXISTS `ai_chat_message` (
   `id` bigint NOT NULL AUTO_INCREMENT COMMENT '编号',
   `tenant_id` bigint NOT NULL DEFAULT 0 COMMENT '租户编号',
+  `department_id` bigint NOT NULL DEFAULT 0 COMMENT '部门编号',
   `conversation_id` bigint NOT NULL COMMENT '会话编号',
   `user_id` bigint DEFAULT NULL COMMENT '用户编号',
   `role` varchar(32) COLLATE utf8mb4_unicode_ci NOT NULL COMMENT '消息角色',
   `content` longtext COLLATE utf8mb4_unicode_ci NOT NULL COMMENT '消息内容',
+  `model` varchar(128) COLLATE utf8mb4_unicode_ci DEFAULT NULL COMMENT '模型名称',
   `prompt_tokens` int NOT NULL DEFAULT 0 COMMENT '提示词 Token 数',
   `completion_tokens` int NOT NULL DEFAULT 0 COMMENT '回复 Token 数',
   `total_tokens` int NOT NULL DEFAULT 0 COMMENT '总 Token 数',
+  `latency_ms` bigint NOT NULL DEFAULT 0 COMMENT '模型调用耗时，单位毫秒',
   `status` tinyint NOT NULL DEFAULT 0 COMMENT '状态',
   `error_message` varchar(1024) COLLATE utf8mb4_unicode_ci DEFAULT NULL COMMENT '错误信息',
   `creator` varchar(64) COLLATE utf8mb4_unicode_ci DEFAULT '' COMMENT '创建者',
@@ -181,18 +187,22 @@ CREATE TABLE IF NOT EXISTS `ai_chat_message` (
   `deleted` bit(1) NOT NULL DEFAULT b'0' COMMENT '是否删除',
   PRIMARY KEY (`id`) USING BTREE,
   KEY `idx_ai_message_conversation_id` (`conversation_id`) USING BTREE,
-  KEY `idx_ai_message_tenant_user` (`tenant_id`, `user_id`) USING BTREE
+  KEY `idx_ai_message_tenant_user` (`tenant_id`, `user_id`) USING BTREE,
+  KEY `idx_ai_message_tenant_dept` (`tenant_id`, `department_id`) USING BTREE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='问答消息表，用于存储会话中的每条消息，包括用户提问和模型回答';
 
 CREATE TABLE IF NOT EXISTS `ai_chat_citation` (
   `id` bigint NOT NULL AUTO_INCREMENT COMMENT '编号',
   `tenant_id` bigint NOT NULL DEFAULT 0 COMMENT '租户编号',
+  `department_id` bigint NOT NULL DEFAULT 0 COMMENT '部门编号',
   `message_id` bigint NOT NULL COMMENT '消息编号',
   `knowledge_base_id` bigint NOT NULL COMMENT '知识库编号',
   `document_id` bigint NOT NULL COMMENT '文档编号',
   `chunk_id` bigint NOT NULL COMMENT '切片编号',
+  `document_title` varchar(256) COLLATE utf8mb4_unicode_ci DEFAULT NULL COMMENT '引用文档标题快照',
   `score` decimal(10,6) DEFAULT NULL COMMENT '相关性分数',
   `sort_order` int NOT NULL DEFAULT 0 COMMENT '排序',
+  `content_snapshot` text COLLATE utf8mb4_unicode_ci COMMENT '引用内容快照',
   `quote_text` text COLLATE utf8mb4_unicode_ci COMMENT '引用内容',
   `creator` varchar(64) COLLATE utf8mb4_unicode_ci DEFAULT '' COMMENT '创建者',
   `create_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
@@ -201,5 +211,6 @@ CREATE TABLE IF NOT EXISTS `ai_chat_citation` (
   `deleted` bit(1) NOT NULL DEFAULT b'0' COMMENT '是否删除',
   PRIMARY KEY (`id`) USING BTREE,
   KEY `idx_ai_citation_message_document_chunk` (`message_id`, `document_id`, `chunk_id`) USING BTREE,
-  KEY `idx_ai_citation_kb_tenant` (`knowledge_base_id`, `tenant_id`) USING BTREE
+  KEY `idx_ai_citation_kb_tenant` (`knowledge_base_id`, `tenant_id`) USING BTREE,
+  KEY `idx_ai_citation_tenant_dept` (`tenant_id`, `department_id`) USING BTREE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='引用来源表，用于存储问答返回中引用的文档/Chunk 信息';

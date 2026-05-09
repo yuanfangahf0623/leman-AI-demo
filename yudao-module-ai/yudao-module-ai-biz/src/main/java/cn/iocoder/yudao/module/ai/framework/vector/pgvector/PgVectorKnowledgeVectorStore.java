@@ -100,17 +100,21 @@ public class PgVectorKnowledgeVectorStore implements KnowledgeVectorStore {
                  LIMIT ?
                 """.formatted(tableName);
         try {
-            return jdbcTemplate.query(sql, ps -> bindSearch(ps, request, queryVector), (rs, rowNum) -> KnowledgeHit.builder()
-                    .vectorId(rs.getString("vector_id"))
-                    .tenantId(rs.getLong("tenant_id"))
-                    .knowledgeBaseId(rs.getLong("knowledge_base_id"))
-                    .documentId(rs.getLong("document_id"))
-                    .chunkId(rs.getLong("chunk_id"))
-                    .chunkNo(extractChunkNo(rs.getString("metadata_json")))
-                    .content(rs.getString("content"))
-                    .score(rs.getDouble("score"))
-                    .metadata(parseMetadata(rs.getString("metadata_json")))
-                    .build());
+            return jdbcTemplate.query(sql, ps -> bindSearch(ps, request, queryVector), (rs, rowNum) -> {
+                Map<String, Object> metadata = parseMetadata(rs.getString("metadata_json"));
+                return KnowledgeHit.builder()
+                        .vectorId(rs.getString("vector_id"))
+                        .tenantId(rs.getLong("tenant_id"))
+                        .knowledgeBaseId(rs.getLong("knowledge_base_id"))
+                        .documentId(rs.getLong("document_id"))
+                        .chunkId(rs.getLong("chunk_id"))
+                        .chunkNo(extractChunkNo(metadata))
+                        .documentTitle(extractDocumentTitle(metadata))
+                        .content(rs.getString("content"))
+                        .score(rs.getDouble("score"))
+                        .metadata(metadata)
+                        .build();
+            });
         } catch (DataAccessException ex) {
             log.warn("PgVector search failed, tenantId={}, knowledgeBaseId={}, topK={}, errorType={}, error={}",
                     request.getTenantId(), request.getKnowledgeBaseId(), request.getTopK(),
@@ -205,7 +209,8 @@ public class PgVectorKnowledgeVectorStore implements KnowledgeVectorStore {
     }
 
     private void validateSearchRequest(KnowledgeSearchRequest request) {
-        if (request == null || request.getTenantId() == null || request.getKnowledgeBaseId() == null
+        if (request == null || request.getTenantId() == null || request.getDepartmentId() == null
+                || request.getKnowledgeBaseId() == null
                 || request.getQueryEmbedding() == null || request.getQueryEmbedding().isEmpty()
                 || request.getTopK() == null || request.getTopK() <= 0
                 || request.getScoreThreshold() == null) {
@@ -254,8 +259,8 @@ public class PgVectorKnowledgeVectorStore implements KnowledgeVectorStore {
         }
     }
 
-    private Integer extractChunkNo(String metadataJson) {
-        Object value = parseMetadata(metadataJson).get("chunkNo");
+    private Integer extractChunkNo(Map<String, Object> metadata) {
+        Object value = metadata.get("chunkNo");
         if (value instanceof Number number) {
             return number.intValue();
         }
@@ -267,6 +272,17 @@ public class PgVectorKnowledgeVectorStore implements KnowledgeVectorStore {
             }
         }
         return null;
+    }
+
+    private String extractDocumentTitle(Map<String, Object> metadata) {
+        Object value = metadata.get("documentTitle");
+        if (value == null) {
+            value = metadata.get("title");
+        }
+        if (value == null) {
+            value = metadata.get("filename");
+        }
+        return value == null ? null : value.toString();
     }
 
     private String buildSafeTableName(AiProperties aiProperties) {

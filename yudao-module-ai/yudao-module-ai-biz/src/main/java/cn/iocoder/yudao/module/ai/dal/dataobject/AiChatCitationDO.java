@@ -27,6 +27,8 @@ public class AiChatCitationDO {
     private Long id;
     @TableField("tenant_id")
     private Long tenantId;
+    @TableField("department_id")
+    private Long departmentId;
     @TableField("message_id")
     private Long messageId;
     @TableField("knowledge_base_id")
@@ -35,10 +37,14 @@ public class AiChatCitationDO {
     private Long documentId;
     @TableField("chunk_id")
     private Long chunkId;
+    @TableField("document_title")
+    private String documentTitle;
     @TableField("score")
     private BigDecimal score;
     @TableField("sort_order")
     private Integer sortOrder;
+    @TableField("content_snapshot")
+    private String contentSnapshot;
     @TableField("quote_text")
     private String quoteText;
     @TableField("creator")

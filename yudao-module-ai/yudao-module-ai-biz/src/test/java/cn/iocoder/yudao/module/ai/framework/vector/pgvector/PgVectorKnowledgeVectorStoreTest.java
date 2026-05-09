@@ -72,6 +72,7 @@ class PgVectorKnowledgeVectorStoreTest {
 
         List<KnowledgeHit> hits = vectorStore.search(KnowledgeSearchRequest.builder()
                 .tenantId(1L)
+                .departmentId(20L)
                 .knowledgeBaseId(10L)
                 .queryEmbedding(List.of(1.0D, 0.0D, 0.0D))
                 .topK(5)
@@ -94,6 +95,7 @@ class PgVectorKnowledgeVectorStoreTest {
 
         List<KnowledgeHit> hits = vectorStore.search(KnowledgeSearchRequest.builder()
                 .tenantId(1L)
+                .departmentId(20L)
                 .knowledgeBaseId(10L)
                 .queryEmbedding(List.of(1.0D, 0.0D, 0.0D))
                 .topK(1)
@@ -115,6 +117,7 @@ class PgVectorKnowledgeVectorStoreTest {
 
         List<KnowledgeHit> hits = vectorStore.search(KnowledgeSearchRequest.builder()
                 .tenantId(1L)
+                .departmentId(20L)
                 .knowledgeBaseId(10L)
                 .queryEmbedding(List.of(1.0D, 0.0D, 0.0D))
                 .topK(5)
@@ -134,6 +137,7 @@ class PgVectorKnowledgeVectorStoreTest {
 
         List<KnowledgeHit> hits = vectorStore.search(KnowledgeSearchRequest.builder()
                 .tenantId(1L)
+                .departmentId(20L)
                 .knowledgeBaseId(11L)
                 .queryEmbedding(List.of(1.0D, 0.0D, 0.0D))
                 .topK(5)

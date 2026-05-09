@@ -22,6 +22,11 @@ public class KnowledgeSearchRequest {
     private Long tenantId;
 
     /**
+     * 部门 ID。RAG 编排层必须传入，用于知识库权限审计和检索上下文隔离。
+     */
+    private Long departmentId;
+
+    /**
      * 知识库 ID。RAG 检索必须限制在指定知识库内。
      */
     private Long knowledgeBaseId;

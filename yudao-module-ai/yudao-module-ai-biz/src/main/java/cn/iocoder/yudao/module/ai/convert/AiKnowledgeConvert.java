@@ -21,8 +21,8 @@ public class AiKnowledgeConvert {
         }
         AiKnowledgeBaseDO result = new AiKnowledgeBaseDO();
         fillBaseFields(result, bean.getName(), bean.getCode(), bean.getDescription(), bean.getStatus(),
-                bean.getVectorStoreType(), bean.getEmbeddingModel(), bean.getChunkSize(), bean.getChunkOverlap(),
-                bean.getTopK());
+                bean.getDepartmentIds(), bean.getVectorStoreType(), bean.getEmbeddingModel(), bean.getChunkSize(),
+                bean.getChunkOverlap(), bean.getTopK());
         return result;
     }
 
@@ -33,8 +33,8 @@ public class AiKnowledgeConvert {
         AiKnowledgeBaseDO result = new AiKnowledgeBaseDO();
         result.setId(bean.getId());
         fillBaseFields(result, bean.getName(), bean.getCode(), bean.getDescription(), bean.getStatus(),
-                bean.getVectorStoreType(), bean.getEmbeddingModel(), bean.getChunkSize(), bean.getChunkOverlap(),
-                bean.getTopK());
+                bean.getDepartmentIds(), bean.getVectorStoreType(), bean.getEmbeddingModel(), bean.getChunkSize(),
+                bean.getChunkOverlap(), bean.getTopK());
         return result;
     }
 
@@ -48,6 +48,7 @@ public class AiKnowledgeConvert {
         result.setCode(bean.getCode());
         result.setDescription(bean.getDescription());
         result.setStatus(bean.getStatus());
+        result.setDepartmentIds(bean.getDepartmentIds());
         result.setVectorStoreType(bean.getVectorStoreType());
         result.setEmbeddingModel(bean.getEmbeddingModel());
         result.setChunkSize(bean.getChunkSize());
@@ -71,12 +72,13 @@ public class AiKnowledgeConvert {
     }
 
     private void fillBaseFields(AiKnowledgeBaseDO result, String name, String code, String description, Integer status,
-                                String vectorStoreType, String embeddingModel, Integer chunkSize,
+                                String departmentIds, String vectorStoreType, String embeddingModel, Integer chunkSize,
                                 Integer chunkOverlap, Integer topK) {
         result.setName(name);
         result.setCode(code);
         result.setDescription(description);
         result.setStatus(status);
+        result.setDepartmentIds(departmentIds);
         result.setVectorStoreType(vectorStoreType);
         result.setEmbeddingModel(embeddingModel);
         result.setChunkSize(chunkSize);
