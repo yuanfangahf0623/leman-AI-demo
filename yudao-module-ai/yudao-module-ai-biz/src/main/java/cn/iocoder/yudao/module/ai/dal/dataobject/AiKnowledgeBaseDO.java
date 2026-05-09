@@ -34,18 +34,24 @@ public class AiKnowledgeBaseDO {
     private String description;
     @TableField("status")
     private Integer status;
+    @TableField("visibility")
+    private String visibility;
     @TableField("department_ids")
     private String departmentIds;
     @TableField("vector_store_type")
     private String vectorStoreType;
     @TableField("embedding_model")
     private String embeddingModel;
+    @TableField("chat_model")
+    private String chatModel;
     @TableField("chunk_size")
     private Integer chunkSize;
     @TableField("chunk_overlap")
     private Integer chunkOverlap;
     @TableField("top_k")
     private Integer topK;
+    @TableField("score_threshold")
+    private Double scoreThreshold;
     @TableField("document_count")
     private Integer documentCount;
     @TableField("chunk_count")

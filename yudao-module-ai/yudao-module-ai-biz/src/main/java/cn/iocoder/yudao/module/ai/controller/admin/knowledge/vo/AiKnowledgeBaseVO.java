@@ -1,6 +1,8 @@
 package cn.iocoder.yudao.module.ai.controller.admin.knowledge.vo;
 
 import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.DecimalMax;
+import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
@@ -26,6 +28,9 @@ public class AiKnowledgeBaseVO {
 
     private Integer status;
 
+    @Size(max = 32, message = "可见范围不能超过 32 个字符")
+    private String visibility;
+
     @Size(max = 512, message = "可访问部门编号不能超过 512 个字符")
     private String departmentIds;
 
@@ -35,6 +40,9 @@ public class AiKnowledgeBaseVO {
 
     @Size(max = 128, message = "Embedding 模型不能超过 128 个字符")
     private String embeddingModel;
+
+    @Size(max = 128, message = "Chat 模型不能超过 128 个字符")
+    private String chatModel;
 
     @NotNull(message = "切片大小不能为空")
     @Min(value = 1, message = "切片大小必须大于 0")
@@ -50,5 +58,9 @@ public class AiKnowledgeBaseVO {
     @Min(value = 1, message = "召回数量必须大于 0")
     @Max(value = 100, message = "召回数量不能超过 100")
     private Integer topK;
+
+    @DecimalMin(value = "0.0", message = "相似度阈值不能小于 0")
+    @DecimalMax(value = "1.0", message = "相似度阈值不能大于 1")
+    private Double scoreThreshold;
 
 }

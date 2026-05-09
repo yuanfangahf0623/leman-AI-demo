@@ -17,4 +17,13 @@ public enum KnowledgeVisibilityEnum {
     private final String code;
     private final String name;
 
+    public static boolean isValidCode(String code) {
+        for (KnowledgeVisibilityEnum value : values()) {
+            if (value.getCode().equals(code)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
 }

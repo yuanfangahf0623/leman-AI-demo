@@ -87,7 +87,7 @@ public class RagServiceImpl implements RagService {
                 .knowledgeBaseId(knowledgeBase.getId())
                 .queryEmbedding(queryEmbedding)
                 .topK(resolveTopK(request, knowledgeBase))
-                .scoreThreshold(resolveScoreThreshold(request))
+                .scoreThreshold(resolveScoreThreshold(request, knowledgeBase))
                 .build();
         List<KnowledgeHit> hits = knowledgeVectorStore.search(searchRequest);
         if (hits == null || hits.isEmpty()) {
@@ -107,6 +107,7 @@ public class RagServiceImpl implements RagService {
 
         long modelStartNanos = System.nanoTime();
         AiChatModelResponse modelResponse = aiChatModelService.chat(AiChatModelRequest.builder()
+                .model(knowledgeBase.getChatModel())
                 .systemPrompt(prompt.getSystemPrompt())
                 .userPrompt(prompt.getUserPrompt())
                 .build());
@@ -272,9 +273,12 @@ public class RagServiceImpl implements RagService {
         return defaultTopK == null || defaultTopK <= 0 ? DEFAULT_TOP_K : defaultTopK;
     }
 
-    private Double resolveScoreThreshold(RagChatRequest request) {
+    private Double resolveScoreThreshold(RagChatRequest request, AiKnowledgeBaseDO knowledgeBase) {
         if (request.getScoreThreshold() != null) {
             return request.getScoreThreshold();
+        }
+        if (knowledgeBase.getScoreThreshold() != null) {
+            return knowledgeBase.getScoreThreshold();
         }
         Double defaultScoreThreshold = aiProperties.getRag() == null ? null : aiProperties.getRag().getDefaultScoreThreshold();
         return defaultScoreThreshold == null ? DEFAULT_SCORE_THRESHOLD : defaultScoreThreshold;

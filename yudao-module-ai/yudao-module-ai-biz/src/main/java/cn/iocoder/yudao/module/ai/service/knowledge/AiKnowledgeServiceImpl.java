@@ -8,6 +8,8 @@ import cn.iocoder.yudao.module.ai.controller.admin.knowledge.vo.AiKnowledgeUpdat
 import cn.iocoder.yudao.module.ai.convert.AiKnowledgeConvert;
 import cn.iocoder.yudao.module.ai.dal.dataobject.AiKnowledgeBaseDO;
 import cn.iocoder.yudao.module.ai.dal.mysql.AiKnowledgeBaseMapper;
+import cn.iocoder.yudao.module.ai.enums.KnowledgeVisibilityEnum;
+import cn.iocoder.yudao.module.ai.enums.VectorStoreTypeEnum;
 import cn.iocoder.yudao.module.ai.framework.tenant.AiTenantContextHolder;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -15,6 +17,8 @@ import org.springframework.transaction.annotation.Transactional;
 
 import static cn.iocoder.yudao.module.ai.enums.AiKnowledgeErrorCodeConstants.KNOWLEDGE_CODE_DUPLICATE;
 import static cn.iocoder.yudao.module.ai.enums.AiKnowledgeErrorCodeConstants.KNOWLEDGE_NOT_EXISTS;
+import static cn.iocoder.yudao.module.ai.enums.AiKnowledgeErrorCodeConstants.KNOWLEDGE_VECTOR_STORE_TYPE_INVALID;
+import static cn.iocoder.yudao.module.ai.enums.AiKnowledgeErrorCodeConstants.KNOWLEDGE_VISIBILITY_INVALID;
 
 /**
  * AI 知识库 Service 实现。
@@ -28,6 +32,8 @@ public class AiKnowledgeServiceImpl implements AiKnowledgeService {
     private static final Integer DEFAULT_STATUS = 0;
     private static final Integer DEFAULT_COUNT = 0;
     private static final String DEFAULT_DEPARTMENT_IDS = "*";
+    private static final String DEFAULT_VISIBILITY = KnowledgeVisibilityEnum.PUBLIC.getCode();
+    private static final Double DEFAULT_SCORE_THRESHOLD = 0.7D;
 
     private final AiKnowledgeBaseMapper knowledgeBaseMapper;
 
@@ -38,12 +44,16 @@ public class AiKnowledgeServiceImpl implements AiKnowledgeService {
         Long tenantId = AiTenantContextHolder.getTenantId();
         // 同一租户内知识库 code 不允许重复。
         validateCodeUnique(tenantId, null, createReqVO.getCode());
+        validateVisibility(createReqVO.getVisibility());
+        validateVectorStoreType(createReqVO.getVectorStoreType());
 
         AiKnowledgeBaseDO knowledgeBase = AiKnowledgeConvert.INSTANCE.convert(createReqVO);
         knowledgeBase.setTenantId(tenantId);
         // 新建知识库时初始化状态和统计字段，文档/切片数量后续由文档流程维护。
         knowledgeBase.setStatus(knowledgeBase.getStatus() != null ? knowledgeBase.getStatus() : DEFAULT_STATUS);
+        knowledgeBase.setVisibility(normalizeVisibility(knowledgeBase.getVisibility()));
         knowledgeBase.setDepartmentIds(normalizeDepartmentIds(knowledgeBase.getDepartmentIds()));
+        knowledgeBase.setScoreThreshold(normalizeScoreThreshold(knowledgeBase.getScoreThreshold()));
         knowledgeBase.setDocumentCount(DEFAULT_COUNT);
         knowledgeBase.setChunkCount(DEFAULT_COUNT);
         knowledgeBaseMapper.insert(knowledgeBase);
@@ -58,11 +68,17 @@ public class AiKnowledgeServiceImpl implements AiKnowledgeService {
         AiKnowledgeBaseDO oldKnowledge = validateKnowledgeExists(updateReqVO.getId(), tenantId);
         // 允许保持自身 code 不变，但不允许改成同租户已有 code。
         validateCodeUnique(tenantId, updateReqVO.getId(), updateReqVO.getCode());
+        validateVisibility(updateReqVO.getVisibility());
+        validateVectorStoreType(updateReqVO.getVectorStoreType());
 
         AiKnowledgeBaseDO updateObj = AiKnowledgeConvert.INSTANCE.convert(updateReqVO);
         updateObj.setTenantId(oldKnowledge.getTenantId());
+        updateObj.setVisibility(normalizeVisibility(updateObj.getVisibility() != null
+                ? updateObj.getVisibility() : oldKnowledge.getVisibility()));
         updateObj.setDepartmentIds(normalizeDepartmentIds(updateObj.getDepartmentIds() != null
                 ? updateObj.getDepartmentIds() : oldKnowledge.getDepartmentIds()));
+        updateObj.setScoreThreshold(normalizeScoreThreshold(updateObj.getScoreThreshold() != null
+                ? updateObj.getScoreThreshold() : oldKnowledge.getScoreThreshold()));
         // 统计字段不由知识库基础信息更新接口直接修改。
         updateObj.setDocumentCount(oldKnowledge.getDocumentCount());
         updateObj.setChunkCount(oldKnowledge.getChunkCount());
@@ -108,6 +124,27 @@ public class AiKnowledgeServiceImpl implements AiKnowledgeService {
 
     private String normalizeDepartmentIds(String departmentIds) {
         return departmentIds == null || departmentIds.isBlank() ? DEFAULT_DEPARTMENT_IDS : departmentIds.trim();
+    }
+
+    private String normalizeVisibility(String visibility) {
+        return visibility == null || visibility.isBlank() ? DEFAULT_VISIBILITY : visibility.trim();
+    }
+
+    private Double normalizeScoreThreshold(Double scoreThreshold) {
+        return scoreThreshold == null ? DEFAULT_SCORE_THRESHOLD : scoreThreshold;
+    }
+
+    private void validateVisibility(String visibility) {
+        String normalizedVisibility = normalizeVisibility(visibility);
+        if (!KnowledgeVisibilityEnum.isValidCode(normalizedVisibility)) {
+            throw new ServiceException(KNOWLEDGE_VISIBILITY_INVALID, "知识库可见范围不支持");
+        }
+    }
+
+    private void validateVectorStoreType(String vectorStoreType) {
+        if (!VectorStoreTypeEnum.isValidCode(vectorStoreType)) {
+            throw new ServiceException(KNOWLEDGE_VECTOR_STORE_TYPE_INVALID, "向量库类型不支持");
+        }
     }
 
 }

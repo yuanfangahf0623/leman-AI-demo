@@ -15,12 +15,15 @@ public class AiKnowledgeRespVO {
     private String code;
     private String description;
     private Integer status;
+    private String visibility;
     private String departmentIds;
     private String vectorStoreType;
     private String embeddingModel;
+    private String chatModel;
     private Integer chunkSize;
     private Integer chunkOverlap;
     private Integer topK;
+    private Double scoreThreshold;
     private Integer documentCount;
     private Integer chunkCount;
     private LocalDateTime createTime;

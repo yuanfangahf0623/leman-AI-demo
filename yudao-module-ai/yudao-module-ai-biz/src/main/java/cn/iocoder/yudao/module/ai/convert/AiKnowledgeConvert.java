@@ -21,8 +21,9 @@ public class AiKnowledgeConvert {
         }
         AiKnowledgeBaseDO result = new AiKnowledgeBaseDO();
         fillBaseFields(result, bean.getName(), bean.getCode(), bean.getDescription(), bean.getStatus(),
-                bean.getDepartmentIds(), bean.getVectorStoreType(), bean.getEmbeddingModel(), bean.getChunkSize(),
-                bean.getChunkOverlap(), bean.getTopK());
+                bean.getVisibility(), bean.getDepartmentIds(), bean.getVectorStoreType(), bean.getEmbeddingModel(),
+                bean.getChatModel(), bean.getChunkSize(), bean.getChunkOverlap(), bean.getTopK(),
+                bean.getScoreThreshold());
         return result;
     }
 
@@ -33,8 +34,9 @@ public class AiKnowledgeConvert {
         AiKnowledgeBaseDO result = new AiKnowledgeBaseDO();
         result.setId(bean.getId());
         fillBaseFields(result, bean.getName(), bean.getCode(), bean.getDescription(), bean.getStatus(),
-                bean.getDepartmentIds(), bean.getVectorStoreType(), bean.getEmbeddingModel(), bean.getChunkSize(),
-                bean.getChunkOverlap(), bean.getTopK());
+                bean.getVisibility(), bean.getDepartmentIds(), bean.getVectorStoreType(), bean.getEmbeddingModel(),
+                bean.getChatModel(), bean.getChunkSize(), bean.getChunkOverlap(), bean.getTopK(),
+                bean.getScoreThreshold());
         return result;
     }
 
@@ -48,12 +50,15 @@ public class AiKnowledgeConvert {
         result.setCode(bean.getCode());
         result.setDescription(bean.getDescription());
         result.setStatus(bean.getStatus());
+        result.setVisibility(bean.getVisibility());
         result.setDepartmentIds(bean.getDepartmentIds());
         result.setVectorStoreType(bean.getVectorStoreType());
         result.setEmbeddingModel(bean.getEmbeddingModel());
+        result.setChatModel(bean.getChatModel());
         result.setChunkSize(bean.getChunkSize());
         result.setChunkOverlap(bean.getChunkOverlap());
         result.setTopK(bean.getTopK());
+        result.setScoreThreshold(bean.getScoreThreshold());
         result.setDocumentCount(bean.getDocumentCount());
         result.setChunkCount(bean.getChunkCount());
         result.setCreateTime(bean.getCreateTime());
@@ -72,18 +77,22 @@ public class AiKnowledgeConvert {
     }
 
     private void fillBaseFields(AiKnowledgeBaseDO result, String name, String code, String description, Integer status,
-                                String departmentIds, String vectorStoreType, String embeddingModel, Integer chunkSize,
-                                Integer chunkOverlap, Integer topK) {
+                                String visibility, String departmentIds, String vectorStoreType, String embeddingModel,
+                                String chatModel, Integer chunkSize, Integer chunkOverlap, Integer topK,
+                                Double scoreThreshold) {
         result.setName(name);
         result.setCode(code);
         result.setDescription(description);
         result.setStatus(status);
+        result.setVisibility(visibility);
         result.setDepartmentIds(departmentIds);
         result.setVectorStoreType(vectorStoreType);
         result.setEmbeddingModel(embeddingModel);
+        result.setChatModel(chatModel);
         result.setChunkSize(chunkSize);
         result.setChunkOverlap(chunkOverlap);
         result.setTopK(topK);
+        result.setScoreThreshold(scoreThreshold);
     }
 
 }
