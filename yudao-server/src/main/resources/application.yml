@@ -1,0 +1,73 @@
+server:
+  port: ${SERVER_PORT:48080}
+
+spring:
+  application:
+    name: yudao-server
+  autoconfigure:
+    exclude:
+      - org.springframework.boot.autoconfigure.security.servlet.UserDetailsServiceAutoConfiguration
+  datasource:
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    url: ${SPRING_DATASOURCE_URL:jdbc:mysql://${MYSQL_HOST:127.0.0.1}:${MYSQL_PORT:3306}/${MYSQL_DATABASE:yudao_ai}?useUnicode=true&characterEncoding=utf8&zeroDateTimeBehavior=convertToNull&useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true}
+    username: ${SPRING_DATASOURCE_USERNAME:${MYSQL_USER:yudao}}
+    password: ${SPRING_DATASOURCE_PASSWORD:}
+  servlet:
+    multipart:
+      max-file-size: ${SPRING_SERVLET_MULTIPART_MAX_FILE_SIZE:100MB}
+      max-request-size: ${SPRING_SERVLET_MULTIPART_MAX_REQUEST_SIZE:100MB}
+  sql:
+    init:
+      mode: always
+      encoding: UTF-8
+      schema-locations:
+        - classpath:sql/mysql/system-base-20260509.sql
+        - classpath:sql/mysql/ai-module.sql
+        - classpath:sql/mysql/system-menu-pages-20260509.sql
+
+mybatis-plus:
+  configuration:
+    map-underscore-to-camel-case: true
+  global-config:
+    db-config:
+      logic-delete-field: deleted
+      logic-delete-value: 1
+      logic-not-delete-value: 0
+
+logging:
+  level:
+    cn.iocoder.yudao: info
+
+ai:
+  model:
+    provider: ${AI_MODEL_PROVIDER:mock}
+    base-url: ${AI_BASE_URL:}
+    api-key: ${AI_API_KEY:}
+    chat-model: ${AI_CHAT_MODEL:gpt-4o-mini}
+    embedding-model: ${AI_EMBEDDING_MODEL:text-embedding-3-small}
+  vector-store:
+    type: ${AI_VECTOR_STORE_TYPE:mock}
+    pgvector:
+      table-name: ${AI_PGVECTOR_TABLE_NAME:ai_vector_store}
+      dimensions: ${AI_PGVECTOR_DIMENSIONS:1536}
+  rag:
+    default-top-k: ${AI_RAG_DEFAULT_TOP_K:5}
+    default-score-threshold: ${AI_RAG_DEFAULT_SCORE_THRESHOLD:0.7}
+    max-context-tokens: ${AI_RAG_MAX_CONTEXT_TOKENS:6000}
+  document:
+    default-chunk-size: ${AI_DOCUMENT_DEFAULT_CHUNK_SIZE:800}
+    default-chunk-overlap: ${AI_DOCUMENT_DEFAULT_CHUNK_OVERLAP:100}
+    max-file-size-mb: ${AI_DOCUMENT_MAX_FILE_SIZE_MB:50}
+    embedding-batch-size: ${AI_DOCUMENT_EMBEDDING_BATCH_SIZE:32}
+    storage-base-path: ${AI_DOCUMENT_STORAGE_BASE_PATH:.data/ai-documents}
+
+leman:
+  auth:
+    access-token-expire-seconds: ${LEMAN_ACCESS_TOKEN_EXPIRE_SECONDS:7200}
+    refresh-token-expire-seconds: ${LEMAN_REFRESH_TOKEN_EXPIRE_SECONDS:604800}
+    bootstrap:
+      enabled: ${LEMAN_BOOTSTRAP_ADMIN_ENABLED:true}
+      username: ${LEMAN_ADMIN_USERNAME:admin}
+      password: ${LEMAN_ADMIN_PASSWORD:}
+      tenant-id: ${LEMAN_ADMIN_TENANT_ID:1}
+      dept-id: ${LEMAN_ADMIN_DEPT_ID:100}
