@@ -4,17 +4,14 @@ import lombok.AllArgsConstructor;
 import lombok.Getter;
 
 /**
- * 同步任务状态枚举。
+ * 同步记录处理状态枚举。
  */
 @Getter
 @AllArgsConstructor
-public enum SyncJobStatusEnum {
+public enum SyncRecordStatusEnum {
 
-    PENDING(0, "待执行"),
-    RUNNING(10, "运行中"),
     SUCCESS(20, "成功"),
-    FAILED(30, "失败"),
-    CANCELED(40, "已取消");
+    FAILED(30, "失败");
 
     private final Integer code;
     private final String name;

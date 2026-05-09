@@ -22,6 +22,32 @@ public interface AiDocumentMapper extends BaseMapper<AiDocumentDO> {
                 .eq(AiDocumentDO::getTenantId, tenantId));
     }
 
+    default AiDocumentDO selectBySourceUri(Long tenantId, Long knowledgeBaseId, Long dataSourceId, String sourceUri) {
+        return selectOne(Wrappers.lambdaQuery(AiDocumentDO.class)
+                .eq(AiDocumentDO::getTenantId, tenantId)
+                .eq(AiDocumentDO::getKnowledgeBaseId, knowledgeBaseId)
+                .eq(AiDocumentDO::getDataSourceId, dataSourceId)
+                .eq(AiDocumentDO::getSourceUri, sourceUri));
+    }
+
+    default int updateSyncDocumentByIdAndTenantId(AiDocumentDO document, Long tenantId) {
+        return update(null, Wrappers.lambdaUpdate(AiDocumentDO.class)
+                .set(AiDocumentDO::getTitle, document.getTitle())
+                .set(AiDocumentDO::getFileName, document.getFileName())
+                .set(AiDocumentDO::getFileType, document.getFileType())
+                .set(AiDocumentDO::getFileSize, document.getFileSize())
+                .set(AiDocumentDO::getObjectKey, document.getObjectKey())
+                .set(AiDocumentDO::getSourceUri, document.getSourceUri())
+                .set(AiDocumentDO::getContentHash, document.getContentHash())
+                .set(AiDocumentDO::getParseStatus, document.getParseStatus())
+                .set(AiDocumentDO::getEmbeddingStatus, document.getEmbeddingStatus())
+                .set(AiDocumentDO::getChunkCount, document.getChunkCount())
+                .set(AiDocumentDO::getTokenCount, document.getTokenCount())
+                .set(AiDocumentDO::getErrorMessage, document.getErrorMessage())
+                .eq(AiDocumentDO::getId, document.getId())
+                .eq(AiDocumentDO::getTenantId, tenantId));
+    }
+
     default int deleteByIdAndTenantId(Long id, Long tenantId) {
         return delete(Wrappers.lambdaQuery(AiDocumentDO.class)
                 .eq(AiDocumentDO::getId, id)

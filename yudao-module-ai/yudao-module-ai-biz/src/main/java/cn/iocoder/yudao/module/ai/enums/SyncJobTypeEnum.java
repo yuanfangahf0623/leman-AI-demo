@@ -4,18 +4,25 @@ import lombok.AllArgsConstructor;
 import lombok.Getter;
 
 /**
- * 同步任务触发类型枚举。
+ * 同步任务类型枚举。
  */
 @Getter
 @AllArgsConstructor
 public enum SyncJobTypeEnum {
 
-    MANUAL("manual", "手动触发"),
-    SCHEDULE("schedule", "定时触发"),
-    API("api", "API 触发"),
-    RETRY("retry", "失败重试");
+    FULL("FULL", "全量同步"),
+    INCREMENTAL("INCREMENTAL", "增量同步");
 
     private final String code;
     private final String name;
+
+    public static boolean isValidCode(String code) {
+        for (SyncJobTypeEnum value : values()) {
+            if (value.getCode().equals(code)) {
+                return true;
+            }
+        }
+        return false;
+    }
 
 }
