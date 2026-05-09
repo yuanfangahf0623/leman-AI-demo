@@ -65,6 +65,16 @@ class MockKnowledgeVectorStoreTest {
 
         store.deleteByDocumentId(100L);
         assertEquals(2, store.size());
+        List<KnowledgeHit> hits = store.search(KnowledgeSearchRequest.builder()
+                .tenantId(1L)
+                .departmentId(20L)
+                .knowledgeBaseId(10L)
+                .queryEmbedding(List.of(1.0D))
+                .topK(5)
+                .scoreThreshold(0.1D)
+                .build());
+        assertEquals(1, hits.size());
+        assertEquals("document 101", hits.get(0).getContent());
 
         store.deleteByKnowledgeBaseId(10L);
         assertEquals(1, store.size());

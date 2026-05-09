@@ -34,6 +34,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -66,6 +67,7 @@ class AiDocumentServiceImplTest {
         aiProperties = new AiProperties();
         aiProperties.getDocument().setEmbeddingBatchSize(2);
         aiProperties.getModel().setEmbeddingModel("test-embedding-model");
+        aiProperties.getVectorStore().getPgvector().setDimensions(2);
         documentService = new AiDocumentServiceImpl(documentMapper, documentChunkMapper, knowledgeService,
                 chunkService, aiEmbeddingService, knowledgeVectorStore, fileStorageService, documentParserFactory,
                 new ObjectMapper(), aiProperties);
@@ -126,6 +128,41 @@ class AiDocumentServiceImplTest {
                 ChunkStatusEnum.ERROR.getCode());
         verify(documentMapper).updateEmbeddingStatusByIdAndTenantId(100L, 1L,
                 DocumentEmbeddingStatusEnum.FAILED.getCode(), "向量写入失败");
+    }
+
+    @Test
+    void embedDocumentShouldRejectDimensionMismatchBeforeUpsert() {
+        AiDocumentDO document = buildDocument();
+        AiKnowledgeBaseDO knowledgeBase = buildKnowledgeBase();
+        List<AiDocumentChunkDO> chunks = List.of(buildChunk(1000L, 1, "first chunk"));
+        aiProperties.getVectorStore().getPgvector().setDimensions(3);
+        when(documentMapper.selectByIdAndTenantId(100L, 1L)).thenReturn(document);
+        when(knowledgeService.getKnowledge(10L)).thenReturn(knowledgeBase);
+        when(documentChunkMapper.selectListByDocumentIdAndTenantId(100L, 10L, 1L)).thenReturn(chunks);
+        when(aiEmbeddingService.embedBatch(List.of("first chunk"))).thenReturn(List.of(List.of(1.0D, 0.0D)));
+
+        ServiceException exception = assertThrows(ServiceException.class, () -> documentService.embedDocument(100L));
+
+        assertEquals(DOCUMENT_EMBED_FAILED, exception.getCode());
+        verify(knowledgeVectorStore, never()).upsert(anyList());
+        verify(knowledgeVectorStore).deleteByDocumentId(100L);
+        verify(documentMapper).updateEmbeddingStatusByIdAndTenantId(100L, 1L,
+                DocumentEmbeddingStatusEnum.FAILED.getCode(),
+                "Embedding vector dimensions do not match pgvector configuration");
+    }
+
+    @Test
+    void deleteDocumentShouldDeleteDocumentChunksAndVectors() {
+        AiDocumentDO document = buildDocument();
+        AiKnowledgeBaseDO knowledgeBase = buildKnowledgeBase();
+        when(documentMapper.selectByIdAndTenantId(100L, 1L)).thenReturn(document);
+        when(knowledgeService.getKnowledge(10L)).thenReturn(knowledgeBase);
+
+        documentService.deleteDocument(100L);
+
+        verify(documentMapper).deleteByIdAndTenantId(100L, 1L);
+        verify(documentChunkMapper).deleteByDocumentIdAndTenantId(100L, 10L, 1L);
+        verify(knowledgeVectorStore).deleteByDocumentId(100L);
     }
 
     private AiDocumentDO buildDocument() {

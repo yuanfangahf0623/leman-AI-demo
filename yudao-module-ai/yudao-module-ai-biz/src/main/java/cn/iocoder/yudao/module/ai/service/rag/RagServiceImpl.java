@@ -10,6 +10,7 @@ import cn.iocoder.yudao.module.ai.dal.mysql.AiChatConversationMapper;
 import cn.iocoder.yudao.module.ai.dal.mysql.AiChatMessageMapper;
 import cn.iocoder.yudao.module.ai.dal.mysql.AiKnowledgeBaseMapper;
 import cn.iocoder.yudao.module.ai.enums.ChatMessageRoleEnum;
+import cn.iocoder.yudao.module.ai.enums.KnowledgeVisibilityEnum;
 import cn.iocoder.yudao.module.ai.framework.config.AiProperties;
 import cn.iocoder.yudao.module.ai.framework.tenant.AiUserContextHolder;
 import cn.iocoder.yudao.module.ai.framework.vector.KnowledgeHit;
@@ -145,21 +146,31 @@ public class RagServiceImpl implements RagService {
         if (knowledgeBase == null) {
             throw new ServiceException(RAG_KNOWLEDGE_NOT_EXISTS, "知识库不存在");
         }
-        if (!isDepartmentAllowed(knowledgeBase.getDepartmentIds(), departmentId)) {
+        if (!isDepartmentAllowed(knowledgeBase, departmentId)) {
             throw new ServiceException(RAG_KNOWLEDGE_ACCESS_DENIED, "无权访问该知识库");
         }
         return knowledgeBase;
     }
 
-    private boolean isDepartmentAllowed(String departmentIds, Long departmentId) {
+    private boolean isDepartmentAllowed(AiKnowledgeBaseDO knowledgeBase, Long departmentId) {
+        if (KnowledgeVisibilityEnum.PUBLIC.getCode().equals(knowledgeBase.getVisibility())) {
+            return true;
+        }
         if (departmentId == null) {
             return false;
         }
-        if (departmentIds == null || departmentIds.isBlank()) {
-            return false;
+        String departmentIds = knowledgeBase.getDepartmentIds();
+        if (departmentIds == null || departmentIds.isBlank() || ALL_DEPARTMENTS.equals(departmentIds.trim())) {
+            return true;
         }
-        for (String item : departmentIds.split(",")) {
+        String normalizedDepartmentIds = departmentIds.replace("[", "")
+                .replace("]", "")
+                .replace("\"", "");
+        for (String item : normalizedDepartmentIds.split(",")) {
             String normalizedItem = item.trim();
+            if (normalizedItem.isBlank()) {
+                continue;
+            }
             if (ALL_DEPARTMENTS.equals(normalizedItem) || String.valueOf(departmentId).equals(normalizedItem)) {
                 return true;
             }

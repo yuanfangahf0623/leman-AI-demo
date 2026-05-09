@@ -610,6 +610,26 @@ public class SystemBasicController {
                 "createTime", "创建时间"), "登录日志"));
     }
 
+    @GetMapping("/notify-message/get-unread-count")
+    public CommonResult<Integer> getUnreadNotifyMessageCount() {
+        return CommonResult.success(0);
+    }
+
+    @GetMapping("/notify-message/get-unread-list")
+    public CommonResult<List<Map<String, Object>>> getUnreadNotifyMessageList() {
+        return CommonResult.success(List.of());
+    }
+
+    @GetMapping({"/notify-message/page", "/notify-message/my-page"})
+    public CommonResult<PageResult<Map<String, Object>>> getNotifyMessagePage() {
+        return CommonResult.success(new PageResult<>(List.of(), 0L));
+    }
+
+    @PutMapping({"/notify-message/update-read", "/notify-message/update-all-read"})
+    public CommonResult<Boolean> updateNotifyMessageRead() {
+        return CommonResult.success(true);
+    }
+
     private void saveUserRelations(Long userId, Map<String, Object> reqVO) {
         dataService.replaceLongRelations("system_user_post", "user_id", userId, "post_id",
                 dataService.collectionValue(reqVO.get("postIds")));

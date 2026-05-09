@@ -90,8 +90,10 @@ public class OpenAiCompatibleChatModelService implements AiChatModelService {
                         sanitizeEndpoint(chatUri), chatModel, messages.size(), elapsedMs, maskApiKey(apiKey), ex.getCode());
                 throw ex;
             }
-            log.info("OpenAI compatible chat call success, endpoint={}, model={}, messageCount={}, elapsedMs={}",
-                    sanitizeEndpoint(chatUri), chatResponse.getModel(), messages.size(), elapsedMs);
+            log.info("OpenAI compatible chat call success, endpoint={}, model={}, messageCount={}, promptTokens={}, completionTokens={}, totalTokens={}, elapsedMs={}",
+                    sanitizeEndpoint(chatUri), chatResponse.getModel(), messages.size(),
+                    chatResponse.getPromptTokens(), chatResponse.getCompletionTokens(), chatResponse.getTotalTokens(),
+                    elapsedMs);
             return chatResponse;
         } catch (HttpTimeoutException ex) {
             logCallException(chatUri, chatModel, messages.size(), startNanos, apiKey, "timeout", ex);

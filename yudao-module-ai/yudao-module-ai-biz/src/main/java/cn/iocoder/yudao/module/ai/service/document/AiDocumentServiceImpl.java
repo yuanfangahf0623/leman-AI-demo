@@ -260,11 +260,10 @@ public class AiDocumentServiceImpl implements AiDocumentService {
         // 删除文档前校验当前用户仍然有该知识库权限。
         validateKnowledgeExists(document.getKnowledgeBaseId());
 
-        // 先逻辑删除文档，再同步逻辑删除切片；两者处于同一事务中。
+        // 先逻辑删除文档，再同步逻辑删除切片和向量数据，避免已删除文档继续被 RAG 检索命中。
         documentMapper.deleteByIdAndTenantId(id, document.getTenantId());
         documentChunkMapper.deleteByDocumentIdAndTenantId(id, document.getKnowledgeBaseId(), document.getTenantId());
-
-        // TODO 后续接入 VectorStore 后，在异步任务中删除对应向量库数据。
+        knowledgeVectorStore.deleteByDocumentId(id);
     }
 
     private void validateDocumentParsed(AiDocumentDO document) {
@@ -300,6 +299,11 @@ public class AiDocumentServiceImpl implements AiDocumentService {
         }
         if (embeddings.stream().anyMatch(embedding -> embedding == null || embedding.isEmpty())) {
             throw new ServiceException(DOCUMENT_EMBED_FAILED, "Embedding 返回向量为空");
+        }
+        Integer expectedDimensions = aiProperties.getVectorStore().getPgvector().getDimensions();
+        if (expectedDimensions != null && expectedDimensions > 0
+                && embeddings.stream().anyMatch(embedding -> embedding.size() != expectedDimensions)) {
+            throw new ServiceException(DOCUMENT_EMBED_FAILED, "Embedding vector dimensions do not match pgvector configuration");
         }
     }
 

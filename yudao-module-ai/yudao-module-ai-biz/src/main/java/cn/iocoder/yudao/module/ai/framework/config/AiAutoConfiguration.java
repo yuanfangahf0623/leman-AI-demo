@@ -20,6 +20,7 @@ import org.springframework.boot.context.properties.EnableConfigurationProperties
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.context.annotation.Bean;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.datasource.DriverManagerDataSource;
 
 import static cn.iocoder.yudao.module.ai.enums.AiChatModelErrorCodeConstants.CHAT_MODEL_PROVIDER_UNSUPPORTED;
 import static cn.iocoder.yudao.module.ai.enums.AiEmbeddingErrorCodeConstants.EMBEDDING_PROVIDER_UNSUPPORTED;
@@ -83,16 +84,33 @@ public class AiAutoConfiguration {
             return new MockKnowledgeVectorStore();
         }
         if (VECTOR_STORE_PGVECTOR.equalsIgnoreCase(vectorStoreType)) {
-            JdbcTemplate jdbcTemplate = jdbcTemplateProvider.getIfAvailable();
-            if (jdbcTemplate == null) {
-                throw new ServiceException(VECTOR_STORE_CONFIG_INVALID, "pgvector 需要配置 JdbcTemplate");
-            }
-            return new PgVectorKnowledgeVectorStore(aiProperties, jdbcTemplate);
+            return new PgVectorKnowledgeVectorStore(aiProperties, buildPgVectorJdbcTemplate(aiProperties, jdbcTemplateProvider));
         }
         if (VECTOR_STORE_QDRANT.equalsIgnoreCase(vectorStoreType)) {
             return new QdrantKnowledgeVectorStore();
         }
         throw new ServiceException(VECTOR_STORE_CONFIG_INVALID, "向量库类型不支持");
+    }
+
+    private JdbcTemplate buildPgVectorJdbcTemplate(AiProperties aiProperties,
+                                                   ObjectProvider<JdbcTemplate> jdbcTemplateProvider) {
+        AiProperties.PgvectorProperties pgvector = aiProperties.getVectorStore().getPgvector();
+        if (hasText(pgvector.getJdbcUrl())) {
+            DriverManagerDataSource dataSource = new DriverManagerDataSource();
+            dataSource.setUrl(pgvector.getJdbcUrl().trim());
+            dataSource.setUsername(pgvector.getUsername() == null ? "" : pgvector.getUsername().trim());
+            dataSource.setPassword(pgvector.getPassword() == null ? "" : pgvector.getPassword());
+            return new JdbcTemplate(dataSource);
+        }
+        JdbcTemplate jdbcTemplate = jdbcTemplateProvider.getIfAvailable();
+        if (jdbcTemplate == null) {
+            throw new ServiceException(VECTOR_STORE_CONFIG_INVALID, "pgvector 需要配置 PostgreSQL JdbcTemplate");
+        }
+        return jdbcTemplate;
+    }
+
+    private boolean hasText(String value) {
+        return value != null && !value.trim().isEmpty();
     }
 
 }

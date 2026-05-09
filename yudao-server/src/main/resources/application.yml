@@ -48,6 +48,9 @@ ai:
   vector-store:
     type: ${AI_VECTOR_STORE_TYPE:mock}
     pgvector:
+      jdbc-url: ${AI_PGVECTOR_JDBC_URL:jdbc:postgresql://${POSTGRES_HOST:127.0.0.1}:${POSTGRES_PORT:5432}/${POSTGRES_DB:yudao_ai}}
+      username: ${AI_PGVECTOR_USERNAME:${POSTGRES_USER:postgres}}
+      password: ${AI_PGVECTOR_PASSWORD:${POSTGRES_PASSWORD:}}
       table-name: ${AI_PGVECTOR_TABLE_NAME:ai_vector_store}
       dimensions: ${AI_PGVECTOR_DIMENSIONS:1536}
   rag:

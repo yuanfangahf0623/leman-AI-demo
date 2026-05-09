@@ -53,6 +53,7 @@ class PgVectorKnowledgeVectorStoreTest {
                 """.formatted(TABLE_NAME));
         AiProperties properties = new AiProperties();
         properties.getVectorStore().getPgvector().setTableName(TABLE_NAME);
+        properties.getVectorStore().getPgvector().setDimensions(3);
         vectorStore = new PgVectorKnowledgeVectorStore(properties, jdbcTemplate);
     }
 

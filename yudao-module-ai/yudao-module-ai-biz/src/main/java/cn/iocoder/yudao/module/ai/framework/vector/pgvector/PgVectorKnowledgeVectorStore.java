@@ -41,6 +41,7 @@ public class PgVectorKnowledgeVectorStore implements KnowledgeVectorStore {
     private final JdbcTemplate jdbcTemplate;
     private final ObjectMapper objectMapper;
     private final String tableName;
+    private final Integer expectedDimensions;
 
     public PgVectorKnowledgeVectorStore(AiProperties aiProperties, JdbcTemplate jdbcTemplate) {
         this(aiProperties, jdbcTemplate, new ObjectMapper());
@@ -50,6 +51,7 @@ public class PgVectorKnowledgeVectorStore implements KnowledgeVectorStore {
         this.jdbcTemplate = jdbcTemplate;
         this.objectMapper = objectMapper;
         this.tableName = buildSafeTableName(aiProperties);
+        this.expectedDimensions = resolveExpectedDimensions(aiProperties);
     }
 
     @Override
@@ -220,6 +222,9 @@ public class PgVectorKnowledgeVectorStore implements KnowledgeVectorStore {
     }
 
     private void validateEmbedding(List<Double> embedding) {
+        if (expectedDimensions != null && expectedDimensions > 0 && embedding.size() != expectedDimensions) {
+            throw new ServiceException(VECTOR_STORE_REQUEST_INVALID, "Vector dimensions do not match pgvector configuration");
+        }
         if (embedding.stream().anyMatch(value -> value == null || value.isNaN() || value.isInfinite())) {
             throw new ServiceException(VECTOR_STORE_REQUEST_INVALID, "向量值非法");
         }
@@ -302,6 +307,14 @@ public class PgVectorKnowledgeVectorStore implements KnowledgeVectorStore {
             safeParts.add("\"" + part + "\"");
         }
         return String.join(".", safeParts);
+    }
+
+    private Integer resolveExpectedDimensions(AiProperties aiProperties) {
+        if (aiProperties == null || aiProperties.getVectorStore() == null
+                || aiProperties.getVectorStore().getPgvector() == null) {
+            return null;
+        }
+        return aiProperties.getVectorStore().getPgvector().getDimensions();
     }
 
 }

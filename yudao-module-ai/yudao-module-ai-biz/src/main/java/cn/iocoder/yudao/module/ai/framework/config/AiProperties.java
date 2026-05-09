@@ -202,6 +202,21 @@ public class AiProperties {
     public static class PgvectorProperties {
 
         /**
+         * pgvector PostgreSQL JDBC 地址。为空时兼容使用 Spring 主 JdbcTemplate。
+         */
+        private String jdbcUrl;
+
+        /**
+         * pgvector PostgreSQL 用户名。
+         */
+        private String username;
+
+        /**
+         * pgvector PostgreSQL 密码。必须通过环境变量、配置中心或部署配置注入。
+         */
+        private String password;
+
+        /**
          * pgvector 存储表名。
          */
         private String tableName = "ai_vector_store";
@@ -210,6 +225,30 @@ public class AiProperties {
          * 向量维度，需与 Embedding 模型输出维度一致。
          */
         private Integer dimensions = 1536;
+
+        public String getJdbcUrl() {
+            return jdbcUrl;
+        }
+
+        public void setJdbcUrl(String jdbcUrl) {
+            this.jdbcUrl = jdbcUrl;
+        }
+
+        public String getUsername() {
+            return username;
+        }
+
+        public void setUsername(String username) {
+            this.username = username;
+        }
+
+        public String getPassword() {
+            return password;
+        }
+
+        public void setPassword(String password) {
+            this.password = password;
+        }
 
         public String getTableName() {
             return tableName;

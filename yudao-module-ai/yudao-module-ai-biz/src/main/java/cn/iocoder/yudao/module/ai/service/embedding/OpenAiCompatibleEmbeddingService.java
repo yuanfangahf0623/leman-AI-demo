@@ -103,8 +103,8 @@ public class OpenAiCompatibleEmbeddingService implements AiEmbeddingService {
                         sanitizeEndpoint(embeddingsUri), embeddingModel, texts.size(), elapsedMs, maskApiKey(apiKey), ex.getCode());
                 throw ex;
             }
-            log.info("OpenAI compatible embedding call success, endpoint={}, model={}, batchSize={}, elapsedMs={}",
-                    sanitizeEndpoint(embeddingsUri), embeddingModel, texts.size(), elapsedMs);
+            log.info("OpenAI compatible embedding call success, endpoint={}, model={}, batchSize={}, dimensions={}, elapsedMs={}",
+                    sanitizeEndpoint(embeddingsUri), embeddingModel, texts.size(), resolveDimensions(embeddings), elapsedMs);
             return embeddings;
         } catch (HttpTimeoutException ex) {
             logCallException(embeddingsUri, embeddingModel, texts.size(), startNanos, apiKey, "timeout", ex);
@@ -192,6 +192,13 @@ public class OpenAiCompatibleEmbeddingService implements AiEmbeddingService {
             inputs.add(text == null ? "" : text);
         }
         return inputs;
+    }
+
+    private Integer resolveDimensions(List<List<Double>> embeddings) {
+        if (embeddings == null || embeddings.isEmpty() || embeddings.get(0) == null) {
+            return null;
+        }
+        return embeddings.get(0).size();
     }
 
     private String requiredConfig(String value, String fieldName) {
