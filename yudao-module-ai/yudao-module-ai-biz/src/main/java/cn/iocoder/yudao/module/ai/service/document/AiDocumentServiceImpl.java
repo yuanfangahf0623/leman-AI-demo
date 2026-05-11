@@ -3,11 +3,14 @@ package cn.iocoder.yudao.module.ai.service.document;
 import cn.iocoder.yudao.framework.common.exception.ServiceException;
 import cn.iocoder.yudao.framework.common.pojo.PageResult;
 import cn.iocoder.yudao.module.ai.controller.admin.document.vo.AiDocumentPageReqVO;
+import cn.iocoder.yudao.module.ai.controller.admin.document.vo.AiDocumentUpdateReqVO;
 import cn.iocoder.yudao.module.ai.dal.dataobject.AiDocumentChunkDO;
 import cn.iocoder.yudao.module.ai.dal.dataobject.AiDocumentDO;
 import cn.iocoder.yudao.module.ai.dal.dataobject.AiKnowledgeBaseDO;
+import cn.iocoder.yudao.module.ai.dal.dataobject.AiKnowledgeDirectoryDO;
 import cn.iocoder.yudao.module.ai.dal.mysql.AiDocumentChunkMapper;
 import cn.iocoder.yudao.module.ai.dal.mysql.AiDocumentMapper;
+import cn.iocoder.yudao.module.ai.dal.mysql.AiKnowledgeDirectoryMapper;
 import cn.iocoder.yudao.module.ai.enums.ChunkStatusEnum;
 import cn.iocoder.yudao.module.ai.enums.DocumentEmbeddingStatusEnum;
 import cn.iocoder.yudao.module.ai.enums.DocumentParseStatusEnum;
@@ -59,12 +62,13 @@ import static cn.iocoder.yudao.module.ai.enums.AiDocumentErrorCodeConstants.DOCU
 import static cn.iocoder.yudao.module.ai.enums.AiDocumentErrorCodeConstants.DOCUMENT_NOT_EXISTS;
 import static cn.iocoder.yudao.module.ai.enums.AiDocumentErrorCodeConstants.DOCUMENT_PARSE_FAILED;
 import static cn.iocoder.yudao.module.ai.enums.AiDocumentErrorCodeConstants.DOCUMENT_PARSE_NOT_SUCCESS;
+import static cn.iocoder.yudao.module.ai.enums.AiKnowledgeErrorCodeConstants.KNOWLEDGE_DIRECTORY_NOT_EXISTS;
 
 /**
  * AI 文档 Service 实现。
  *
- * <p>负责文档上传编排：权限范围校验、文件安全校验、文件存储和 ai_document 记录创建。
- * 当前阶段不在请求链路内执行解析和向量化。</p>
+ * <p>负责文档上传编排：权限范围校验、文件安全校验、文件存储、ai_document 记录创建，
+ * 以及上传后的自动解析和向量化调度。</p>
  */
 @Service
 @Slf4j
@@ -78,6 +82,7 @@ public class AiDocumentServiceImpl implements AiDocumentService {
     private static final Set<String> ZIP_EXTENSIONS = Set.of("docx", "xlsx", "xlsb", "pptx", "pptm");
     private static final int TEXT_CHECK_BYTES = 4096;
     private static final Integer DEFAULT_COUNT = 0;
+    private static final String DEFAULT_DOCUMENT_VERSION = "v1";
     private static final int ERROR_MESSAGE_MAX_LENGTH = 1024;
     private static final int DEFAULT_EMBEDDING_BATCH_SIZE = 32;
     private static final TypeReference<Map<String, Object>> CHUNK_METADATA_TYPE = new TypeReference<>() {
@@ -85,6 +90,7 @@ public class AiDocumentServiceImpl implements AiDocumentService {
 
     private final AiDocumentMapper documentMapper;
     private final AiDocumentChunkMapper documentChunkMapper;
+    private final AiKnowledgeDirectoryMapper knowledgeDirectoryMapper;
     private final AiKnowledgeService knowledgeService;
     private final ChunkService chunkService;
     private final AiEmbeddingService aiEmbeddingService;
@@ -96,9 +102,12 @@ public class AiDocumentServiceImpl implements AiDocumentService {
 
     @Override
     @Transactional(rollbackFor = Exception.class)
-    public Long uploadDocument(Long knowledgeBaseId, MultipartFile file) {
+    public Long uploadDocument(Long knowledgeBaseId, Long directoryId, MultipartFile file) {
         // 先确认知识库属于当前租户，避免跨租户上传文档。
+        Long tenantId = AiTenantContextHolder.getTenantId();
         validateKnowledgeExists(knowledgeBaseId);
+        Long normalizedDirectoryId = normalizeDirectoryId(directoryId);
+        validateDirectoryBelongsToKnowledge(tenantId, knowledgeBaseId, normalizedDirectoryId);
         // 文件大小和内容校验必须在存储前完成，不能信任用户传入的文件名或 Content-Type。
         validateFileNotEmpty(file);
         validateFileSize(file);
@@ -110,7 +119,6 @@ public class AiDocumentServiceImpl implements AiDocumentService {
         validateFileContent(extension, content);
 
         // 对象 Key 使用租户、知识库和 UUID 组成，避免路径穿越和文件名碰撞。
-        Long tenantId = AiTenantContextHolder.getTenantId();
         String objectKey = buildObjectKey(tenantId, knowledgeBaseId, extension);
         FileStorageResult storageResult = fileStorageService.store(objectKey, content);
 
@@ -118,7 +126,9 @@ public class AiDocumentServiceImpl implements AiDocumentService {
         AiDocumentDO document = new AiDocumentDO();
         document.setTenantId(tenantId);
         document.setKnowledgeBaseId(knowledgeBaseId);
+        document.setDirectoryId(normalizedDirectoryId);
         document.setTitle(removeExtension(fileName));
+        document.setDocumentVersion(DEFAULT_DOCUMENT_VERSION);
         document.setFileName(fileName);
         document.setFileType(extension);
         document.setFileSize((long) content.length);
@@ -130,6 +140,7 @@ public class AiDocumentServiceImpl implements AiDocumentService {
         document.setChunkCount(DEFAULT_COUNT);
         document.setTokenCount(DEFAULT_COUNT);
         documentMapper.insert(document);
+        autoParseAndEmbedAfterUpload(document.getId(), tenantId, knowledgeBaseId);
         return document.getId();
     }
 
@@ -138,6 +149,10 @@ public class AiDocumentServiceImpl implements AiDocumentService {
         // 如果指定知识库，则先校验当前租户是否可访问该知识库。
         if (pageReqVO.getKnowledgeBaseId() != null) {
             validateKnowledgeExists(pageReqVO.getKnowledgeBaseId());
+        }
+        if (pageReqVO.getDirectoryId() != null && pageReqVO.getDirectoryId() > 0) {
+            validateDirectoryBelongsToKnowledge(AiTenantContextHolder.getTenantId(), pageReqVO.getKnowledgeBaseId(),
+                    pageReqVO.getDirectoryId());
         }
         return documentMapper.selectPage(pageReqVO, AiTenantContextHolder.getTenantId());
     }
@@ -148,6 +163,31 @@ public class AiDocumentServiceImpl implements AiDocumentService {
         // 文档详情返回前再次校验知识库权限，避免只凭 documentId 越权访问。
         validateKnowledgeExists(document.getKnowledgeBaseId());
         return document;
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void updateDocument(AiDocumentUpdateReqVO updateReqVO) {
+        AiDocumentDO document = validateDocumentExists(updateReqVO.getId());
+        validateKnowledgeExists(document.getKnowledgeBaseId());
+        Long normalizedDirectoryId = normalizeDirectoryId(updateReqVO.getDirectoryId());
+        validateDirectoryBelongsToKnowledge(document.getTenantId(), document.getKnowledgeBaseId(),
+                normalizedDirectoryId);
+
+        AiDocumentDO updateObj = new AiDocumentDO();
+        updateObj.setId(document.getId());
+        updateObj.setDirectoryId(normalizedDirectoryId);
+        updateObj.setTitle(updateReqVO.getTitle().trim());
+        updateObj.setDocumentVersion(normalizeDocumentVersion(updateReqVO.getDocumentVersion()));
+        documentMapper.updateBasicByIdAndTenantId(updateObj, document.getTenantId());
+    }
+
+    @Override
+    public AiDocumentPreview getDocumentPreview(Long id) {
+        AiDocumentDO document = getDocument(id);
+        // 预览只返回文件流，不暴露本地 sourceUri 或 objectKey，避免泄露服务器路径。
+        return new AiDocumentPreview(document.getFileName(), resolvePreviewContentType(document),
+                fileStorageService.load(document.getObjectKey()));
     }
 
     @Override
@@ -165,11 +205,15 @@ public class AiDocumentServiceImpl implements AiDocumentService {
             chunkService.recreateChunks(knowledgeBase, document, parsedDocument);
             documentMapper.updateParseStatusByIdAndTenantId(id, document.getTenantId(),
                     DocumentParseStatusEnum.SUCCESS.getCode(), null);
+            documentMapper.updateEmbeddingStatusByIdAndTenantId(id, document.getTenantId(),
+                    DocumentEmbeddingStatusEnum.PENDING.getCode(), null);
             return parsedDocument;
         } catch (ServiceException ex) {
             String errorMessage = toSafeErrorMessage(ex);
             documentMapper.updateParseStatusByIdAndTenantId(id, document.getTenantId(),
                     DocumentParseStatusEnum.FAILED.getCode(), errorMessage);
+            documentMapper.updateEmbeddingStatusByIdAndTenantId(id, document.getTenantId(),
+                    DocumentEmbeddingStatusEnum.FAILED.getCode(), errorMessage);
             // 保留底层业务异常错误码，例如 chunkOverlap 配置非法，方便前端展示明确原因。
             log.warn("文档解析失败, documentId={}, tenantId={}, knowledgeBaseId={}, fileType={}, reason={}",
                     document.getId(), document.getTenantId(), document.getKnowledgeBaseId(),
@@ -179,6 +223,8 @@ public class AiDocumentServiceImpl implements AiDocumentService {
             String errorMessage = toSafeErrorMessage(ex);
             documentMapper.updateParseStatusByIdAndTenantId(id, document.getTenantId(),
                     DocumentParseStatusEnum.FAILED.getCode(), errorMessage);
+            documentMapper.updateEmbeddingStatusByIdAndTenantId(id, document.getTenantId(),
+                    DocumentEmbeddingStatusEnum.FAILED.getCode(), errorMessage);
             // 日志只记录业务标识、文件类型和安全错误摘要，不输出文件路径、objectKey 或文件内容。
             log.warn("文档解析失败, documentId={}, tenantId={}, knowledgeBaseId={}, fileType={}, reason={}",
                     document.getId(), document.getTenantId(), document.getKnowledgeBaseId(),
@@ -270,6 +316,26 @@ public class AiDocumentServiceImpl implements AiDocumentService {
         if (!DocumentParseStatusEnum.SUCCESS.getCode().equals(document.getParseStatus())) {
             throw new ServiceException(DOCUMENT_PARSE_NOT_SUCCESS, "文档尚未解析成功");
         }
+    }
+
+    private void autoParseAndEmbedAfterUpload(Long documentId, Long tenantId, Long knowledgeBaseId) {
+        long startNanos = System.nanoTime();
+        try {
+            parseDocument(documentId);
+            embedDocument(documentId);
+            log.info("文档上传后自动处理成功, documentId={}, tenantId={}, knowledgeBaseId={}, elapsedMs={}",
+                    documentId, tenantId, knowledgeBaseId, elapsedMillis(startNanos));
+        } catch (Exception ex) {
+            log.warn("文档上传后自动处理失败, documentId={}, tenantId={}, knowledgeBaseId={}, elapsedMs={}, reason={}",
+                    documentId, tenantId, knowledgeBaseId, elapsedMillis(startNanos), toSafeErrorMessage(ex));
+        }
+    }
+
+    private String normalizeDocumentVersion(String documentVersion) {
+        if (documentVersion == null || documentVersion.isBlank()) {
+            return DEFAULT_DOCUMENT_VERSION;
+        }
+        return documentVersion.trim();
     }
 
     private List<AiDocumentChunkDO> getEffectiveChunks(AiDocumentDO document) {
@@ -371,6 +437,20 @@ public class AiDocumentServiceImpl implements AiDocumentService {
             throw new ServiceException(DOCUMENT_KNOWLEDGE_NOT_EXISTS, "知识库不存在或无权限访问");
         }
         return knowledgeBase;
+    }
+
+    private void validateDirectoryBelongsToKnowledge(Long tenantId, Long knowledgeBaseId, Long directoryId) {
+        if (directoryId == null) {
+            return;
+        }
+        AiKnowledgeDirectoryDO directory = knowledgeDirectoryMapper.selectByIdAndTenantId(directoryId, tenantId);
+        if (directory == null || (knowledgeBaseId != null && !knowledgeBaseId.equals(directory.getKnowledgeBaseId()))) {
+            throw new ServiceException(KNOWLEDGE_DIRECTORY_NOT_EXISTS, "目录不存在或不属于当前知识库");
+        }
+    }
+
+    private Long normalizeDirectoryId(Long directoryId) {
+        return directoryId == null || directoryId <= 0 ? null : directoryId;
     }
 
     private void validateFileNotEmpty(MultipartFile file) {
@@ -501,6 +581,16 @@ public class AiDocumentServiceImpl implements AiDocumentService {
                 .filename(document.getFileName())
                 .fileType(document.getFileType())
                 .build();
+    }
+
+    private String resolvePreviewContentType(AiDocumentDO document) {
+        String fileType = document.getFileType() == null ? "" : document.getFileType().toLowerCase(Locale.ROOT);
+        return switch (fileType) {
+            case "pdf" -> "application/pdf";
+            case "md" -> "text/markdown;charset=UTF-8";
+            case "txt" -> "text/plain;charset=UTF-8";
+            default -> "application/octet-stream";
+        };
     }
 
     private String toSafeErrorMessage(Exception ex) {

@@ -1,10 +1,12 @@
 package cn.iocoder.yudao.module.ai.dal.mysql;
 
 import cn.iocoder.yudao.module.ai.dal.dataobject.AiDocumentChunkDO;
+import cn.iocoder.yudao.module.ai.enums.ChunkStatusEnum;
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import org.apache.ibatis.annotations.Mapper;
 
+import java.util.Collections;
 import java.util.List;
 
 /**
@@ -48,6 +50,31 @@ public interface AiDocumentChunkMapper extends BaseMapper<AiDocumentChunkDO> {
                 .eq(AiDocumentChunkDO::getDocumentId, documentId)
                 .eq(AiDocumentChunkDO::getKnowledgeBaseId, knowledgeBaseId)
                 .eq(AiDocumentChunkDO::getTenantId, tenantId));
+    }
+
+    default List<AiDocumentChunkDO> selectLexicalCandidates(Long tenantId, Long knowledgeBaseId,
+                                                            List<String> keywords, Integer limit) {
+        if (tenantId == null || knowledgeBaseId == null || keywords == null || keywords.isEmpty()) {
+            return Collections.emptyList();
+        }
+        int safeLimit = limit == null || limit <= 0 ? 20 : Math.min(limit, 100);
+        return selectList(Wrappers.lambdaQuery(AiDocumentChunkDO.class)
+                .eq(AiDocumentChunkDO::getTenantId, tenantId)
+                .eq(AiDocumentChunkDO::getKnowledgeBaseId, knowledgeBaseId)
+                .eq(AiDocumentChunkDO::getStatus, ChunkStatusEnum.SUCCESS.getCode())
+                .and(query -> {
+                    for (int i = 0; i < keywords.size(); i++) {
+                        String keyword = keywords.get(i);
+                        if (i == 0) {
+                            query.like(AiDocumentChunkDO::getContent, keyword);
+                        } else {
+                            query.or().like(AiDocumentChunkDO::getContent, keyword);
+                        }
+                    }
+                })
+                .orderByAsc(AiDocumentChunkDO::getDocumentId)
+                .orderByAsc(AiDocumentChunkDO::getChunkIndex)
+                .last("LIMIT " + safeLimit));
     }
 
 }

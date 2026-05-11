@@ -19,4 +19,12 @@ public interface AiChatRecordService {
 
     List<AiChatCitationDO> getCitationList(Long messageId);
 
+    void renameConversation(Long conversationId, String title);
+
+    void updateConversationPinned(Long conversationId, Boolean pinned);
+
+    void archiveConversation(Long conversationId);
+
+    void deleteConversation(Long conversationId);
+
 }

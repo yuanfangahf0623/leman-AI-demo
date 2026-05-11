@@ -319,7 +319,7 @@ public class AiProperties {
         /**
          * 默认相似度阈值。
          */
-        private Double defaultScoreThreshold = 0.7D;
+        private Double defaultScoreThreshold = 0.1D;
 
         /**
          * 最大上下文 Token 数。
@@ -404,6 +404,11 @@ public class AiProperties {
          */
         private String storageBasePath = ".data/ai-documents";
 
+        /**
+         * OCR 识别配置。默认关闭，避免本地未安装 OCR 引擎时影响普通文档解析。
+         */
+        private OcrProperties ocr = new OcrProperties();
+
         public Integer getDefaultChunkSize() {
             return defaultChunkSize;
         }
@@ -442,6 +447,134 @@ public class AiProperties {
 
         public void setStorageBasePath(String storageBasePath) {
             this.storageBasePath = storageBasePath;
+        }
+
+        public OcrProperties getOcr() {
+            return ocr;
+        }
+
+        public void setOcr(OcrProperties ocr) {
+            this.ocr = ocr;
+        }
+    }
+
+    public static class OcrProperties {
+
+        /**
+         * 是否启用 OCR。扫描件或图片型 PDF 需要开启后才能提取文本。
+         */
+        private Boolean enabled = false;
+
+        /**
+         * OCR 提供方。第一阶段仅支持本地 tesseract-cli，后续可扩展云 OCR。
+         */
+        private String provider = "tesseract-cli";
+
+        /**
+         * Tesseract 可执行文件路径。生产环境建议通过环境变量或部署配置指定。
+         */
+        private String tesseractExecutable = "tesseract";
+
+        /**
+         * Tesseract 语言包目录。为空时使用 Tesseract 默认 tessdata 目录。
+         */
+        private String tessdataDirectory;
+
+        /**
+         * OCR 识别语言。中文和英文混排场景使用 chi_sim+eng。
+         */
+        private String language = "chi_sim+eng";
+
+        /**
+         * PDF 渲染图片 DPI。数值越高识别率越好，但 CPU 和内存消耗也越高。
+         */
+        private Integer dpi = 200;
+
+        /**
+         * 单个 PDF 最多 OCR 页数，避免超大文件长时间占用资源。
+         */
+        private Integer maxPages = 20;
+
+        /**
+         * 单页 OCR 超时时间，单位秒。
+         */
+        private Integer timeoutSeconds = 60;
+
+        /**
+         * PDF 原生文本长度达到该阈值时跳过 OCR。
+         */
+        private Integer minTextLengthToSkipOcr = 20;
+
+        public Boolean getEnabled() {
+            return enabled;
+        }
+
+        public void setEnabled(Boolean enabled) {
+            this.enabled = enabled;
+        }
+
+        public String getProvider() {
+            return provider;
+        }
+
+        public void setProvider(String provider) {
+            this.provider = provider;
+        }
+
+        public String getTesseractExecutable() {
+            return tesseractExecutable;
+        }
+
+        public void setTesseractExecutable(String tesseractExecutable) {
+            this.tesseractExecutable = tesseractExecutable;
+        }
+
+        public String getTessdataDirectory() {
+            return tessdataDirectory;
+        }
+
+        public void setTessdataDirectory(String tessdataDirectory) {
+            this.tessdataDirectory = tessdataDirectory;
+        }
+
+        public String getLanguage() {
+            return language;
+        }
+
+        public void setLanguage(String language) {
+            this.language = language;
+        }
+
+        public Integer getDpi() {
+            return dpi;
+        }
+
+        public void setDpi(Integer dpi) {
+            this.dpi = dpi;
+        }
+
+        public Integer getMaxPages() {
+            return maxPages;
+        }
+
+        public void setMaxPages(Integer maxPages) {
+            this.maxPages = maxPages;
+        }
+
+        public Integer getTimeoutSeconds() {
+            return timeoutSeconds;
+        }
+
+        public void setTimeoutSeconds(Integer timeoutSeconds) {
+            this.timeoutSeconds = timeoutSeconds;
+        }
+
+        public Integer getMinTextLengthToSkipOcr() {
+            return minTextLengthToSkipOcr;
+        }
+
+        public void setMinTextLengthToSkipOcr(Integer minTextLengthToSkipOcr) {
+            this.minTextLengthToSkipOcr = minTextLengthToSkipOcr;
         }
     }
 }

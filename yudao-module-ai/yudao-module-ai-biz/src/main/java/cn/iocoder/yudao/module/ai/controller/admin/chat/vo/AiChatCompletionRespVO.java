@@ -20,6 +20,8 @@ public class AiChatCompletionRespVO {
 
     private Boolean noContext;
 
+    private String debugInfo;
+
     private List<AiChatCompletionCitationRespVO> citations;
 
 }

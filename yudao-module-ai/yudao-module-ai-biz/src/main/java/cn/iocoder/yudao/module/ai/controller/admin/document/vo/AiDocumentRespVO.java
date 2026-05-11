@@ -12,7 +12,9 @@ public class AiDocumentRespVO {
 
     private Long id;
     private Long knowledgeBaseId;
+    private Long directoryId;
     private Long dataSourceId;
+    private String documentVersion;
     private String title;
     private String fileName;
     private String fileType;

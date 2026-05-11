@@ -6,6 +6,7 @@ import cn.iocoder.yudao.module.ai.dal.dataobject.AiDocumentDO;
 import cn.iocoder.yudao.module.ai.dal.dataobject.AiKnowledgeBaseDO;
 import cn.iocoder.yudao.module.ai.dal.mysql.AiDocumentChunkMapper;
 import cn.iocoder.yudao.module.ai.dal.mysql.AiDocumentMapper;
+import cn.iocoder.yudao.module.ai.dal.mysql.AiKnowledgeDirectoryMapper;
 import cn.iocoder.yudao.module.ai.enums.ChunkStatusEnum;
 import cn.iocoder.yudao.module.ai.enums.DocumentEmbeddingStatusEnum;
 import cn.iocoder.yudao.module.ai.enums.DocumentParseStatusEnum;
@@ -46,6 +47,8 @@ class AiDocumentServiceImplTest {
     @Mock
     private AiDocumentChunkMapper documentChunkMapper;
     @Mock
+    private AiKnowledgeDirectoryMapper knowledgeDirectoryMapper;
+    @Mock
     private AiKnowledgeService knowledgeService;
     @Mock
     private ChunkService chunkService;
@@ -68,9 +71,9 @@ class AiDocumentServiceImplTest {
         aiProperties.getDocument().setEmbeddingBatchSize(2);
         aiProperties.getModel().setEmbeddingModel("test-embedding-model");
         aiProperties.getVectorStore().getPgvector().setDimensions(2);
-        documentService = new AiDocumentServiceImpl(documentMapper, documentChunkMapper, knowledgeService,
-                chunkService, aiEmbeddingService, knowledgeVectorStore, fileStorageService, documentParserFactory,
-                new ObjectMapper(), aiProperties);
+        documentService = new AiDocumentServiceImpl(documentMapper, documentChunkMapper, knowledgeDirectoryMapper,
+                knowledgeService, chunkService, aiEmbeddingService, knowledgeVectorStore, fileStorageService,
+                documentParserFactory, new ObjectMapper(), aiProperties);
     }
 
     @AfterEach

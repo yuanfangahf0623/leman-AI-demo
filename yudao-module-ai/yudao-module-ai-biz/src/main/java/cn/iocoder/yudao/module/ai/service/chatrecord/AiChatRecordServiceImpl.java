@@ -9,10 +9,12 @@ import cn.iocoder.yudao.module.ai.dal.dataobject.AiChatMessageDO;
 import cn.iocoder.yudao.module.ai.dal.mysql.AiChatCitationMapper;
 import cn.iocoder.yudao.module.ai.dal.mysql.AiChatConversationMapper;
 import cn.iocoder.yudao.module.ai.dal.mysql.AiChatMessageMapper;
+import cn.iocoder.yudao.module.ai.enums.AiChatConversationStatusEnum;
 import cn.iocoder.yudao.module.ai.framework.tenant.AiUserContextHolder;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
+import java.time.LocalDateTime;
 import java.util.List;
 
 import static cn.iocoder.yudao.module.ai.enums.AiRagErrorCodeConstants.RAG_CONVERSATION_ACCESS_DENIED;
@@ -49,6 +51,34 @@ public class AiChatRecordServiceImpl implements AiChatRecordService {
         }
         validateConversationAccessible(message.getConversationId());
         return chatCitationMapper.selectListByMessageId(messageId, AiUserContextHolder.getTenantId());
+    }
+
+    @Override
+    public void renameConversation(Long conversationId, String title) {
+        validateConversationAccessible(conversationId);
+        chatConversationMapper.updateTitleByIdAndTenantId(conversationId, AiUserContextHolder.getTenantId(),
+                title == null ? null : title.trim());
+    }
+
+    @Override
+    public void updateConversationPinned(Long conversationId, Boolean pinned) {
+        validateConversationAccessible(conversationId);
+        boolean pinnedValue = Boolean.TRUE.equals(pinned);
+        chatConversationMapper.updatePinnedByIdAndTenantId(conversationId, AiUserContextHolder.getTenantId(),
+                pinnedValue, pinnedValue ? LocalDateTime.now() : null);
+    }
+
+    @Override
+    public void archiveConversation(Long conversationId) {
+        validateConversationAccessible(conversationId);
+        chatConversationMapper.updateStatusByIdAndTenantId(conversationId, AiUserContextHolder.getTenantId(),
+                AiChatConversationStatusEnum.ARCHIVED.getStatus());
+    }
+
+    @Override
+    public void deleteConversation(Long conversationId) {
+        validateConversationAccessible(conversationId);
+        chatConversationMapper.deleteByIdAndTenantId(conversationId, AiUserContextHolder.getTenantId());
     }
 
     private AiChatConversationDO validateConversationAccessible(Long conversationId) {

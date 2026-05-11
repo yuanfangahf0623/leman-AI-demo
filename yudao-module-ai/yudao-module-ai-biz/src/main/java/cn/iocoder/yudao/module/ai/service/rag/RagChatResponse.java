@@ -26,6 +26,8 @@ public class RagChatResponse {
 
     private Boolean noContext;
 
+    private String debugInfo;
+
     private List<RagChatCitation> citations;
 
 }

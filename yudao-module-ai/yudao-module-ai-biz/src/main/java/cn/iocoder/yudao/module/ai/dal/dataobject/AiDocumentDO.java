@@ -28,8 +28,12 @@ public class AiDocumentDO {
     private Long tenantId;
     @TableField("knowledge_base_id")
     private Long knowledgeBaseId;
+    @TableField("directory_id")
+    private Long directoryId;
     @TableField("data_source_id")
     private Long dataSourceId;
+    @TableField("document_version")
+    private String documentVersion;
     @TableField("title")
     private String title;
     @TableField("file_name")

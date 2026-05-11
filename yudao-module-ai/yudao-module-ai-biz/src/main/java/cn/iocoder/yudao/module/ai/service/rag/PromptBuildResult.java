@@ -40,6 +40,8 @@ public class PromptBuildResult {
      */
     private Integer estimatedContextTokens;
 
+    private String debugInfo;
+
     /**
      * 实际进入 Prompt 上下文的命中片段，用于保存 citations。
      */

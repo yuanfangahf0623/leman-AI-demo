@@ -15,6 +15,8 @@ public class AiDocumentPageReqVO extends PageParam {
 
     private Long knowledgeBaseId;
 
+    private Long directoryId;
+
     private Integer parseStatus;
 
     private Integer embeddingStatus;

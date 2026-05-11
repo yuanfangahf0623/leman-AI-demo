@@ -20,7 +20,9 @@ public class AiDocumentConvert {
         AiDocumentRespVO result = new AiDocumentRespVO();
         result.setId(bean.getId());
         result.setKnowledgeBaseId(bean.getKnowledgeBaseId());
+        result.setDirectoryId(bean.getDirectoryId());
         result.setDataSourceId(bean.getDataSourceId());
+        result.setDocumentVersion(bean.getDocumentVersion());
         result.setTitle(bean.getTitle());
         result.setFileName(bean.getFileName());
         result.setFileType(bean.getFileType());

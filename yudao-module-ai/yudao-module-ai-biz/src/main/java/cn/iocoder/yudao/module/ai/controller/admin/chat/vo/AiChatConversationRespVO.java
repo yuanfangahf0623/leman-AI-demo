@@ -22,6 +22,10 @@ public class AiChatConversationRespVO {
 
     private Integer status;
 
+    private Boolean pinned;
+
+    private LocalDateTime pinnedTime;
+
     private LocalDateTime lastMessageTime;
 
     private LocalDateTime createTime;

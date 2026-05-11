@@ -6,7 +6,9 @@ import cn.iocoder.yudao.framework.common.pojo.PageResult;
 import cn.iocoder.yudao.module.ai.controller.admin.chat.vo.AiChatCompletionReqVO;
 import cn.iocoder.yudao.module.ai.controller.admin.chat.vo.AiChatCompletionRespVO;
 import cn.iocoder.yudao.module.ai.controller.admin.chat.vo.AiChatCitationRespVO;
+import cn.iocoder.yudao.module.ai.controller.admin.chat.vo.AiChatConversationPinReqVO;
 import cn.iocoder.yudao.module.ai.controller.admin.chat.vo.AiChatConversationPageReqVO;
+import cn.iocoder.yudao.module.ai.controller.admin.chat.vo.AiChatConversationRenameReqVO;
 import cn.iocoder.yudao.module.ai.controller.admin.chat.vo.AiChatConversationRespVO;
 import cn.iocoder.yudao.module.ai.controller.admin.chat.vo.AiChatMessageRespVO;
 import cn.iocoder.yudao.module.ai.convert.AiChatConvert;
@@ -19,8 +21,10 @@ import jakarta.validation.constraints.NotNull;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.validation.annotation.Validated;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -59,6 +63,36 @@ public class AiChatController {
     public CommonResult<PageResult<AiChatConversationRespVO>> getConversationPage(@Valid AiChatConversationPageReqVO pageReqVO) {
         PageResult<AiChatConversationDO> pageResult = chatRecordService.getConversationPage(pageReqVO);
         return CommonResult.success(AiChatConvert.INSTANCE.convertConversationPage(pageResult));
+    }
+
+    @PutMapping("/conversation/rename")
+    @PreAuthorize("@ss.hasPermission('ai:chat:query')")
+    public CommonResult<Boolean> renameConversation(@Valid @RequestBody AiChatConversationRenameReqVO reqVO) {
+        chatRecordService.renameConversation(reqVO.getId(), reqVO.getTitle());
+        return CommonResult.success(true);
+    }
+
+    @PutMapping("/conversation/pin")
+    @PreAuthorize("@ss.hasPermission('ai:chat:query')")
+    public CommonResult<Boolean> updateConversationPinned(@Valid @RequestBody AiChatConversationPinReqVO reqVO) {
+        chatRecordService.updateConversationPinned(reqVO.getId(), reqVO.getPinned());
+        return CommonResult.success(true);
+    }
+
+    @PutMapping("/conversation/archive")
+    @PreAuthorize("@ss.hasPermission('ai:chat:query')")
+    public CommonResult<Boolean> archiveConversation(@RequestParam("id")
+                                                     @NotNull(message = "会话编号不能为空") Long id) {
+        chatRecordService.archiveConversation(id);
+        return CommonResult.success(true);
+    }
+
+    @DeleteMapping("/conversation/delete")
+    @PreAuthorize("@ss.hasPermission('ai:chat:query')")
+    public CommonResult<Boolean> deleteConversation(@RequestParam("id")
+                                                    @NotNull(message = "会话编号不能为空") Long id) {
+        chatRecordService.deleteConversation(id);
+        return CommonResult.success(true);
     }
 
     @GetMapping("/message/list")

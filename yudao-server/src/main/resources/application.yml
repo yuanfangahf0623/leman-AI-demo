@@ -55,7 +55,7 @@ ai:
       dimensions: ${AI_PGVECTOR_DIMENSIONS:1536}
   rag:
     default-top-k: ${AI_RAG_DEFAULT_TOP_K:5}
-    default-score-threshold: ${AI_RAG_DEFAULT_SCORE_THRESHOLD:0.7}
+    default-score-threshold: ${AI_RAG_DEFAULT_SCORE_THRESHOLD:0.1}
     max-context-tokens: ${AI_RAG_MAX_CONTEXT_TOKENS:6000}
   document:
     default-chunk-size: ${AI_DOCUMENT_DEFAULT_CHUNK_SIZE:800}
@@ -63,6 +63,16 @@ ai:
     max-file-size-mb: ${AI_DOCUMENT_MAX_FILE_SIZE_MB:50}
     embedding-batch-size: ${AI_DOCUMENT_EMBEDDING_BATCH_SIZE:32}
     storage-base-path: ${AI_DOCUMENT_STORAGE_BASE_PATH:.data/ai-documents}
+    ocr:
+      enabled: ${AI_DOCUMENT_OCR_ENABLED:false}
+      provider: ${AI_DOCUMENT_OCR_PROVIDER:tesseract-cli}
+      tesseract-executable: ${AI_DOCUMENT_OCR_TESSERACT_EXECUTABLE:tesseract}
+      tessdata-directory: ${AI_DOCUMENT_OCR_TESSDATA_DIRECTORY:}
+      language: ${AI_DOCUMENT_OCR_LANGUAGE:chi_sim+eng}
+      dpi: ${AI_DOCUMENT_OCR_DPI:200}
+      max-pages: ${AI_DOCUMENT_OCR_MAX_PAGES:20}
+      timeout-seconds: ${AI_DOCUMENT_OCR_TIMEOUT_SECONDS:60}
+      min-text-length-to-skip-ocr: ${AI_DOCUMENT_OCR_MIN_TEXT_LENGTH_TO_SKIP_OCR:20}
 
 leman:
   auth:

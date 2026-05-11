@@ -71,6 +71,15 @@ VALUES
 (910413, '任务管理', '', 2, 13, 910400, 'task/manager', 'ep:finished', 'bpm/task/manager/index', 'BpmManagerTask', 0, b'1', b'1', b'1', 'admin', NOW(), 'admin', NOW(), b'0'),
 (910414, 'OA 请假', '', 2, 14, 910400, 'oa/leave', 'ep:calendar', 'bpm/oa/leave/index', 'BpmOALeave', 0, b'1', b'1', b'1', 'admin', NOW(), 'admin', NOW(), b'0'),
 
+-- AI 知识库
+(910600, 'AI 知识库', '', 1, 10, 0, '/ai', 'ep:collection', NULL, NULL, 0, b'1', b'1', b'1', 'admin', NOW(), 'admin', NOW(), b'0'),
+(910601, '知识库管理', 'ai:knowledge:query', 2, 1, 910600, 'knowledge', 'ep:folder-opened', 'ai/knowledge-base/knowledge/index', 'AiKnowledgeManage', 0, b'1', b'1', b'1', 'admin', NOW(), 'admin', NOW(), b'0'),
+(910602, '文档管理', 'ai:document:query', 2, 2, 910600, 'document', 'ep:document', 'ai/knowledge-base/document/index', 'AiKnowledgeDocumentManage', 0, b'1', b'1', b'1', 'admin', NOW(), 'admin', NOW(), b'0'),
+(910603, '数据源管理', 'ai:datasource:query', 2, 3, 910600, 'datasource', 'ep:connection', 'ai/knowledge-base/datasource/index', 'AiKnowledgeDataSourceManage', 0, b'1', b'1', b'1', 'admin', NOW(), 'admin', NOW(), b'0'),
+(910604, '同步任务', 'ai:sync-job:query', 2, 4, 910600, 'sync-job', 'ep:refresh', 'ai/knowledge-base/sync-job/index', 'AiKnowledgeSyncJob', 0, b'1', b'1', b'1', 'admin', NOW(), 'admin', NOW(), b'0'),
+(910605, 'AI问答', 'ai:chat:test', 2, 5, 910600, 'chat-test', 'ep:chat-dot-round', 'ai/knowledge-base/chat-test/index', 'AiKnowledgeChatTest', 0, b'1', b'1', b'1', 'admin', NOW(), 'admin', NOW(), b'0'),
+(910606, '问答记录', 'ai:chat-record:query', 2, 6, 910600, 'chat-record', 'ep:chat-line-round', 'ai/knowledge-base/chat-record/index', 'AiKnowledgeChatRecord', 0, b'1', b'1', b'1', 'admin', NOW(), 'admin', NOW(), b'0'),
+
 -- 组织管理按钮权限
 (910010, '部门查询', 'system:dept:query', 3, 1, 910001, '', '', '', NULL, 0, b'1', b'1', b'1', 'admin', NOW(), 'admin', NOW(), b'0'),
 (910011, '部门新增', 'system:dept:create', 3, 2, 910001, '', '', '', NULL, 0, b'1', b'1', b'1', 'admin', NOW(), 'admin', NOW(), b'0'),
@@ -161,21 +170,27 @@ VALUES
 (910490, '流程实例查询（管理员）', 'bpm:process-instance:manager-query', 3, 1, 910412, '', '', '', NULL, 0, b'1', b'1', b'1', 'admin', NOW(), 'admin', NOW(), b'0'),
 (910491, '流程实例取消（管理员）', 'bpm:process-instance:cancel-by-admin', 3, 2, 910412, '', '', '', NULL, 0, b'1', b'1', b'1', 'admin', NOW(), 'admin', NOW(), b'0'),
 (910500, 'OA 请假查询', 'bpm:oa-leave:query', 3, 1, 910414, '', '', '', NULL, 0, b'1', b'1', b'1', 'admin', NOW(), 'admin', NOW(), b'0'),
-(910501, 'OA 请假创建', 'bpm:oa-leave:create', 3, 2, 910414, '', '', '', NULL, 0, b'1', b'1', b'1', 'admin', NOW(), 'admin', NOW(), b'0')
+(910501, 'OA 请假创建', 'bpm:oa-leave:create', 3, 2, 910414, '', '', '', NULL, 0, b'1', b'1', b'1', 'admin', NOW(), 'admin', NOW(), b'0'),
+
+-- AI 知识库按钮权限
+(910610, '知识库查询', 'ai:knowledge:query', 3, 1, 910601, '', '', '', NULL, 0, b'1', b'1', b'1', 'admin', NOW(), 'admin', NOW(), b'0'),
+(910611, '知识库新增', 'ai:knowledge:create', 3, 2, 910601, '', '', '', NULL, 0, b'1', b'1', b'1', 'admin', NOW(), 'admin', NOW(), b'0'),
+(910612, '知识库修改', 'ai:knowledge:update', 3, 3, 910601, '', '', '', NULL, 0, b'1', b'1', b'1', 'admin', NOW(), 'admin', NOW(), b'0'),
+(910613, '知识库删除', 'ai:knowledge:delete', 3, 4, 910601, '', '', '', NULL, 0, b'1', b'1', b'1', 'admin', NOW(), 'admin', NOW(), b'0'),
+(910620, '文档查询', 'ai:document:query', 3, 1, 910602, '', '', '', NULL, 0, b'1', b'1', b'1', 'admin', NOW(), 'admin', NOW(), b'0'),
+(910621, '文档上传', 'ai:document:upload', 3, 2, 910602, '', '', '', NULL, 0, b'1', b'1', b'1', 'admin', NOW(), 'admin', NOW(), b'0'),
+(910622, '文档解析', 'ai:document:parse', 3, 3, 910602, '', '', '', NULL, 0, b'1', b'1', b'1', 'admin', NOW(), 'admin', NOW(), b'0'),
+(910623, '文档向量化', 'ai:document:embed', 3, 4, 910602, '', '', '', NULL, 0, b'1', b'1', b'1', 'admin', NOW(), 'admin', NOW(), b'0'),
+(910624, '文档删除', 'ai:document:delete', 3, 5, 910602, '', '', '', NULL, 0, b'1', b'1', b'1', 'admin', NOW(), 'admin', NOW(), b'0'),
+(910625, '文档编辑', 'ai:document:update', 3, 6, 910602, '', '', '', NULL, 0, b'1', b'1', b'1', 'admin', NOW(), 'admin', NOW(), b'0'),
+(910630, '数据源查询', 'ai:datasource:query', 3, 1, 910603, '', '', '', NULL, 0, b'1', b'1', b'1', 'admin', NOW(), 'admin', NOW(), b'0'),
+(910631, '数据源新增', 'ai:datasource:create', 3, 2, 910603, '', '', '', NULL, 0, b'1', b'1', b'1', 'admin', NOW(), 'admin', NOW(), b'0'),
+(910632, '数据源修改', 'ai:datasource:update', 3, 3, 910603, '', '', '', NULL, 0, b'1', b'1', b'1', 'admin', NOW(), 'admin', NOW(), b'0'),
+(910633, '数据源删除', 'ai:datasource:delete', 3, 4, 910603, '', '', '', NULL, 0, b'1', b'1', b'1', 'admin', NOW(), 'admin', NOW(), b'0'),
+(910640, '同步任务查询', 'ai:sync-job:query', 3, 1, 910604, '', '', '', NULL, 0, b'1', b'1', b'1', 'admin', NOW(), 'admin', NOW(), b'0'),
+(910641, '同步任务创建', 'ai:sync-job:create', 3, 2, 910604, '', '', '', NULL, 0, b'1', b'1', b'1', 'admin', NOW(), 'admin', NOW(), b'0'),
+(910642, '同步任务执行', 'ai:sync-job:execute', 3, 3, 910604, '', '', '', NULL, 0, b'1', b'1', b'1', 'admin', NOW(), 'admin', NOW(), b'0'),
+(910650, 'AI问答', 'ai:chat:test', 3, 1, 910605, '', '', '', NULL, 0, b'1', b'1', b'1', 'admin', NOW(), 'admin', NOW(), b'0'),
+(910660, '问答记录查询', 'ai:chat-record:query', 3, 1, 910606, '', '', '', NULL, 0, b'1', b'1', b'1', 'admin', NOW(), 'admin', NOW(), b'0')
 ON DUPLICATE KEY UPDATE
-  `name` = VALUES(`name`),
-  `permission` = VALUES(`permission`),
-  `type` = VALUES(`type`),
-  `sort` = VALUES(`sort`),
-  `parent_id` = VALUES(`parent_id`),
-  `path` = VALUES(`path`),
-  `icon` = VALUES(`icon`),
-  `component` = VALUES(`component`),
-  `component_name` = VALUES(`component_name`),
-  `status` = VALUES(`status`),
-  `visible` = VALUES(`visible`),
-  `keep_alive` = VALUES(`keep_alive`),
-  `always_show` = VALUES(`always_show`),
-  `updater` = VALUES(`updater`),
-  `update_time` = VALUES(`update_time`),
-  `deleted` = VALUES(`deleted`);
+  `id` = `id`;

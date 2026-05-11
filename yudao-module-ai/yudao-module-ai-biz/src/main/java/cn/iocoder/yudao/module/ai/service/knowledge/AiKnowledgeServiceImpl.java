@@ -33,7 +33,7 @@ public class AiKnowledgeServiceImpl implements AiKnowledgeService {
     private static final Integer DEFAULT_COUNT = 0;
     private static final String DEFAULT_DEPARTMENT_IDS = "*";
     private static final String DEFAULT_VISIBILITY = KnowledgeVisibilityEnum.PUBLIC.getCode();
-    private static final Double DEFAULT_SCORE_THRESHOLD = 0.7D;
+    private static final Double DEFAULT_SCORE_THRESHOLD = 0.1D;
 
     private final AiKnowledgeBaseMapper knowledgeBaseMapper;
 

@@ -67,6 +67,7 @@ public class KnowledgeSyncServiceImpl implements KnowledgeSyncService {
     private static final Set<String> SUPPORTED_EXTENSIONS = Set.of("txt", "md", "pdf", "doc", "docx", "wps",
             "xls", "xlsx", "xlsb", "ppt", "pptx", "pptm");
     private static final Integer DEFAULT_COUNT = 0;
+    private static final String DEFAULT_DOCUMENT_VERSION = "v1";
     private static final int ERROR_MESSAGE_MAX_LENGTH = 1024;
 
     private final AiSyncJobMapper syncJobMapper;
@@ -188,6 +189,8 @@ public class KnowledgeSyncServiceImpl implements KnowledgeSyncService {
                 storageResult);
         updateObj.setId(oldDocument.getId());
         updateObj.setDataSourceId(oldDocument.getDataSourceId());
+        updateObj.setDirectoryId(oldDocument.getDirectoryId());
+        updateObj.setDocumentVersion(nextDocumentVersion(oldDocument.getDocumentVersion()));
         documentMapper.updateSyncDocumentByIdAndTenantId(updateObj, syncJob.getTenantId());
         return oldDocument.getId();
     }
@@ -207,6 +210,7 @@ public class KnowledgeSyncServiceImpl implements KnowledgeSyncService {
         document.setTenantId(syncJob.getTenantId());
         document.setKnowledgeBaseId(syncJob.getKnowledgeBaseId());
         document.setDataSourceId(dataSource != null ? dataSource.getId() : syncJob.getDataSourceId());
+        document.setDocumentVersion(DEFAULT_DOCUMENT_VERSION);
         document.setTitle(removeExtension(fileName));
         document.setFileName(fileName);
         document.setFileType(extension);
@@ -220,6 +224,22 @@ public class KnowledgeSyncServiceImpl implements KnowledgeSyncService {
         document.setTokenCount(DEFAULT_COUNT);
         document.setErrorMessage(null);
         return document;
+    }
+
+    private String nextDocumentVersion(String oldVersion) {
+        if (oldVersion == null || oldVersion.isBlank()) {
+            return DEFAULT_DOCUMENT_VERSION;
+        }
+        String normalized = oldVersion.trim();
+        if (normalized.length() > 1 && normalized.charAt(0) == 'v') {
+            try {
+                int number = Integer.parseInt(normalized.substring(1));
+                return "v" + (number + 1);
+            } catch (NumberFormatException ignored) {
+                // 非 vN 格式的版本号保留旧值，避免同步任务误改业务定义的版本。
+            }
+        }
+        return normalized;
     }
 
     private void insertSyncRecord(AiSyncJobDO syncJob, Long documentId, String sourceUri, String actionType,

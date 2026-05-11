@@ -36,6 +36,10 @@ public class AiChatConversationDO {
     private String title;
     @TableField("status")
     private Integer status;
+    @TableField("pinned")
+    private Boolean pinned;
+    @TableField("pinned_time")
+    private LocalDateTime pinnedTime;
     @TableField("last_message_time")
     private LocalDateTime lastMessageTime;
     @TableField("creator")

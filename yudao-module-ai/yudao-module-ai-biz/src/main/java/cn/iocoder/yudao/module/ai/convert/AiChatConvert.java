@@ -32,6 +32,8 @@ public class AiChatConvert {
                 .knowledgeBaseId(bean.getKnowledgeBaseId())
                 .conversationId(bean.getConversationId())
                 .question(bean.getQuestion())
+                .topK(bean.getTopK())
+                .scoreThreshold(bean.getScoreThreshold())
                 .build();
     }
 
@@ -45,6 +47,7 @@ public class AiChatConvert {
         result.setAssistantMessageId(bean.getAssistantMessageId());
         result.setAnswer(bean.getAnswer());
         result.setNoContext(bean.getNoContext());
+        result.setDebugInfo(bean.getDebugInfo());
         result.setCitations(convertCompletionCitationList(bean.getCitations()));
         return result;
     }
@@ -96,6 +99,8 @@ public class AiChatConvert {
         result.setDepartmentId(bean.getDepartmentId());
         result.setTitle(bean.getTitle());
         result.setStatus(bean.getStatus());
+        result.setPinned(bean.getPinned());
+        result.setPinnedTime(bean.getPinnedTime());
         result.setLastMessageTime(bean.getLastMessageTime());
         result.setCreateTime(bean.getCreateTime());
         return result;

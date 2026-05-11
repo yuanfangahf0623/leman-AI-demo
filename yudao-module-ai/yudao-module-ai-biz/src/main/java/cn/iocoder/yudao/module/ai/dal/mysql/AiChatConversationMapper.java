@@ -3,6 +3,7 @@ package cn.iocoder.yudao.module.ai.dal.mysql;
 import cn.iocoder.yudao.framework.common.pojo.PageResult;
 import cn.iocoder.yudao.module.ai.controller.admin.chat.vo.AiChatConversationPageReqVO;
 import cn.iocoder.yudao.module.ai.dal.dataobject.AiChatConversationDO;
+import cn.iocoder.yudao.module.ai.enums.AiChatConversationStatusEnum;
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
@@ -41,6 +42,9 @@ public interface AiChatConversationMapper extends BaseMapper<AiChatConversationD
                         .eq(!admin, AiChatConversationDO::getUserId, userId)
                         .eq(reqVO.getKnowledgeBaseId() != null, AiChatConversationDO::getKnowledgeBaseId,
                                 reqVO.getKnowledgeBaseId())
+                        .ne(AiChatConversationDO::getStatus, AiChatConversationStatusEnum.ARCHIVED.getStatus())
+                        .orderByDesc(AiChatConversationDO::getPinned)
+                        .orderByDesc(AiChatConversationDO::getPinnedTime)
                         .orderByDesc(AiChatConversationDO::getLastMessageTime)
                         .orderByDesc(AiChatConversationDO::getId));
         return new PageResult<>(page.getRecords(), page.getTotal());
@@ -52,6 +56,36 @@ public interface AiChatConversationMapper extends BaseMapper<AiChatConversationD
                 .eq(AiChatConversationDO::getId, id)
                 .eq(AiChatConversationDO::getTenantId, tenantId)
                 .eq(AiChatConversationDO::getDepartmentId, departmentId));
+    }
+
+    default int updateTitleByIdAndTenantId(Long id, Long tenantId, String title) {
+        return update(null, Wrappers.lambdaUpdate(AiChatConversationDO.class)
+                .set(AiChatConversationDO::getTitle, title)
+                .eq(AiChatConversationDO::getId, id)
+                .eq(AiChatConversationDO::getTenantId, tenantId));
+    }
+
+    default int updatePinnedByIdAndTenantId(Long id, Long tenantId, Boolean pinned, LocalDateTime pinnedTime) {
+        return update(null, Wrappers.lambdaUpdate(AiChatConversationDO.class)
+                .set(AiChatConversationDO::getPinned, pinned)
+                .set(AiChatConversationDO::getPinnedTime, pinnedTime)
+                .eq(AiChatConversationDO::getId, id)
+                .eq(AiChatConversationDO::getTenantId, tenantId));
+    }
+
+    default int updateStatusByIdAndTenantId(Long id, Long tenantId, Integer status) {
+        return update(null, Wrappers.lambdaUpdate(AiChatConversationDO.class)
+                .set(AiChatConversationDO::getStatus, status)
+                .set(AiChatConversationDO::getPinned, false)
+                .set(AiChatConversationDO::getPinnedTime, null)
+                .eq(AiChatConversationDO::getId, id)
+                .eq(AiChatConversationDO::getTenantId, tenantId));
+    }
+
+    default int deleteByIdAndTenantId(Long id, Long tenantId) {
+        return delete(Wrappers.lambdaQuery(AiChatConversationDO.class)
+                .eq(AiChatConversationDO::getId, id)
+                .eq(AiChatConversationDO::getTenantId, tenantId));
     }
 
 }

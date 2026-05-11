@@ -27,6 +27,24 @@ CREATE TABLE IF NOT EXISTS `ai_knowledge_base` (
   KEY `idx_ai_kb_tenant_code_deleted` (`tenant_id`, `code`, `deleted`) USING BTREE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='知识库表，用于存储企业知识库的基本信息和配置';
 
+CREATE TABLE IF NOT EXISTS `ai_knowledge_directory` (
+  `id` bigint NOT NULL AUTO_INCREMENT COMMENT '编号',
+  `tenant_id` bigint NOT NULL DEFAULT 0 COMMENT '租户编号',
+  `knowledge_base_id` bigint NOT NULL COMMENT '知识库编号',
+  `parent_id` bigint NOT NULL DEFAULT 0 COMMENT '父目录编号',
+  `name` varchar(128) COLLATE utf8mb4_unicode_ci NOT NULL COMMENT '目录名称',
+  `sort` int NOT NULL DEFAULT 0 COMMENT '显示排序',
+  `status` tinyint NOT NULL DEFAULT 0 COMMENT '状态',
+  `creator` varchar(64) COLLATE utf8mb4_unicode_ci DEFAULT '' COMMENT '创建者',
+  `create_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+  `updater` varchar(64) COLLATE utf8mb4_unicode_ci DEFAULT '' COMMENT '更新者',
+  `update_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+  `deleted` bit(1) NOT NULL DEFAULT b'0' COMMENT '是否删除',
+  PRIMARY KEY (`id`) USING BTREE,
+  KEY `idx_ai_dir_kb_parent_tenant_deleted` (`knowledge_base_id`, `parent_id`, `tenant_id`, `deleted`) USING BTREE,
+  KEY `idx_ai_dir_tenant_kb_name` (`tenant_id`, `knowledge_base_id`, `name`) USING BTREE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='知识库目录表，用于维护知识库下的文档目录结构';
+
 CREATE TABLE IF NOT EXISTS `ai_data_source` (
   `id` bigint NOT NULL AUTO_INCREMENT COMMENT '编号',
   `tenant_id` bigint NOT NULL DEFAULT 0 COMMENT '租户编号',
@@ -53,7 +71,9 @@ CREATE TABLE IF NOT EXISTS `ai_document` (
   `id` bigint NOT NULL AUTO_INCREMENT COMMENT '编号',
   `tenant_id` bigint NOT NULL DEFAULT 0 COMMENT '租户编号',
   `knowledge_base_id` bigint NOT NULL COMMENT '知识库编号',
+  `directory_id` bigint DEFAULT NULL COMMENT '知识库目录编号',
   `data_source_id` bigint DEFAULT NULL COMMENT '数据源编号',
+  `document_version` varchar(64) COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'v1' COMMENT '文档版本',
   `title` varchar(256) COLLATE utf8mb4_unicode_ci NOT NULL COMMENT '文档标题',
   `file_name` varchar(256) COLLATE utf8mb4_unicode_ci DEFAULT NULL COMMENT '文件名',
   `file_type` varchar(64) COLLATE utf8mb4_unicode_ci DEFAULT NULL COMMENT '文件类型',
@@ -73,6 +93,7 @@ CREATE TABLE IF NOT EXISTS `ai_document` (
   `deleted` bit(1) NOT NULL DEFAULT b'0' COMMENT '是否删除',
   PRIMARY KEY (`id`) USING BTREE,
   KEY `idx_ai_doc_kb_tenant_parse_embedding` (`knowledge_base_id`, `tenant_id`, `parse_status`, `embedding_status`) USING BTREE,
+  KEY `idx_ai_doc_directory` (`directory_id`) USING BTREE,
   KEY `idx_ai_doc_data_source` (`data_source_id`) USING BTREE,
   KEY `idx_ai_doc_content_hash` (`content_hash`) USING BTREE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='文档表，用于存储上传或同步的文档基本信息及状态';
@@ -152,10 +173,13 @@ CREATE TABLE IF NOT EXISTS `ai_sync_record` (
 CREATE TABLE IF NOT EXISTS `ai_chat_conversation` (
   `id` bigint NOT NULL AUTO_INCREMENT COMMENT '编号',
   `tenant_id` bigint NOT NULL DEFAULT 0 COMMENT '租户编号',
+  `department_id` bigint NOT NULL DEFAULT 0 COMMENT '部门编号',
   `knowledge_base_id` bigint NOT NULL COMMENT '知识库编号',
   `user_id` bigint NOT NULL COMMENT '用户编号',
   `title` varchar(256) COLLATE utf8mb4_unicode_ci DEFAULT NULL COMMENT '会话标题',
   `status` tinyint NOT NULL DEFAULT 0 COMMENT '状态',
+  `pinned` bit(1) NOT NULL DEFAULT b'0' COMMENT '是否置顶',
+  `pinned_time` datetime DEFAULT NULL COMMENT '置顶时间',
   `last_message_time` datetime DEFAULT NULL COMMENT '最后消息时间',
   `creator` varchar(64) COLLATE utf8mb4_unicode_ci DEFAULT '' COMMENT '创建者',
   `create_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
@@ -165,7 +189,8 @@ CREATE TABLE IF NOT EXISTS `ai_chat_conversation` (
   PRIMARY KEY (`id`) USING BTREE,
   KEY `idx_ai_conversation_user_kb_tenant` (`user_id`, `knowledge_base_id`, `tenant_id`) USING BTREE,
   KEY `idx_ai_conversation_kb_tenant` (`knowledge_base_id`, `tenant_id`) USING BTREE,
-  KEY `idx_ai_conversation_tenant_dept` (`tenant_id`, `department_id`) USING BTREE
+  KEY `idx_ai_conversation_tenant_dept` (`tenant_id`, `department_id`) USING BTREE,
+  KEY `idx_ai_conversation_pinned` (`tenant_id`, `user_id`, `pinned`, `pinned_time`) USING BTREE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='问答会话表，用于记录用户发起的问答会话信息';
 
 CREATE TABLE IF NOT EXISTS `ai_chat_message` (
@@ -217,3 +242,33 @@ CREATE TABLE IF NOT EXISTS `ai_chat_citation` (
   KEY `idx_ai_citation_kb_tenant` (`knowledge_base_id`, `tenant_id`) USING BTREE,
   KEY `idx_ai_citation_tenant_dept` (`tenant_id`, `department_id`) USING BTREE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='引用来源表，用于存储问答返回中引用的文档/Chunk 信息';
+
+CREATE TABLE IF NOT EXISTS `ai_chat_question_cache` (
+  `id` bigint NOT NULL AUTO_INCREMENT COMMENT '编号',
+  `tenant_id` bigint NOT NULL DEFAULT 0 COMMENT '租户编号',
+  `department_id` bigint NOT NULL DEFAULT 0 COMMENT '部门编号',
+  `knowledge_base_id` bigint NOT NULL COMMENT '知识库编号',
+  `user_id` bigint DEFAULT NULL COMMENT '首次提问用户编号',
+  `question` varchar(512) COLLATE utf8mb4_unicode_ci NOT NULL COMMENT '原始问题',
+  `normalized_question` varchar(512) COLLATE utf8mb4_unicode_ci NOT NULL COMMENT '归一化问题',
+  `question_hash` varchar(64) COLLATE utf8mb4_unicode_ci NOT NULL COMMENT '问题哈希',
+  `answer` longtext COLLATE utf8mb4_unicode_ci NOT NULL COMMENT '缓存回答',
+  `model` varchar(128) COLLATE utf8mb4_unicode_ci DEFAULT NULL COMMENT '模型名称',
+  `prompt_tokens` int NOT NULL DEFAULT 0 COMMENT '提示词 Token 数',
+  `completion_tokens` int NOT NULL DEFAULT 0 COMMENT '回复 Token 数',
+  `total_tokens` int NOT NULL DEFAULT 0 COMMENT '总 Token 数',
+  `latency_ms` bigint NOT NULL DEFAULT 0 COMMENT '原模型调用耗时，单位毫秒',
+  `citation_snapshot_json` longtext COLLATE utf8mb4_unicode_ci COMMENT '引用来源快照 JSON',
+  `hit_count` int NOT NULL DEFAULT 0 COMMENT '缓存命中次数',
+  `last_hit_time` datetime DEFAULT NULL COMMENT '最后命中时间',
+  `status` tinyint NOT NULL DEFAULT 0 COMMENT '状态',
+  `creator` varchar(64) COLLATE utf8mb4_unicode_ci DEFAULT '' COMMENT '创建者',
+  `create_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+  `updater` varchar(64) COLLATE utf8mb4_unicode_ci DEFAULT '' COMMENT '更新者',
+  `update_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+  `deleted` bit(1) NOT NULL DEFAULT b'0' COMMENT '是否删除',
+  PRIMARY KEY (`id`) USING BTREE,
+  KEY `idx_ai_question_cache_scope_hash` (`tenant_id`, `department_id`, `knowledge_base_id`, `question_hash`, `deleted`) USING BTREE,
+  KEY `idx_ai_question_cache_kb_tenant` (`knowledge_base_id`, `tenant_id`) USING BTREE,
+  KEY `idx_ai_question_cache_last_hit` (`tenant_id`, `knowledge_base_id`, `last_hit_time`) USING BTREE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='问答问题缓存表，用于复用已生成且带引用的答案';

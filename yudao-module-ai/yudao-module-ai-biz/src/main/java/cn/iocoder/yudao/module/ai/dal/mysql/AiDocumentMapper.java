@@ -39,11 +39,21 @@ public interface AiDocumentMapper extends BaseMapper<AiDocumentDO> {
                 .set(AiDocumentDO::getObjectKey, document.getObjectKey())
                 .set(AiDocumentDO::getSourceUri, document.getSourceUri())
                 .set(AiDocumentDO::getContentHash, document.getContentHash())
+                .set(AiDocumentDO::getDocumentVersion, document.getDocumentVersion())
                 .set(AiDocumentDO::getParseStatus, document.getParseStatus())
                 .set(AiDocumentDO::getEmbeddingStatus, document.getEmbeddingStatus())
                 .set(AiDocumentDO::getChunkCount, document.getChunkCount())
                 .set(AiDocumentDO::getTokenCount, document.getTokenCount())
                 .set(AiDocumentDO::getErrorMessage, document.getErrorMessage())
+                .eq(AiDocumentDO::getId, document.getId())
+                .eq(AiDocumentDO::getTenantId, tenantId));
+    }
+
+    default int updateBasicByIdAndTenantId(AiDocumentDO document, Long tenantId) {
+        return update(null, Wrappers.lambdaUpdate(AiDocumentDO.class)
+                .set(AiDocumentDO::getDirectoryId, document.getDirectoryId())
+                .set(AiDocumentDO::getTitle, document.getTitle())
+                .set(AiDocumentDO::getDocumentVersion, document.getDocumentVersion())
                 .eq(AiDocumentDO::getId, document.getId())
                 .eq(AiDocumentDO::getTenantId, tenantId));
     }
@@ -83,14 +93,25 @@ public interface AiDocumentMapper extends BaseMapper<AiDocumentDO> {
         IPage<AiDocumentDO> page = selectPage(new Page<>(reqVO.getPageNo(), reqVO.getPageSize()),
                 Wrappers.lambdaQuery(AiDocumentDO.class)
                         .eq(AiDocumentDO::getTenantId, tenantId)
-                        .eq(reqVO.getKnowledgeBaseId() != null, AiDocumentDO::getKnowledgeBaseId,
+                .eq(reqVO.getKnowledgeBaseId() != null, AiDocumentDO::getKnowledgeBaseId,
                                 reqVO.getKnowledgeBaseId())
+                        .eq(reqVO.getDirectoryId() != null && reqVO.getDirectoryId() > 0,
+                                AiDocumentDO::getDirectoryId, reqVO.getDirectoryId())
+                        .and(reqVO.getDirectoryId() != null && reqVO.getDirectoryId() == 0,
+                                query -> query.isNull(AiDocumentDO::getDirectoryId)
+                                        .or().eq(AiDocumentDO::getDirectoryId, 0L))
                         .eq(reqVO.getParseStatus() != null, AiDocumentDO::getParseStatus, reqVO.getParseStatus())
                         .eq(reqVO.getEmbeddingStatus() != null, AiDocumentDO::getEmbeddingStatus,
                                 reqVO.getEmbeddingStatus())
                         .like(StringUtils.isNotBlank(reqVO.getTitle()), AiDocumentDO::getTitle, reqVO.getTitle())
                         .orderByDesc(AiDocumentDO::getId));
         return new PageResult<>(page.getRecords(), page.getTotal());
+    }
+
+    default Long selectCountByDirectoryId(Long tenantId, Long directoryId) {
+        return selectCount(Wrappers.lambdaQuery(AiDocumentDO.class)
+                .eq(AiDocumentDO::getTenantId, tenantId)
+                .eq(AiDocumentDO::getDirectoryId, directoryId));
     }
 
 }

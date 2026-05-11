@@ -45,6 +45,10 @@ public class ChunkServiceImpl implements ChunkService {
         // 先完成配置校验、切片和元数据构造，再替换旧 chunk，避免配置非法时误删旧数据。
         List<String> chunkContents = documentChunkSplitter.split(parsedDocument.getContent(),
                 knowledgeBase.getChunkSize(), knowledgeBase.getChunkOverlap());
+        if (chunkContents.isEmpty()) {
+            throw new ServiceException(DOCUMENT_CHUNK_CREATE_FAILED,
+                    "文档未解析到可切片文本，请确认文件包含可复制文本；扫描件或图片型文件需先 OCR");
+        }
         List<AiDocumentChunkDO> chunks = buildChunks(knowledgeBase, document, parsedDocument, chunkContents);
 
         // 重新解析同一文档时，先逻辑删除旧 chunk，保证不会存在重复有效 chunk。
