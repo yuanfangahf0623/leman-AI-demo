@@ -3,6 +3,8 @@ package cn.iocoder.yudao.module.ai.controller.admin.datasource;
 import cn.iocoder.yudao.framework.common.pojo.CommonResult;
 import cn.iocoder.yudao.framework.common.pojo.PageResult;
 import cn.iocoder.yudao.module.ai.controller.admin.datasource.vo.AiDataSourceCreateReqVO;
+import cn.iocoder.yudao.module.ai.controller.admin.datasource.vo.AiDataSourceIngestReqVO;
+import cn.iocoder.yudao.module.ai.controller.admin.datasource.vo.AiDataSourceIngestRespVO;
 import cn.iocoder.yudao.module.ai.controller.admin.datasource.vo.AiDataSourcePageReqVO;
 import cn.iocoder.yudao.module.ai.controller.admin.datasource.vo.AiDataSourceRespVO;
 import cn.iocoder.yudao.module.ai.controller.admin.datasource.vo.AiDataSourceUpdateReqVO;
@@ -56,6 +58,12 @@ public class AiDataSourceController {
     public CommonResult<Long> createDataSource(@Valid @RequestBody AiDataSourceCreateReqVO createReqVO) {
         // 创建前会在 Service 校验 knowledgeBaseId 是否存在且属于当前租户。
         return CommonResult.success(dataSourceService.createDataSource(createReqVO));
+    }
+
+    @PostMapping("/ingest")
+    @PreAuthorize("@ss.hasPermission('ai:datasource:update')")
+    public CommonResult<AiDataSourceIngestRespVO> ingest(@Valid @RequestBody AiDataSourceIngestReqVO ingestReqVO) {
+        return CommonResult.success(dataSourceService.ingest(ingestReqVO));
     }
 
     @PutMapping("/update")

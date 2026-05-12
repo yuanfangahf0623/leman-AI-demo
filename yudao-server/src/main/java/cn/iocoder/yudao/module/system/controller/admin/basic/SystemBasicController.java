@@ -5,11 +5,13 @@ import cn.iocoder.yudao.framework.common.pojo.CommonResult;
 import cn.iocoder.yudao.framework.common.pojo.PageResult;
 import cn.iocoder.yudao.server.framework.crud.SimpleAdminDataService;
 import cn.iocoder.yudao.server.framework.crud.SimpleAdminDataService.TableDef;
+import cn.iocoder.yudao.server.framework.security.SecurityFrameworkUtils;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ContentDisposition;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.util.StringUtils;
@@ -24,6 +26,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -74,6 +77,7 @@ public class SystemBasicController {
 
     private final SimpleAdminDataService dataService;
     private final PasswordEncoder passwordEncoder;
+    private final JdbcTemplate jdbcTemplate;
 
     @GetMapping("/dept/simple-list")
     @PreAuthorize("@ss.hasPermission('system:dept:query')")
@@ -267,7 +271,7 @@ public class SystemBasicController {
         return excel("user.xlsx", dataService.exportExcel(users, columns(
                 "id", "编号",
                 "username", "用户账号",
-                "nickname", "用户昵称",
+                "nickname", "用户姓名",
                 "deptId", "部门编号",
                 "mobile", "手机号",
                 "email", "邮箱",
@@ -281,6 +285,72 @@ public class SystemBasicController {
     @GetMapping("/user/get-import-template")
     public ResponseEntity<byte[]> getUserImportTemplate() {
         return download("user-import-template.csv", "username,nickname,password,mobile,email\n".getBytes());
+    }
+
+    @GetMapping("/user/profile/get")
+    public CommonResult<Map<String, Object>> getUserProfile() {
+        Long userId = requireLoginUserId();
+        Map<String, Object> user = dataService.get(USER, userId);
+        removeSensitiveUserFields(user);
+        user.put("dept", getOptional(DEPT, dataService.longValue(user.get("deptId"))));
+        user.put("posts", getRelationRows("system_user_post", "post_id", userId, POST));
+        user.put("roles", getRelationRows("system_user_role", "role_id", userId, ROLE));
+        return CommonResult.success(user);
+    }
+
+    @PutMapping("/user/profile/update")
+    public CommonResult<Boolean> updateUserProfile(@RequestBody Map<String, Object> reqVO) {
+        Long userId = requireLoginUserId();
+        Map<String, Object> values = new LinkedHashMap<>();
+        putIfPresent(values, reqVO, "email");
+        putIfPresent(values, reqVO, "mobile");
+        putIfPresent(values, reqVO, "sex");
+        putIfPresent(values, reqVO, "avatar");
+        if (!values.isEmpty()) {
+            dataService.updateColumns("system_users", userId, values);
+        }
+        return CommonResult.success(true);
+    }
+
+    @PutMapping("/user/profile/update-password")
+    public CommonResult<Boolean> updateUserProfilePassword(@RequestBody Map<String, Object> reqVO) {
+        Long userId = requireLoginUserId();
+        String oldPassword = stringValue(reqVO.get("oldPassword"));
+        String newPassword = stringValue(reqVO.get("newPassword"));
+        if (!StringUtils.hasText(oldPassword) || !StringUtils.hasText(newPassword)) {
+            throw new ServiceException(400, "密码不能为空");
+        }
+        String encodedPassword = jdbcTemplate.queryForObject(
+                "SELECT password FROM system_users WHERE id = ? AND deleted = 0", String.class, userId);
+        if (!passwordEncoder.matches(oldPassword, encodedPassword)) {
+            throw new ServiceException(400, "旧密码不正确");
+        }
+        dataService.updateColumns("system_users", userId, Map.of("password", passwordEncoder.encode(newPassword)));
+        return CommonResult.success(true);
+    }
+
+    @GetMapping("/social-user/get-bind-list")
+    public CommonResult<List<Map<String, Object>>> getBindSocialUserList() {
+        requireLoginUserId();
+        return CommonResult.success(Collections.emptyList());
+    }
+
+    @PostMapping("/social-user/bind")
+    public CommonResult<Boolean> bindSocialUser() {
+        requireLoginUserId();
+        throw new ServiceException(400, "社交绑定暂未启用");
+    }
+
+    @DeleteMapping("/social-user/unbind")
+    public CommonResult<Boolean> unbindSocialUser() {
+        requireLoginUserId();
+        return CommonResult.success(true);
+    }
+
+    @GetMapping("/auth/social-auth-redirect")
+    public CommonResult<String> socialAuthRedirect() {
+        requireLoginUserId();
+        throw new ServiceException(400, "社交绑定暂未启用");
     }
 
     @GetMapping("/tenant/page")
@@ -639,6 +709,49 @@ public class SystemBasicController {
 
     private void removeSensitiveUserFields(Map<String, Object> user) {
         user.remove("password");
+    }
+
+    private Long requireLoginUserId() {
+        Long userId = SecurityFrameworkUtils.getLoginUserId();
+        if (userId == null) {
+            throw new ServiceException(401, "未登录或登录已过期");
+        }
+        return userId;
+    }
+
+    private Map<String, Object> getOptional(TableDef table, Long id) {
+        if (id == null) {
+            return null;
+        }
+        try {
+            return dataService.get(table, id);
+        } catch (ServiceException ex) {
+            return null;
+        }
+    }
+
+    private List<Map<String, Object>> getRelationRows(String relationTable, String valueColumn, Long userId,
+                                                      TableDef targetTable) {
+        List<Long> ids = jdbcTemplate.queryForList("SELECT " + valueColumn + " FROM " + relationTable
+                + " WHERE user_id = ?", Long.class, userId);
+        List<Map<String, Object>> rows = new ArrayList<>();
+        for (Long id : ids) {
+            Map<String, Object> row = getOptional(targetTable, id);
+            if (row != null) {
+                rows.add(row);
+            }
+        }
+        return rows;
+    }
+
+    private void putIfPresent(Map<String, Object> target, Map<String, Object> source, String key) {
+        if (source.containsKey(key)) {
+            target.put(key, source.get(key));
+        }
+    }
+
+    private String stringValue(Object value) {
+        return value == null ? null : String.valueOf(value);
     }
 
     private ResponseEntity<byte[]> download(String filename, byte[] content) {

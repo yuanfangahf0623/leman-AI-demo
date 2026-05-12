@@ -1,8 +1,11 @@
 package cn.iocoder.yudao.module.ai.service.document;
 
 import cn.iocoder.yudao.framework.common.pojo.PageResult;
+import cn.iocoder.yudao.module.ai.controller.admin.datasource.vo.AiDataSourceIngestReqVO;
+import cn.iocoder.yudao.module.ai.controller.admin.datasource.vo.AiDataSourceIngestRespVO;
 import cn.iocoder.yudao.module.ai.controller.admin.document.vo.AiDocumentPageReqVO;
 import cn.iocoder.yudao.module.ai.controller.admin.document.vo.AiDocumentUpdateReqVO;
+import cn.iocoder.yudao.module.ai.dal.dataobject.AiDataSourceDO;
 import cn.iocoder.yudao.module.ai.dal.dataobject.AiDocumentDO;
 import cn.iocoder.yudao.module.ai.framework.parser.ParsedDocument;
 import org.springframework.web.multipart.MultipartFile;
@@ -13,6 +16,9 @@ import org.springframework.web.multipart.MultipartFile;
 public interface AiDocumentService {
 
     Long uploadDocument(Long knowledgeBaseId, Long directoryId, MultipartFile file);
+
+    AiDataSourceIngestRespVO createDocumentFromDataSource(AiDataSourceDO dataSource,
+                                                          AiDataSourceIngestReqVO ingestReqVO);
 
     PageResult<AiDocumentDO> getDocumentPage(AiDocumentPageReqVO pageReqVO);
 

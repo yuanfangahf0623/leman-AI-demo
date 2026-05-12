@@ -25,7 +25,7 @@ function Import-EnvValue {
     }
 }
 
-$envNames = @(
+$requiredEnvNames = @(
     "AI_MODEL_PROVIDER",
     "AI_BASE_URL",
     "AI_API_KEY",
@@ -38,7 +38,18 @@ $envNames = @(
     "SPRING_DATASOURCE_PASSWORD"
 )
 
-foreach ($name in $envNames) {
+$optionalEnvNames = @(
+    "AI_DOCUMENT_OCR_ENABLED",
+    "AI_DOCUMENT_OCR_PROVIDER",
+    "AI_DOCUMENT_OCR_TESSERACT_EXECUTABLE",
+    "AI_DOCUMENT_OCR_TESSDATA_DIRECTORY",
+    "AI_DOCUMENT_OCR_LANGUAGE",
+    "AI_DOCUMENT_OCR_DPI",
+    "AI_DOCUMENT_OCR_MAX_PAGES",
+    "AI_DOCUMENT_OCR_TIMEOUT_SECONDS"
+)
+
+foreach ($name in ($requiredEnvNames + $optionalEnvNames)) {
     Import-EnvValue $name
 }
 
@@ -49,7 +60,7 @@ if (-not $env:AI_VECTOR_STORE_TYPE) {
     $env:AI_VECTOR_STORE_TYPE = "pgvector"
 }
 
-$missing = $envNames | Where-Object { -not [Environment]::GetEnvironmentVariable($_, "Process") }
+$missing = $requiredEnvNames | Where-Object { -not [Environment]::GetEnvironmentVariable($_, "Process") }
 if ($missing.Count -gt 0) {
     throw "Missing required environment variables: $($missing -join ', '). Configure them in Windows user/machine env or current PowerShell. Secret values are never printed."
 }

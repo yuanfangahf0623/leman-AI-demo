@@ -1,0 +1,17 @@
+# 后端 OCR 运行时镜像模板。
+#
+# 当前后端通过本机 CLI 调用 tesseract，因此容器化部署时需要把 OCR 引擎安装进后端镜像。
+# 可将本文件中的 RUN/ENV 配置合并到实际 yudao-server Dockerfile。
+FROM eclipse-temurin:17-jre-jammy
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+        tesseract-ocr \
+        tesseract-ocr-chi-sim \
+        tesseract-ocr-eng \
+    && rm -rf /var/lib/apt/lists/*
+
+ENV AI_DOCUMENT_OCR_ENABLED=true
+ENV AI_DOCUMENT_OCR_PROVIDER=tesseract-cli
+ENV AI_DOCUMENT_OCR_TESSERACT_EXECUTABLE=tesseract
+ENV AI_DOCUMENT_OCR_LANGUAGE=chi_sim+eng

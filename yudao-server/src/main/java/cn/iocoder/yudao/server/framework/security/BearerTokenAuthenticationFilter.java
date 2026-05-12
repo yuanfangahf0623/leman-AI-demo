@@ -42,7 +42,7 @@ public class BearerTokenAuthenticationFilter extends OncePerRequestFilter {
                             .toList());
                     SecurityContextHolder.getContext().setAuthentication(authentication);
                     AiUserContextHolder.setUserContext(loginUser.getTenantId(), loginUser.getId(),
-                            loginUser.getDeptId(), loginUser.isAdmin());
+                            loginUser.getDeptId(), loginUser.getNickname(), loginUser.isAdmin());
                 }
             }
             filterChain.doFilter(request, response);

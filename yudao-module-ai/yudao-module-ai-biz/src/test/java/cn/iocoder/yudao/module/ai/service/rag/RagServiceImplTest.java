@@ -5,6 +5,7 @@ import cn.iocoder.yudao.module.ai.dal.dataobject.AiChatCitationDO;
 import cn.iocoder.yudao.module.ai.dal.dataobject.AiChatConversationDO;
 import cn.iocoder.yudao.module.ai.dal.dataobject.AiChatMessageDO;
 import cn.iocoder.yudao.module.ai.dal.dataobject.AiChatQuestionCacheDO;
+import cn.iocoder.yudao.module.ai.dal.dataobject.AiDocumentChunkDO;
 import cn.iocoder.yudao.module.ai.dal.dataobject.AiKnowledgeBaseDO;
 import cn.iocoder.yudao.module.ai.dal.mysql.AiChatCitationMapper;
 import cn.iocoder.yudao.module.ai.dal.mysql.AiChatConversationMapper;
@@ -21,6 +22,7 @@ import cn.iocoder.yudao.module.ai.service.chatmodel.AiChatModelRequest;
 import cn.iocoder.yudao.module.ai.service.chatmodel.AiChatModelResponse;
 import cn.iocoder.yudao.module.ai.service.chatmodel.AiChatModelService;
 import cn.iocoder.yudao.module.ai.service.embedding.AiEmbeddingService;
+import cn.iocoder.yudao.module.ai.service.rag.sensitive.PersonalSensitiveDataPolicy;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -35,11 +37,14 @@ import java.util.Map;
 import java.util.concurrent.atomic.AtomicLong;
 
 import static cn.iocoder.yudao.module.ai.enums.AiRagErrorCodeConstants.RAG_KNOWLEDGE_ACCESS_DENIED;
+import static cn.iocoder.yudao.module.ai.enums.AiRagErrorCodeConstants.RAG_PERSONAL_SENSITIVE_ACCESS_DENIED;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
@@ -82,7 +87,7 @@ class RagServiceImplTest {
         ragService = new RagServiceImpl(knowledgeBaseMapper, chatConversationMapper, chatMessageMapper,
                 chatCitationMapper, chatQuestionCacheMapper, documentChunkMapper, aiEmbeddingService,
                 knowledgeVectorStore, new PromptBuilder(aiProperties), aiChatModelService, objectMapper,
-                aiProperties);
+                aiProperties, new PersonalSensitiveDataPolicy(null));
     }
 
     @AfterEach
@@ -154,6 +159,165 @@ class RagServiceImplTest {
         assertEquals("unit-test-chat-model", assistantMessage.getModel());
         assertEquals(15, assistantMessage.getTotalTokens());
         assertTrue(assistantMessage.getLatencyMs() >= 0L);
+    }
+
+    @Test
+    void chatShouldAnswerCurrentLoginNicknameWhenAskedWhoAmI() {
+        AiUserContextHolder.setUserContext(1L, 100L, 20L, "管理员", false);
+        mockConversationAndMessageIds();
+        when(knowledgeBaseMapper.selectByIdAndTenantId(10L, 1L)).thenReturn(buildKnowledge("*"));
+
+        RagChatResponse response = ragService.chat(RagChatRequest.builder()
+                .knowledgeBaseId(10L)
+                .question("我是谁？")
+                .build());
+
+        assertFalse(response.getNoContext());
+        assertEquals("你是管理员。", response.getAnswer());
+        assertTrue(response.getCitations().isEmpty());
+        verifyNoInteractions(chatQuestionCacheMapper, aiEmbeddingService, knowledgeVectorStore, documentChunkMapper,
+                aiChatModelService);
+    }
+
+    @Test
+    void chatShouldMergeLexicalSupplementWhenVectorMissesRelatedPolicy() {
+        AiUserContextHolder.setUserContext(1L, 100L, 20L, "温春雨", false);
+        mockConversationAndMessageIds();
+        mockCitationId();
+        String question = "如果我是车间主任，我全勤的且满绩效的情况下可以拿到多少钱？";
+        when(knowledgeBaseMapper.selectByIdAndTenantId(10L, 1L)).thenReturn(buildKnowledge("*"));
+        when(aiEmbeddingService.embed(question)).thenReturn(List.of(1.0D, 0.0D));
+        when(knowledgeVectorStore.search(any(KnowledgeSearchRequest.class))).thenReturn(List.of(KnowledgeHit.builder()
+                .tenantId(1L)
+                .knowledgeBaseId(10L)
+                .documentId(201L)
+                .chunkId(301L)
+                .chunkNo(1)
+                .documentTitle("绩效考核制度")
+                .content("车间主任满绩效奖金为 1000 元。")
+                .score(0.88D)
+                .metadata(Map.of("title", "绩效考核制度"))
+                .build()));
+        when(documentChunkMapper.selectLexicalCandidates(eq(1L), eq(10L), anyList(), anyInt()))
+                .thenReturn(List.of(
+                        buildChunk(302L, 201L, 2, "绩效考核制度", "车间主任绩效工资按绩效结果计算，满绩效时发放 1000 元。"),
+                        buildChunk(303L, 201L, 3, "绩效考核制度", "车间主任现场5S绩效、质量绩效、产量绩效均达标时不扣绩效工资。"),
+                        buildChunk(304L, 201L, 4, "绩效考核制度", "车间主任绩效奖金和岗位工资按月度绩效考核结果核算。"),
+                        buildChunk(305L, 201L, 5, "绩效考核制度", "满绩效情况下，绩效工资按制度表格中的标准金额发放。"),
+                        buildChunk(306L, 201L, 6, "绩效考核制度", "车间主任绩效达标且质量无异常时，绩效部分不扣款。"),
+                        buildChunk(307L, 202L, 1, "考勤制度", "员工当月全勤时，全勤奖为 50 元。")
+                ));
+        when(aiChatModelService.chat(any(AiChatModelRequest.class))).thenReturn(AiChatModelResponse.builder()
+                .model("unit-test-chat-model")
+                .content("车间主任满绩效奖金 1000 元，全勤奖 50 元，合计 1050 元。")
+                .promptTokens(20)
+                .completionTokens(10)
+                .totalTokens(30)
+                .build());
+
+        RagChatResponse response = ragService.chat(RagChatRequest.builder()
+                .knowledgeBaseId(10L)
+                .question(question)
+                .build());
+
+        assertFalse(response.getNoContext());
+        assertTrue(response.getCitations().stream()
+                .anyMatch(citation -> "绩效考核制度".equals(citation.getDocumentTitle())));
+        assertTrue(response.getCitations().stream()
+                .anyMatch(citation -> "考勤制度".equals(citation.getDocumentTitle())));
+
+        ArgumentCaptor<AiChatModelRequest> chatCaptor = ArgumentCaptor.forClass(AiChatModelRequest.class);
+        verify(aiChatModelService).chat(chatCaptor.capture());
+        assertTrue(chatCaptor.getValue().getUserPrompt().contains("车间主任满绩效奖金"));
+        assertTrue(chatCaptor.getValue().getUserPrompt().contains("全勤奖为 50 元"));
+    }
+
+    @Test
+    void chatShouldRejectPersonalSensitiveQuestionWhenNonAdminQueriesOtherPerson() {
+        AiUserContextHolder.setUserContext(1L, 100L, 20L, "温春雨", false);
+        when(knowledgeBaseMapper.selectByIdAndTenantId(10L, 1L)).thenReturn(buildKnowledge("*"));
+
+        ServiceException exception = assertThrows(ServiceException.class, () -> ragService.chat(RagChatRequest.builder()
+                .knowledgeBaseId(10L)
+                .question("张增波工资是多少？")
+                .build()));
+
+        assertEquals(RAG_PERSONAL_SENSITIVE_ACCESS_DENIED, exception.getCode());
+        verifyNoInteractions(chatConversationMapper, chatMessageMapper, chatQuestionCacheMapper, aiEmbeddingService,
+                knowledgeVectorStore, documentChunkMapper, aiChatModelService);
+    }
+
+    @Test
+    void chatShouldRejectIdCardQuestionWhenNonAdminQueriesOtherPerson() {
+        AiUserContextHolder.setUserContext(1L, 100L, 20L, "温春雨", false);
+        when(knowledgeBaseMapper.selectByIdAndTenantId(10L, 1L)).thenReturn(buildKnowledge("*"));
+
+        ServiceException exception = assertThrows(ServiceException.class, () -> ragService.chat(RagChatRequest.builder()
+                .knowledgeBaseId(10L)
+                .question("张增波身份证号是多少？")
+                .build()));
+
+        assertEquals(RAG_PERSONAL_SENSITIVE_ACCESS_DENIED, exception.getCode());
+        verifyNoInteractions(chatConversationMapper, chatMessageMapper, chatQuestionCacheMapper, aiEmbeddingService,
+                knowledgeVectorStore, documentChunkMapper, aiChatModelService);
+    }
+
+    @Test
+    void chatShouldFilterOtherPersonalSensitiveHitsForNonAdminSelfQuestion() {
+        AiUserContextHolder.setUserContext(1L, 100L, 20L, "温春雨", false);
+        mockConversationAndMessageIds();
+        mockCitationId();
+        String question = "我全勤且满绩效可以拿到多少钱？";
+        when(knowledgeBaseMapper.selectByIdAndTenantId(10L, 1L)).thenReturn(buildKnowledge("*"));
+        when(aiEmbeddingService.embed(question)).thenReturn(List.of(1.0D, 0.0D));
+        when(knowledgeVectorStore.search(any(KnowledgeSearchRequest.class))).thenReturn(List.of(
+                KnowledgeHit.builder()
+                        .tenantId(1L)
+                        .knowledgeBaseId(10L)
+                        .documentId(15L)
+                        .chunkId(66L)
+                        .chunkNo(4)
+                        .documentTitle("绩效考核制度")
+                        .content("Sheet: 温春雨\n绩效目标确认单\n薪资结构：车间主任综合薪资 16000元/月。")
+                        .score(0.90D)
+                        .metadata(Map.of("title", "绩效考核制度"))
+                        .build(),
+                KnowledgeHit.builder()
+                        .tenantId(1L)
+                        .knowledgeBaseId(10L)
+                        .documentId(15L)
+                        .chunkId(72L)
+                        .chunkNo(10)
+                        .documentTitle("绩效考核制度")
+                        .content("Sheet: 张增波\n绩效目标确认单\n薪资结构：车间主任综合薪资 12000元/月。")
+                        .score(0.89D)
+                        .metadata(Map.of("title", "绩效考核制度"))
+                        .build()));
+        when(documentChunkMapper.selectLexicalCandidates(eq(1L), eq(10L), anyList(), anyInt()))
+                .thenReturn(List.of(buildChunk(307L, 14L, 4, "考勤制度", "员工当月全勤时，全勤奖为 50 元。")));
+        when(aiChatModelService.chat(any(AiChatModelRequest.class))).thenReturn(AiChatModelResponse.builder()
+                .model("unit-test-chat-model")
+                .content("温春雨满绩效 16000 元，全勤奖 50 元。")
+                .promptTokens(20)
+                .completionTokens(10)
+                .totalTokens(30)
+                .build());
+
+        RagChatResponse response = ragService.chat(RagChatRequest.builder()
+                .knowledgeBaseId(10L)
+                .question(question)
+                .build());
+
+        assertFalse(response.getNoContext());
+        assertTrue(response.getCitations().stream().anyMatch(citation -> citation.getQuoteText().contains("温春雨")));
+        assertTrue(response.getCitations().stream().noneMatch(citation -> citation.getQuoteText().contains("张增波")));
+        assertTrue(response.getCitations().stream().anyMatch(citation -> citation.getQuoteText().contains("全勤奖为 50 元")));
+
+        ArgumentCaptor<AiChatModelRequest> chatCaptor = ArgumentCaptor.forClass(AiChatModelRequest.class);
+        verify(aiChatModelService).chat(chatCaptor.capture());
+        assertTrue(chatCaptor.getValue().getUserPrompt().contains("温春雨"));
+        assertFalse(chatCaptor.getValue().getUserPrompt().contains("张增波"));
+        assertTrue(chatCaptor.getValue().getUserPrompt().contains("全勤奖为 50 元"));
     }
 
     @Test
@@ -264,6 +428,19 @@ class RagServiceImplTest {
                 .departmentIds(departmentIds)
                 .name("财务知识库")
                 .topK(3)
+                .build();
+    }
+
+    private AiDocumentChunkDO buildChunk(Long id, Long documentId, Integer chunkIndex, String title, String content) {
+        return AiDocumentChunkDO.builder()
+                .id(id)
+                .tenantId(1L)
+                .knowledgeBaseId(10L)
+                .documentId(documentId)
+                .chunkIndex(chunkIndex)
+                .content(content)
+                .metadataJson("{\"title\":\"" + title + "\"}")
+                .status(10)
                 .build();
     }
 

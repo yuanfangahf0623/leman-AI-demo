@@ -3,6 +3,8 @@ package cn.iocoder.yudao.module.ai.service.datasource;
 import cn.iocoder.yudao.framework.common.exception.ServiceException;
 import cn.iocoder.yudao.framework.common.pojo.PageResult;
 import cn.iocoder.yudao.module.ai.controller.admin.datasource.vo.AiDataSourceCreateReqVO;
+import cn.iocoder.yudao.module.ai.controller.admin.datasource.vo.AiDataSourceIngestReqVO;
+import cn.iocoder.yudao.module.ai.controller.admin.datasource.vo.AiDataSourceIngestRespVO;
 import cn.iocoder.yudao.module.ai.controller.admin.datasource.vo.AiDataSourcePageReqVO;
 import cn.iocoder.yudao.module.ai.controller.admin.datasource.vo.AiDataSourceUpdateReqVO;
 import cn.iocoder.yudao.module.ai.convert.AiDataSourceConvert;
@@ -11,8 +13,10 @@ import cn.iocoder.yudao.module.ai.dal.mysql.AiDataSourceMapper;
 import cn.iocoder.yudao.module.ai.enums.DataSourceTypeEnum;
 import cn.iocoder.yudao.module.ai.enums.SyncModeEnum;
 import cn.iocoder.yudao.module.ai.framework.tenant.AiTenantContextHolder;
+import cn.iocoder.yudao.module.ai.service.document.AiDocumentService;
 import cn.iocoder.yudao.module.ai.service.knowledge.AiKnowledgeService;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -27,6 +31,7 @@ import static cn.iocoder.yudao.module.ai.enums.AiDataSourceErrorCodeConstants.DA
  * <p>负责数据源 CRUD 编排，包括知识库归属校验、sourceType/syncMode 合法性校验和逻辑删除。</p>
  */
 @Service
+@Slf4j
 @RequiredArgsConstructor
 public class AiDataSourceServiceImpl implements AiDataSourceService {
 
@@ -35,6 +40,7 @@ public class AiDataSourceServiceImpl implements AiDataSourceService {
 
     private final AiDataSourceMapper dataSourceMapper;
     private final AiKnowledgeService knowledgeService;
+    private final AiDocumentService documentService;
 
     @Override
     @Transactional(rollbackFor = Exception.class)
@@ -52,6 +58,21 @@ public class AiDataSourceServiceImpl implements AiDataSourceService {
         dataSource.setStatus(dataSource.getStatus() != null ? dataSource.getStatus() : DEFAULT_STATUS);
         dataSourceMapper.insert(dataSource);
         return dataSource.getId();
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public AiDataSourceIngestRespVO ingest(AiDataSourceIngestReqVO ingestReqVO) {
+        AiDataSourceDO dataSource = validateDataSourceExists(ingestReqVO.getDataSourceId());
+        if (!DataSourceTypeEnum.API.getCode().equals(dataSource.getType())) {
+            throw new ServiceException(DATA_SOURCE_TYPE_INVALID, "只有 API 数据源支持 Webhook 写入");
+        }
+        validateKnowledgeExists(dataSource.getKnowledgeBaseId());
+        AiDataSourceIngestRespVO response = documentService.createDocumentFromDataSource(dataSource, ingestReqVO);
+        log.info("API 数据源写入完成, tenantId={}, knowledgeBaseId={}, dataSourceId={}, documentId={}, action={}",
+                dataSource.getTenantId(), dataSource.getKnowledgeBaseId(), dataSource.getId(),
+                response.getDocumentId(), response.getAction());
+        return response;
     }
 
     @Override

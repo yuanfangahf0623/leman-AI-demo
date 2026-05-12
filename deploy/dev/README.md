@@ -2,6 +2,8 @@
 
 本目录提供本地开发使用的 Docker Compose 中间件编排，包含 MySQL、Redis、Nacos、PostgreSQL + pgvector、MinIO、Qdrant、RabbitMQ。
 
+OCR 使用本地 Tesseract CLI，由后端进程直接调用，不是独立网络服务。因此 Tesseract 需要安装在后端运行环境中；如果后端容器化部署，需要安装在后端镜像内，而不是单独放到本中间件 Compose 中。
+
 ## 安全说明
 
 `docker-compose.middleware.yml` 中使用的是本地开发默认账号和密码，并通过环境变量提供覆盖能力。生产环境必须修改所有账号、密码、Token、端口暴露策略和网络访问控制，不要直接复用本文件。
@@ -66,6 +68,42 @@ docker compose -f deploy/dev/docker-compose.middleware.yml logs -f nacos
 | RabbitMQ | `127.0.0.1:5672` | `admin` | `rabbitmq123` |
 | RabbitMQ Console | `http://127.0.0.1:15672` | `admin` | `rabbitmq123` |
 
+## OCR 运行依赖
+
+扫描件或图片型 PDF 需要启用 OCR。当前实现依赖 Tesseract CLI，需要在后端运行环境安装：
+
+Windows 本地开发：
+
+```powershell
+winget install --id tesseract-ocr.tesseract --exact --accept-package-agreements --accept-source-agreements
+```
+
+Linux 或后端容器镜像：
+
+```bash
+apt-get update
+apt-get install -y --no-install-recommends tesseract-ocr tesseract-ocr-chi-sim tesseract-ocr-eng
+rm -rf /var/lib/apt/lists/*
+```
+
+后端容器化部署时，可参考 [Dockerfile.backend-runtime](./ocr/Dockerfile.backend-runtime) 把 OCR 依赖合并进实际后端镜像。
+
+后端 OCR 常用环境变量：
+
+```text
+AI_DOCUMENT_OCR_ENABLED=true
+AI_DOCUMENT_OCR_PROVIDER=tesseract-cli
+AI_DOCUMENT_OCR_TESSERACT_EXECUTABLE=tesseract
+AI_DOCUMENT_OCR_TESSDATA_DIRECTORY=
+AI_DOCUMENT_OCR_LANGUAGE=chi_sim+eng
+AI_DOCUMENT_OCR_DPI=200
+AI_DOCUMENT_OCR_MAX_PAGES=20
+AI_DOCUMENT_OCR_TIMEOUT_SECONDS=60
+```
+
+如果 Windows 下 Tesseract 未加入 `PATH`，请把 `AI_DOCUMENT_OCR_TESSERACT_EXECUTABLE` 设置为完整路径，例如 `C:\Program Files\Tesseract-OCR\tesseract.exe`。
+如果中文语言包放在自定义目录，请设置 `AI_DOCUMENT_OCR_TESSDATA_DIRECTORY`。
+
 ## 常用环境变量
 
 如果本机端口被占用，可覆盖端口，例如本机已有 PostgreSQL 使用 `5432`：
@@ -85,6 +123,7 @@ POSTGRES_PORT, POSTGRES_DB, POSTGRES_USER, POSTGRES_PASSWORD
 MINIO_API_PORT, MINIO_CONSOLE_PORT, MINIO_ROOT_USER, MINIO_ROOT_PASSWORD
 QDRANT_HTTP_PORT, QDRANT_GRPC_PORT
 RABBITMQ_PORT, RABBITMQ_MANAGEMENT_PORT, RABBITMQ_DEFAULT_USER, RABBITMQ_DEFAULT_PASS
+AI_DOCUMENT_OCR_ENABLED, AI_DOCUMENT_OCR_TESSERACT_EXECUTABLE, AI_DOCUMENT_OCR_TESSDATA_DIRECTORY, AI_DOCUMENT_OCR_LANGUAGE
 ```
 
 ## pgvector 验证

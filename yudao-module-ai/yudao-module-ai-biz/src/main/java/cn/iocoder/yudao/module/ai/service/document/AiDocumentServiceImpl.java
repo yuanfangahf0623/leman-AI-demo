@@ -2,8 +2,11 @@ package cn.iocoder.yudao.module.ai.service.document;
 
 import cn.iocoder.yudao.framework.common.exception.ServiceException;
 import cn.iocoder.yudao.framework.common.pojo.PageResult;
+import cn.iocoder.yudao.module.ai.controller.admin.datasource.vo.AiDataSourceIngestReqVO;
+import cn.iocoder.yudao.module.ai.controller.admin.datasource.vo.AiDataSourceIngestRespVO;
 import cn.iocoder.yudao.module.ai.controller.admin.document.vo.AiDocumentPageReqVO;
 import cn.iocoder.yudao.module.ai.controller.admin.document.vo.AiDocumentUpdateReqVO;
+import cn.iocoder.yudao.module.ai.dal.dataobject.AiDataSourceDO;
 import cn.iocoder.yudao.module.ai.dal.dataobject.AiDocumentChunkDO;
 import cn.iocoder.yudao.module.ai.dal.dataobject.AiDocumentDO;
 import cn.iocoder.yudao.module.ai.dal.dataobject.AiKnowledgeBaseDO;
@@ -39,6 +42,7 @@ import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.time.Duration;
@@ -142,6 +146,47 @@ public class AiDocumentServiceImpl implements AiDocumentService {
         documentMapper.insert(document);
         autoParseAndEmbedAfterUpload(document.getId(), tenantId, knowledgeBaseId);
         return document.getId();
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public AiDataSourceIngestRespVO createDocumentFromDataSource(AiDataSourceDO dataSource,
+                                                                 AiDataSourceIngestReqVO ingestReqVO) {
+        Long tenantId = AiTenantContextHolder.getTenantId();
+        if (dataSource == null || !tenantId.equals(dataSource.getTenantId())) {
+            throw new ServiceException(DOCUMENT_KNOWLEDGE_NOT_EXISTS, "数据源不存在或无权限访问");
+        }
+        Long knowledgeBaseId = dataSource.getKnowledgeBaseId();
+        validateKnowledgeExists(knowledgeBaseId);
+        Long normalizedDirectoryId = normalizeDirectoryId(ingestReqVO.getDirectoryId());
+        validateDirectoryBelongsToKnowledge(tenantId, knowledgeBaseId, normalizedDirectoryId);
+
+        String title = normalizeTitle(ingestReqVO.getTitle());
+        String markdown = buildDataSourceMarkdown(title, ingestReqVO);
+        byte[] content = markdown.getBytes(StandardCharsets.UTF_8);
+        String contentHash = sha256Hex(content);
+        String sourceUri = resolveDataSourceSourceUri(dataSource.getId(), ingestReqVO, contentHash);
+        String fileName = buildDataSourceFileName(title);
+        String objectKey = buildDataSourceObjectKey(tenantId, knowledgeBaseId, dataSource.getId());
+        FileStorageResult storageResult = fileStorageService.store(objectKey, content);
+
+        AiDocumentDO oldDocument = documentMapper.selectBySourceUri(tenantId, knowledgeBaseId, dataSource.getId(),
+                sourceUri);
+        if (oldDocument != null && contentHash.equals(oldDocument.getContentHash())) {
+            return buildIngestResponse(oldDocument.getId(), dataSource, sourceUri, "SKIP");
+        }
+        AiDocumentDO document = buildDataSourceDocument(tenantId, knowledgeBaseId, normalizedDirectoryId, dataSource,
+                ingestReqVO, title, fileName, content.length, storageResult, sourceUri, contentHash);
+        if (oldDocument == null) {
+            documentMapper.insert(document);
+            autoParseAndEmbedAfterUpload(document.getId(), tenantId, knowledgeBaseId);
+            return buildIngestResponse(document.getId(), dataSource, sourceUri, "CREATE");
+        }
+
+        document.setId(oldDocument.getId());
+        documentMapper.updateSyncDocumentByIdAndTenantId(document, tenantId);
+        autoParseAndEmbedAfterUpload(oldDocument.getId(), tenantId, knowledgeBaseId);
+        return buildIngestResponse(oldDocument.getId(), dataSource, sourceUri, "UPDATE");
     }
 
     @Override
@@ -329,6 +374,111 @@ public class AiDocumentServiceImpl implements AiDocumentService {
             log.warn("文档上传后自动处理失败, documentId={}, tenantId={}, knowledgeBaseId={}, elapsedMs={}, reason={}",
                     documentId, tenantId, knowledgeBaseId, elapsedMillis(startNanos), toSafeErrorMessage(ex));
         }
+    }
+
+    private AiDocumentDO buildDataSourceDocument(Long tenantId, Long knowledgeBaseId, Long directoryId,
+                                                 AiDataSourceDO dataSource, AiDataSourceIngestReqVO ingestReqVO,
+                                                 String title, String fileName, long fileSize,
+                                                 FileStorageResult storageResult, String sourceUri,
+                                                 String contentHash) {
+        AiDocumentDO document = new AiDocumentDO();
+        document.setTenantId(tenantId);
+        document.setKnowledgeBaseId(knowledgeBaseId);
+        document.setDirectoryId(directoryId);
+        document.setDataSourceId(dataSource.getId());
+        document.setTitle(title);
+        document.setDocumentVersion(normalizeDocumentVersion(ingestReqVO.getDocumentVersion()));
+        document.setFileName(fileName);
+        document.setFileType("md");
+        document.setFileSize(fileSize);
+        document.setObjectKey(storageResult.getObjectKey());
+        document.setSourceUri(sourceUri);
+        document.setContentHash(contentHash);
+        document.setParseStatus(DocumentParseStatusEnum.PENDING.getCode());
+        document.setEmbeddingStatus(DocumentEmbeddingStatusEnum.PENDING.getCode());
+        document.setChunkCount(DEFAULT_COUNT);
+        document.setTokenCount(DEFAULT_COUNT);
+        document.setErrorMessage(null);
+        return document;
+    }
+
+    private AiDataSourceIngestRespVO buildIngestResponse(Long documentId, AiDataSourceDO dataSource, String sourceUri,
+                                                         String action) {
+        return AiDataSourceIngestRespVO.builder()
+                .documentId(documentId)
+                .dataSourceId(dataSource.getId())
+                .knowledgeBaseId(dataSource.getKnowledgeBaseId())
+                .sourceUri(sourceUri)
+                .action(action)
+                .build();
+    }
+
+    private String normalizeTitle(String title) {
+        String normalized = title == null ? "" : title.trim();
+        if (normalized.isBlank()) {
+            throw new ServiceException(DOCUMENT_FILE_NAME_INVALID, "标题不能为空");
+        }
+        return normalized.length() > 255 ? normalized.substring(0, 255) : normalized;
+    }
+
+    private String buildDataSourceMarkdown(String title, AiDataSourceIngestReqVO ingestReqVO) {
+        StringBuilder builder = new StringBuilder();
+        builder.append("# ").append(title).append("\n\n");
+        appendLineIfPresent(builder, "Source", ingestReqVO.getSourceUri());
+        if (ingestReqVO.getTags() != null && !ingestReqVO.getTags().isEmpty()) {
+            builder.append("Tags: ").append(String.join(", ", ingestReqVO.getTags())).append("\n");
+        }
+        if (ingestReqVO.getMetadata() != null && !ingestReqVO.getMetadata().isEmpty()) {
+            builder.append("Metadata: ").append(toMetadataJson(ingestReqVO.getMetadata())).append("\n");
+        }
+        builder.append("\n").append(ingestReqVO.getContent().trim()).append("\n");
+        return builder.toString();
+    }
+
+    private void appendLineIfPresent(StringBuilder builder, String label, String value) {
+        if (value != null && !value.isBlank()) {
+            builder.append(label).append(": ").append(value.trim()).append("\n");
+        }
+    }
+
+    private String toMetadataJson(Map<String, Object> metadata) {
+        try {
+            return objectMapper.writeValueAsString(metadata);
+        } catch (JsonProcessingException ex) {
+            return "{}";
+        }
+    }
+
+    private String resolveDataSourceSourceUri(Long dataSourceId, AiDataSourceIngestReqVO ingestReqVO,
+                                              String contentHash) {
+        if (ingestReqVO.getSourceUri() != null && !ingestReqVO.getSourceUri().isBlank()) {
+            return abbreviate(ingestReqVO.getSourceUri().trim(), 1024);
+        }
+        if (ingestReqVO.getExternalId() != null && !ingestReqVO.getExternalId().isBlank()) {
+            return abbreviate("datasource://" + dataSourceId + "/" + ingestReqVO.getExternalId().trim(), 1024);
+        }
+        return "datasource://" + dataSourceId + "/content/" + contentHash;
+    }
+
+    private String buildDataSourceFileName(String title) {
+        String safeName = title.replaceAll("[\\\\/:*?\"<>|\\p{Cntrl}]+", "_").trim();
+        if (safeName.isBlank()) {
+            safeName = "webhook-document";
+        }
+        safeName = abbreviate(safeName, 120);
+        return safeName + ".md";
+    }
+
+    private String buildDataSourceObjectKey(Long tenantId, Long knowledgeBaseId, Long dataSourceId) {
+        return "ai/datasource/" + tenantId + "/" + knowledgeBaseId + "/" + dataSourceId + "/"
+                + UUID.randomUUID() + ".md";
+    }
+
+    private String abbreviate(String value, int maxLength) {
+        if (value == null || value.length() <= maxLength) {
+            return value;
+        }
+        return value.substring(0, maxLength);
     }
 
     private String normalizeDocumentVersion(String documentVersion) {

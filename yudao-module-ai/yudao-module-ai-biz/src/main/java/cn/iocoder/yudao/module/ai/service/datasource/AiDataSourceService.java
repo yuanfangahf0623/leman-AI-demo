@@ -2,6 +2,8 @@ package cn.iocoder.yudao.module.ai.service.datasource;
 
 import cn.iocoder.yudao.framework.common.pojo.PageResult;
 import cn.iocoder.yudao.module.ai.controller.admin.datasource.vo.AiDataSourceCreateReqVO;
+import cn.iocoder.yudao.module.ai.controller.admin.datasource.vo.AiDataSourceIngestReqVO;
+import cn.iocoder.yudao.module.ai.controller.admin.datasource.vo.AiDataSourceIngestRespVO;
 import cn.iocoder.yudao.module.ai.controller.admin.datasource.vo.AiDataSourcePageReqVO;
 import cn.iocoder.yudao.module.ai.controller.admin.datasource.vo.AiDataSourceUpdateReqVO;
 import cn.iocoder.yudao.module.ai.dal.dataobject.AiDataSourceDO;
@@ -12,6 +14,8 @@ import cn.iocoder.yudao.module.ai.dal.dataobject.AiDataSourceDO;
 public interface AiDataSourceService {
 
     Long createDataSource(AiDataSourceCreateReqVO createReqVO);
+
+    AiDataSourceIngestRespVO ingest(AiDataSourceIngestReqVO ingestReqVO);
 
     void updateDataSource(AiDataSourceUpdateReqVO updateReqVO);
 

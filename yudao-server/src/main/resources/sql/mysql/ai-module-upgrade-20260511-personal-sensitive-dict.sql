@@ -1,0 +1,47 @@
+-- AI 个人敏感数据识别规则字典。
+-- 字典值格式：类型编码:规则值，例如 salary:工资、id_card:身份证号。
+
+INSERT IGNORE INTO `system_dict_type` (`id`, `name`, `type`, `status`, `remark`, `creator`, `updater`) VALUES
+(102070701, 'AI个人敏感问题关键词', 'ai_personal_sensitive_question_keyword', 0, '触发个人敏感数据访问控制的问题关键词，字典值格式：类型编码:关键词', 'system', 'system'),
+(102070702, 'AI个人敏感内容标记', 'ai_personal_sensitive_hit_marker', 0, '识别知识片段中个人敏感数据的内容标记，字典值格式：类型编码:标记词', 'system', 'system'),
+(102070703, 'AI个人敏感值正则', 'ai_personal_sensitive_value_pattern', 0, '识别个人敏感数据值的正则表达式，字典值格式：类型编码:正则表达式', 'system', 'system');
+
+INSERT IGNORE INTO `system_dict_data` (`id`, `sort`, `label`, `value`, `dict_type`, `status`, `color_type`, `remark`, `creator`, `updater`) VALUES
+(102070711, 1, '薪资收入-工资', 'salary:工资', 'ai_personal_sensitive_question_keyword', 0, 'danger', '薪资收入类个人敏感问题关键词', 'system', 'system'),
+(102070712, 2, '薪资收入-薪资', 'salary:薪资', 'ai_personal_sensitive_question_keyword', 0, 'danger', '薪资收入类个人敏感问题关键词', 'system', 'system'),
+(102070713, 3, '薪资收入-薪酬', 'salary:薪酬', 'ai_personal_sensitive_question_keyword', 0, 'danger', '薪资收入类个人敏感问题关键词', 'system', 'system'),
+(102070714, 4, '薪资收入-收入', 'salary:收入', 'ai_personal_sensitive_question_keyword', 0, 'danger', '薪资收入类个人敏感问题关键词', 'system', 'system'),
+(102070715, 5, '薪资收入-绩效工资', 'salary:绩效工资', 'ai_personal_sensitive_question_keyword', 0, 'danger', '薪资收入类个人敏感问题关键词', 'system', 'system'),
+(102070716, 6, '薪资收入-绩效奖金', 'salary:绩效奖金', 'ai_personal_sensitive_question_keyword', 0, 'danger', '薪资收入类个人敏感问题关键词', 'system', 'system'),
+(102070717, 7, '薪资收入-绩效', 'salary:绩效', 'ai_personal_sensitive_question_keyword', 0, 'warning', '薪资收入类个人敏感问题关键词', 'system', 'system'),
+(102070718, 8, '薪资收入-奖金', 'salary:奖金', 'ai_personal_sensitive_question_keyword', 0, 'warning', '薪资收入类个人敏感问题关键词', 'system', 'system'),
+(102070719, 9, '薪资收入-全勤奖', 'salary:全勤奖', 'ai_personal_sensitive_question_keyword', 0, 'warning', '薪资收入类个人敏感问题关键词', 'system', 'system'),
+(102070720, 10, '薪资收入-补贴', 'salary:补贴', 'ai_personal_sensitive_question_keyword', 0, 'warning', '薪资收入类个人敏感问题关键词', 'system', 'system'),
+(102070721, 11, '薪资收入-岗位工资', 'salary:岗位工资', 'ai_personal_sensitive_question_keyword', 0, 'danger', '薪资收入类个人敏感问题关键词', 'system', 'system'),
+(102070722, 12, '薪资收入-综合薪资', 'salary:综合薪资', 'ai_personal_sensitive_question_keyword', 0, 'danger', '薪资收入类个人敏感问题关键词', 'system', 'system'),
+(102070723, 13, '薪资收入-综合工资', 'salary:综合工资', 'ai_personal_sensitive_question_keyword', 0, 'danger', '薪资收入类个人敏感问题关键词', 'system', 'system'),
+(102070724, 14, '薪资收入-应发', 'salary:应发', 'ai_personal_sensitive_question_keyword', 0, 'warning', '薪资收入类个人敏感问题关键词', 'system', 'system'),
+(102070725, 15, '薪资收入-实发', 'salary:实发', 'ai_personal_sensitive_question_keyword', 0, 'warning', '薪资收入类个人敏感问题关键词', 'system', 'system'),
+(102070726, 16, '薪资收入-扣款', 'salary:扣款', 'ai_personal_sensitive_question_keyword', 0, 'warning', '薪资收入类个人敏感问题关键词', 'system', 'system'),
+(102070727, 17, '薪资收入-多少钱', 'salary:多少钱', 'ai_personal_sensitive_question_keyword', 0, 'warning', '薪资收入类个人敏感问题关键词', 'system', 'system'),
+(102070728, 18, '薪资收入-拿到多少钱', 'salary:拿到多少钱', 'ai_personal_sensitive_question_keyword', 0, 'warning', '薪资收入类个人敏感问题关键词', 'system', 'system'),
+(102070729, 19, '身份证号-身份证', 'id_card:身份证', 'ai_personal_sensitive_question_keyword', 0, 'danger', '身份证号类个人敏感问题关键词', 'system', 'system'),
+(102070730, 20, '身份证号-身份证号', 'id_card:身份证号', 'ai_personal_sensitive_question_keyword', 0, 'danger', '身份证号类个人敏感问题关键词', 'system', 'system'),
+(102070731, 21, '身份证号-证件号', 'id_card:证件号', 'ai_personal_sensitive_question_keyword', 0, 'danger', '身份证号类个人敏感问题关键词', 'system', 'system'),
+(102070732, 22, '身份证号-居民身份证', 'id_card:居民身份证', 'ai_personal_sensitive_question_keyword', 0, 'danger', '身份证号类个人敏感问题关键词', 'system', 'system'),
+(102070733, 23, '身份证号-公民身份号码', 'id_card:公民身份号码', 'ai_personal_sensitive_question_keyword', 0, 'danger', '身份证号类个人敏感问题关键词', 'system', 'system'),
+(102070741, 1, '薪资收入-绩效目标确认单', 'salary:绩效目标确认单', 'ai_personal_sensitive_hit_marker', 0, 'danger', '薪资收入类个人敏感内容标记', 'system', 'system'),
+(102070742, 2, '薪资收入-员工姓名', 'salary:员工姓名', 'ai_personal_sensitive_hit_marker', 0, 'danger', '薪资收入类个人敏感内容标记', 'system', 'system'),
+(102070743, 3, '薪资收入-薪资结构', 'salary:薪资结构', 'ai_personal_sensitive_hit_marker', 0, 'danger', '薪资收入类个人敏感内容标记', 'system', 'system'),
+(102070744, 4, '薪资收入-工资结构', 'salary:工资结构', 'ai_personal_sensitive_hit_marker', 0, 'danger', '薪资收入类个人敏感内容标记', 'system', 'system'),
+(102070745, 5, '薪资收入-综合薪资', 'salary:综合薪资', 'ai_personal_sensitive_hit_marker', 0, 'danger', '薪资收入类个人敏感内容标记', 'system', 'system'),
+(102070746, 6, '薪资收入-综合工资', 'salary:综合工资', 'ai_personal_sensitive_hit_marker', 0, 'danger', '薪资收入类个人敏感内容标记', 'system', 'system'),
+(102070747, 7, '薪资收入-岗位工资', 'salary:岗位工资', 'ai_personal_sensitive_hit_marker', 0, 'danger', '薪资收入类个人敏感内容标记', 'system', 'system'),
+(102070748, 8, '薪资收入-调机工资', 'salary:调机工资', 'ai_personal_sensitive_hit_marker', 0, 'danger', '薪资收入类个人敏感内容标记', 'system', 'system'),
+(102070749, 9, '薪资收入-Sheet', 'salary:Sheet:', 'ai_personal_sensitive_hit_marker', 0, 'danger', '薪资收入类个人敏感内容标记', 'system', 'system'),
+(102070750, 10, '身份证号-身份证', 'id_card:身份证', 'ai_personal_sensitive_hit_marker', 0, 'danger', '身份证号类个人敏感内容标记', 'system', 'system'),
+(102070751, 11, '身份证号-身份证号', 'id_card:身份证号', 'ai_personal_sensitive_hit_marker', 0, 'danger', '身份证号类个人敏感内容标记', 'system', 'system'),
+(102070752, 12, '身份证号-证件号', 'id_card:证件号', 'ai_personal_sensitive_hit_marker', 0, 'danger', '身份证号类个人敏感内容标记', 'system', 'system'),
+(102070753, 13, '身份证号-居民身份证', 'id_card:居民身份证', 'ai_personal_sensitive_hit_marker', 0, 'danger', '身份证号类个人敏感内容标记', 'system', 'system'),
+(102070754, 14, '身份证号-公民身份号码', 'id_card:公民身份号码', 'ai_personal_sensitive_hit_marker', 0, 'danger', '身份证号类个人敏感内容标记', 'system', 'system'),
+(102070761, 1, '身份证号-号码正则', 'id_card:(?<!\\d)(\\d{15}|\\d{17}[0-9Xx])(?!\\d)', 'ai_personal_sensitive_value_pattern', 0, 'danger', '身份证号格式正则', 'system', 'system');

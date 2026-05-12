@@ -26,7 +26,9 @@ public class PromptBuilder {
             你是企业内部知识库助手。
             请严格基于给定的知识片段回答问题。
             如果知识片段中没有答案，请回答“根据当前知识库资料无法确认”。
-            不要编造不存在的制度、数据、流程或结论。""";
+            不要编造不存在的制度、数据、流程或结论。
+            当前登录用户信息只用于理解“我、本人、当前用户”等指代，不能作为制度、薪资或流程依据。
+            如果问题涉及多项制度或金额计算，请综合所有相关知识片段，不要只依据单一片段。""";
 
     private final int maxContextTokens;
 
@@ -35,25 +37,30 @@ public class PromptBuilder {
     }
 
     public PromptBuildResult build(String question, List<KnowledgeHit> knowledgeHits) {
+        return build(question, knowledgeHits, null);
+    }
+
+    public PromptBuildResult build(String question, List<KnowledgeHit> knowledgeHits, String currentUserNickname) {
         String safeQuestion = question == null ? "" : question.trim();
+        String userContext = buildUserContext(currentUserNickname);
         int originalHitCount = knowledgeHits == null ? 0 : knowledgeHits.size();
         List<KnowledgeHit> effectiveHits = selectEffectiveHits(knowledgeHits);
         if (effectiveHits.isEmpty()) {
-            return buildNoContextPrompt(safeQuestion, originalHitCount);
+            return buildNoContextPrompt(safeQuestion, userContext, originalHitCount);
         }
 
         ContextBuildResult contextBuildResult = buildContext(effectiveHits);
         if (contextBuildResult.context().isBlank()) {
-            return buildNoContextPrompt(safeQuestion, originalHitCount);
+            return buildNoContextPrompt(safeQuestion, userContext, originalHitCount);
         }
-        String userPrompt = buildUserPrompt(safeQuestion, contextBuildResult.context());
+        String userPrompt = buildUserPrompt(safeQuestion, userContext, contextBuildResult.context());
         return PromptBuildResult.builder()
                 .status(PromptBuildResult.STATUS_NORMAL)
                 .systemPrompt(SYSTEM_PROMPT)
                 .userPrompt(userPrompt)
                 .context(contextBuildResult.context())
                 .estimatedContextTokens(estimateTokens(contextBuildResult.context()))
-                .debugInfo(buildDebugInfo(safeQuestion, originalHitCount, effectiveHits, contextBuildResult,
+                .debugInfo(buildDebugInfo(safeQuestion, userContext, originalHitCount, effectiveHits, contextBuildResult,
                         SYSTEM_PROMPT, userPrompt, PromptBuildResult.STATUS_NORMAL))
                 .knowledgeHits(contextBuildResult.knowledgeHits())
                 .build();
@@ -121,15 +128,17 @@ public class PromptBuilder {
         return true;
     }
 
-    private PromptBuildResult buildNoContextPrompt(String question, int originalHitCount) {
+    private PromptBuildResult buildNoContextPrompt(String question, String userContext, int originalHitCount) {
         String userPrompt = """
+                当前登录用户：
+                %s
                 用户问题：
                 %s
                 知识片段：
                 no-context
                 回答要求：
                 请回答“根据当前知识库资料无法确认”。
-                """.formatted(question);
+                """.formatted(userContext, question);
         ContextBuildResult contextBuildResult = new ContextBuildResult("", List.of(), false,
                 maxContextTokens * TOKEN_CHAR_RATIO);
         return PromptBuildResult.builder()
@@ -138,14 +147,16 @@ public class PromptBuilder {
                 .userPrompt(userPrompt)
                 .context("")
                 .estimatedContextTokens(0)
-                .debugInfo(buildDebugInfo(question, originalHitCount, List.of(), contextBuildResult,
+                .debugInfo(buildDebugInfo(question, userContext, originalHitCount, List.of(), contextBuildResult,
                         SYSTEM_PROMPT, userPrompt, PromptBuildResult.STATUS_NO_CONTEXT))
                 .knowledgeHits(List.of())
                 .build();
     }
 
-    private String buildUserPrompt(String question, String context) {
+    private String buildUserPrompt(String question, String userContext, String context) {
         return """
+                当前登录用户：
+                %s
                 用户问题：
                 %s
                 知识片段：
@@ -154,10 +165,19 @@ public class PromptBuilder {
                 先直接回答结论。
                 再给出依据。
                 如果有来源，请列出来源文档。
-                """.formatted(question, context);
+                如果是金额计算，请列出计算项和计算过程。
+                """.formatted(userContext, question, context);
     }
 
-    private String buildDebugInfo(String question, int originalHitCount, List<KnowledgeHit> effectiveHits,
+    private String buildUserContext(String currentUserNickname) {
+        if (currentUserNickname == null || currentUserNickname.isBlank()) {
+            return "未提供";
+        }
+        return "当前登录用户姓名：" + currentUserNickname.trim();
+    }
+
+    private String buildDebugInfo(String question, String userContext, int originalHitCount,
+                                  List<KnowledgeHit> effectiveHits,
                                   ContextBuildResult contextBuildResult, String systemPrompt, String userPrompt,
                                   String status) {
         StringBuilder debug = new StringBuilder();
@@ -195,7 +215,8 @@ public class PromptBuilder {
 
         debug.append("\n### 4. 如何生成 systemPrompt 和 userPrompt\n");
         debug.append("- systemPrompt：固定企业知识库助手约束，要求严格基于知识片段回答，不足时输出固定兜底语。\n");
-        debug.append("- userPrompt：由用户问题、context、回答要求三部分组成。\n");
+        debug.append("- 当前登录用户信息：").append(userContext).append("\n");
+        debug.append("- userPrompt：由当前登录用户、用户问题、context、回答要求四部分组成。\n");
 
         debug.append("\n### 5. 如何处理 no-context 情况\n");
         debug.append("- 当前状态：").append(status).append("\n");

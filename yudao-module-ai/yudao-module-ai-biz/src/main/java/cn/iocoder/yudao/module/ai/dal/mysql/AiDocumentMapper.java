@@ -32,6 +32,8 @@ public interface AiDocumentMapper extends BaseMapper<AiDocumentDO> {
 
     default int updateSyncDocumentByIdAndTenantId(AiDocumentDO document, Long tenantId) {
         return update(null, Wrappers.lambdaUpdate(AiDocumentDO.class)
+                .set(AiDocumentDO::getDirectoryId, document.getDirectoryId())
+                .set(AiDocumentDO::getDataSourceId, document.getDataSourceId())
                 .set(AiDocumentDO::getTitle, document.getTitle())
                 .set(AiDocumentDO::getFileName, document.getFileName())
                 .set(AiDocumentDO::getFileType, document.getFileType())

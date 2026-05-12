@@ -18,6 +18,7 @@ OCR 模块用于处理扫描件或图片型 PDF。普通 PDF 会优先使用 PDF
 $env:AI_DOCUMENT_OCR_ENABLED = "true"
 $env:AI_DOCUMENT_OCR_PROVIDER = "tesseract-cli"
 $env:AI_DOCUMENT_OCR_TESSERACT_EXECUTABLE = "tesseract"
+$env:AI_DOCUMENT_OCR_TESSDATA_DIRECTORY = ""
 $env:AI_DOCUMENT_OCR_LANGUAGE = "chi_sim+eng"
 $env:AI_DOCUMENT_OCR_DPI = "200"
 $env:AI_DOCUMENT_OCR_MAX_PAGES = "20"
@@ -25,6 +26,7 @@ $env:AI_DOCUMENT_OCR_TIMEOUT_SECONDS = "60"
 ```
 
 如果 Tesseract 没有加入 `PATH`，请把 `AI_DOCUMENT_OCR_TESSERACT_EXECUTABLE` 设置为本机完整可执行文件路径。
+如果中文语言包不在 Tesseract 默认目录，请把 `AI_DOCUMENT_OCR_TESSDATA_DIRECTORY` 设置为包含 `chi_sim.traineddata`、`eng.traineddata` 的目录。
 
 ## 启动方式
 
