@@ -7,6 +7,12 @@ import cn.iocoder.yudao.server.framework.crud.SimpleAdminDataService;
 import cn.iocoder.yudao.server.framework.crud.SimpleAdminDataService.TableDef;
 import cn.iocoder.yudao.server.framework.security.SecurityFrameworkUtils;
 import lombok.RequiredArgsConstructor;
+import org.apache.poi.ss.usermodel.DataFormatter;
+import org.apache.poi.ss.usermodel.Row;
+import org.apache.poi.ss.usermodel.Sheet;
+import org.apache.poi.ss.usermodel.Workbook;
+import org.apache.poi.ss.usermodel.WorkbookFactory;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.http.ContentDisposition;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
@@ -23,10 +29,13 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.multipart.MultipartFile;
 
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -41,6 +50,7 @@ import java.util.Set;
 public class SystemBasicController {
 
     private static final Set<String> AUDIT_COLUMNS = Set.of("creator", "create_time", "updater", "update_time", "deleted");
+    private static final int DEPT_IMPORT_MAX_ROWS = 1000;
     private static final TableDef DEPT = def("system_dept",
             cols("id", "tenant_id", "name", "parent_id", "sort", "leader_user_id", "phone", "email", "status"),
             cols("name", "status"), "sort ASC, id ASC");
@@ -122,6 +132,49 @@ public class SystemBasicController {
     public CommonResult<Boolean> deleteDeptList(@RequestParam("ids") String ids) {
         dataService.deleteList(DEPT, ids);
         return CommonResult.success(true);
+    }
+
+    @GetMapping("/dept/export-excel")
+    @PreAuthorize("@ss.hasPermission('system:dept:query')")
+    public ResponseEntity<byte[]> exportDept(@RequestParam Map<String, Object> params) {
+        return excel("dept.xlsx", dataService.exportExcel(DEPT, params, deptExportColumns(), "部门"));
+    }
+
+    @GetMapping("/dept/get-import-template")
+    @PreAuthorize("@ss.hasPermission('system:dept:create')")
+    public ResponseEntity<byte[]> getDeptImportTemplate() {
+        return excel("dept-import-template.xlsx", dataService.exportExcel(List.of(), deptImportColumns(), "部门导入模板"));
+    }
+
+    @PostMapping(value = "/dept/import", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @PreAuthorize("@ss.hasPermission('system:dept:create')")
+    public CommonResult<Map<String, Object>> importDept(@RequestParam("file") MultipartFile file) {
+        List<DeptImportRow> rows = readDeptImportRows(file);
+        if (rows.isEmpty()) {
+            throw new ServiceException(400, "导入文件没有可处理的数据");
+        }
+        List<String> successNames = new ArrayList<>();
+        List<Map<String, Object>> failureRows = new ArrayList<>();
+        Set<String> importKeys = new HashSet<>();
+        for (DeptImportRow row : rows) {
+            List<String> errors = validateDeptImportRow(row, importKeys);
+            if (!errors.isEmpty()) {
+                failureRows.add(deptImportFailure(row, String.join("；", errors)));
+                continue;
+            }
+            try {
+                dataService.create(DEPT, deptImportData(row));
+                successNames.add(row.name());
+            } catch (Exception ex) {
+                failureRows.add(deptImportFailure(row, "写入失败，请检查数据是否重复或字段格式是否正确"));
+            }
+        }
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("successCount", successNames.size());
+        result.put("failureCount", failureRows.size());
+        result.put("successNames", successNames);
+        result.put("failureRows", failureRows);
+        return CommonResult.success(result);
     }
 
     @GetMapping("/post/page")
@@ -210,24 +263,40 @@ public class SystemBasicController {
     @PostMapping("/user/create")
     @PreAuthorize("@ss.hasPermission('system:user:create')")
     public CommonResult<Long> createUser(@RequestBody Map<String, Object> reqVO) {
+        validateUserBase(reqVO, true);
+        validateUserUsernameUnique(reqVO.get("username"), null);
         Object password = reqVO.get("password");
         if (password == null || !StringUtils.hasText(String.valueOf(password))) {
             throw new ServiceException(400, "密码不能为空");
         }
-        Map<String, Object> data = new LinkedHashMap<>(reqVO);
+        Map<String, Object> data = normalizeUserWriteData(reqVO);
         data.put("password", passwordEncoder.encode(String.valueOf(password)));
-        Long userId = dataService.create(USER, data);
-        saveUserRelations(userId, reqVO);
-        return CommonResult.success(userId);
+        try {
+            Long userId = dataService.create(USER, data);
+            saveUserRelations(userId, reqVO);
+            return CommonResult.success(userId);
+        } catch (DuplicateKeyException ex) {
+            throw new ServiceException(400, "用户名称已存在");
+        }
     }
 
     @PutMapping("/user/update")
     @PreAuthorize("@ss.hasPermission('system:user:update')")
     public CommonResult<Boolean> updateUser(@RequestBody Map<String, Object> reqVO) {
-        Map<String, Object> data = new LinkedHashMap<>(reqVO);
+        Long userId = dataService.longValue(reqVO.get("id"));
+        if (userId == null) {
+            throw new ServiceException(400, "用户编号不能为空");
+        }
+        validateUserBase(reqVO, false);
+        validateUserUsernameUnique(reqVO.get("username"), userId);
+        Map<String, Object> data = normalizeUserWriteData(reqVO);
         data.remove("password");
-        dataService.update(USER, data);
-        saveUserRelations(dataService.longValue(reqVO.get("id")), reqVO);
+        try {
+            dataService.update(USER, data);
+        } catch (DuplicateKeyException ex) {
+            throw new ServiceException(400, "用户名称已存在");
+        }
+        saveUserRelations(userId, reqVO);
         return CommonResult.success(true);
     }
 
@@ -700,11 +769,269 @@ public class SystemBasicController {
         return CommonResult.success(true);
     }
 
+    private List<DeptImportRow> readDeptImportRows(MultipartFile file) {
+        if (file == null || file.isEmpty()) {
+            throw new ServiceException(400, "请上传部门导入文件");
+        }
+        List<DeptImportRow> rows = new ArrayList<>();
+        DataFormatter formatter = new DataFormatter();
+        try (Workbook workbook = WorkbookFactory.create(file.getInputStream())) {
+            Sheet sheet = workbook.getNumberOfSheets() == 0 ? null : workbook.getSheetAt(0);
+            if (sheet == null) {
+                return rows;
+            }
+            for (int rowIndex = 1; rowIndex <= sheet.getLastRowNum(); rowIndex++) {
+                Row row = sheet.getRow(rowIndex);
+                if (isBlankDeptImportRow(row, formatter)) {
+                    continue;
+                }
+                if (rows.size() >= DEPT_IMPORT_MAX_ROWS) {
+                    throw new ServiceException(400, "单次最多导入 " + DEPT_IMPORT_MAX_ROWS + " 条部门数据");
+                }
+                rows.add(new DeptImportRow(rowIndex + 1,
+                        cellText(row, 0, formatter),
+                        parseLongText(cellText(row, 1, formatter), 0L),
+                        parseLongText(cellText(row, 2, formatter), null),
+                        cellText(row, 3, formatter),
+                        cellText(row, 4, formatter),
+                        parseIntegerText(cellText(row, 5, formatter), 0),
+                        parseStatusText(cellText(row, 6, formatter), 0)));
+            }
+            return rows;
+        } catch (ServiceException ex) {
+            throw ex;
+        } catch (IOException | RuntimeException ex) {
+            throw new ServiceException(400, "导入文件解析失败，请确认使用部门导入模板");
+        }
+    }
+
+    private List<String> validateDeptImportRow(DeptImportRow row, Set<String> importKeys) {
+        List<String> errors = new ArrayList<>();
+        if (!StringUtils.hasText(row.name())) {
+            errors.add("部门名称不能为空");
+        }
+        if (row.parentId() == null || row.parentId() < 0) {
+            errors.add("上级部门编号必须为大于等于 0 的整数");
+        } else if (row.parentId() > 0 && !existsInCurrentTenant("system_dept", row.parentId())) {
+            errors.add("上级部门不存在");
+        }
+        if (row.leaderUserId() != null && !existsInCurrentTenant("system_users", row.leaderUserId())) {
+            errors.add("负责人用户不存在");
+        }
+        if (row.sort() == null || row.sort() < 0) {
+            errors.add("显示排序必须为大于等于 0 的整数");
+        }
+        if (row.status() == null || (row.status() != 0 && row.status() != 1)) {
+            errors.add("状态只能填写 0/1、启用/停用");
+        }
+        if (StringUtils.hasText(row.phone()) && !String.valueOf(row.phone()).matches("^1[3-9]\\d{9}$")) {
+            errors.add("联系电话格式不正确");
+        }
+        if (StringUtils.hasText(row.email())
+                && !String.valueOf(row.email()).matches("^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$")) {
+            errors.add("邮箱格式不正确");
+        }
+        if (StringUtils.hasText(row.name()) && row.parentId() != null) {
+            String importKey = row.parentId() + ":" + row.name();
+            if (!importKeys.add(importKey)) {
+                errors.add("同一上级部门下模板内部门名称重复");
+            } else if (deptNameExists(row.parentId(), row.name())) {
+                errors.add("同一上级部门下部门名称已存在");
+            }
+        }
+        return errors;
+    }
+
+    private Map<String, Object> deptImportData(DeptImportRow row) {
+        Map<String, Object> data = new LinkedHashMap<>();
+        data.put("name", row.name());
+        data.put("parentId", row.parentId());
+        data.put("sort", row.sort());
+        data.put("status", row.status());
+        if (row.leaderUserId() != null) {
+            data.put("leaderUserId", row.leaderUserId());
+        }
+        if (StringUtils.hasText(row.phone())) {
+            data.put("phone", row.phone());
+        }
+        if (StringUtils.hasText(row.email())) {
+            data.put("email", row.email());
+        }
+        return data;
+    }
+
+    private Map<String, Object> deptImportFailure(DeptImportRow row, String errorMessage) {
+        Map<String, Object> data = new LinkedHashMap<>();
+        data.put("rowNo", row.rowNo());
+        data.put("name", row.name());
+        data.put("parentId", row.parentId());
+        data.put("leaderUserId", row.leaderUserId());
+        data.put("phone", row.phone());
+        data.put("email", row.email());
+        data.put("sort", row.sort());
+        data.put("status", row.status());
+        data.put("errorMessage", errorMessage);
+        return data;
+    }
+
+    private boolean existsInCurrentTenant(String tableName, Long id) {
+        if (id == null) {
+            return false;
+        }
+        Long count = jdbcTemplate.queryForObject("SELECT COUNT(*) FROM " + tableName
+                + " WHERE id = ? AND tenant_id = ? AND deleted = 0", Long.class, id, currentTenantId());
+        return count != null && count > 0;
+    }
+
+    private boolean deptNameExists(Long parentId, String name) {
+        Long count = jdbcTemplate.queryForObject("SELECT COUNT(*) FROM system_dept"
+                + " WHERE tenant_id = ? AND parent_id = ? AND name = ? AND deleted = 0",
+                Long.class, currentTenantId(), parentId == null ? 0L : parentId, name);
+        return count != null && count > 0;
+    }
+
+    private boolean isBlankDeptImportRow(Row row, DataFormatter formatter) {
+        if (row == null) {
+            return true;
+        }
+        for (int i = 0; i <= 6; i++) {
+            if (StringUtils.hasText(cellText(row, i, formatter))) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private String cellText(Row row, int cellIndex, DataFormatter formatter) {
+        if (row == null || row.getCell(cellIndex) == null) {
+            return "";
+        }
+        return formatter.formatCellValue(row.getCell(cellIndex)).trim();
+    }
+
+    private Long parseLongText(String text, Long defaultValue) {
+        if (!StringUtils.hasText(text)) {
+            return defaultValue;
+        }
+        try {
+            return Long.parseLong(normalizeNumberText(text));
+        } catch (NumberFormatException ex) {
+            return -1L;
+        }
+    }
+
+    private Integer parseIntegerText(String text, Integer defaultValue) {
+        if (!StringUtils.hasText(text)) {
+            return defaultValue;
+        }
+        try {
+            return Integer.parseInt(normalizeNumberText(text));
+        } catch (NumberFormatException ex) {
+            return -1;
+        }
+    }
+
+    private Integer parseStatusText(String text, Integer defaultValue) {
+        if (!StringUtils.hasText(text)) {
+            return defaultValue;
+        }
+        String value = text.trim();
+        if ("启用".equals(value) || "正常".equals(value)) {
+            return 0;
+        }
+        if ("停用".equals(value) || "禁用".equals(value)) {
+            return 1;
+        }
+        return parseIntegerText(value, -1);
+    }
+
+    private String normalizeNumberText(String text) {
+        String value = text.trim();
+        return value.matches("-?\\d+\\.0+") ? value.substring(0, value.indexOf('.')) : value;
+    }
+
+    private LinkedHashMap<String, String> deptExportColumns() {
+        return columns(
+                "id", "部门编号",
+                "name", "部门名称",
+                "parentId", "上级部门编号",
+                "leaderUserId", "负责人用户编号",
+                "phone", "联系电话",
+                "email", "邮箱",
+                "sort", "显示排序",
+                "status", "状态",
+                "createTime", "创建时间");
+    }
+
+    private LinkedHashMap<String, String> deptImportColumns() {
+        return columns(
+                "name", "部门名称",
+                "parentId", "上级部门编号",
+                "leaderUserId", "负责人用户编号",
+                "phone", "联系电话",
+                "email", "邮箱",
+                "sort", "显示排序",
+                "status", "状态");
+    }
+
     private void saveUserRelations(Long userId, Map<String, Object> reqVO) {
         dataService.replaceLongRelations("system_user_post", "user_id", userId, "post_id",
                 dataService.collectionValue(reqVO.get("postIds")));
         dataService.replaceLongRelations("system_user_role", "user_id", userId, "role_id",
                 dataService.collectionValue(reqVO.get("roleIds")));
+    }
+
+    private void validateUserBase(Map<String, Object> reqVO, boolean create) {
+        requireText(reqVO.get("username"), "用户名称不能为空");
+        requireText(reqVO.get("nickname"), "用户姓名不能为空");
+        if (create) {
+            requireText(reqVO.get("password"), "密码不能为空");
+        }
+    }
+
+    private void validateUserUsernameUnique(Object username, Long excludeId) {
+        if (username == null || !StringUtils.hasText(String.valueOf(username))) {
+            return;
+        }
+        List<Object> args = new ArrayList<>();
+        String sql = "SELECT COUNT(*) FROM system_users WHERE tenant_id = ? AND username = ? AND deleted = 0";
+        args.add(currentTenantId());
+        args.add(String.valueOf(username));
+        if (excludeId != null) {
+            sql += " AND id <> ?";
+            args.add(excludeId);
+        }
+        Long count = jdbcTemplate.queryForObject(sql, Long.class, args.toArray());
+        if (count != null && count > 0) {
+            throw new ServiceException(400, "用户名称已存在");
+        }
+    }
+
+    private Map<String, Object> normalizeUserWriteData(Map<String, Object> reqVO) {
+        Map<String, Object> data = new LinkedHashMap<>(reqVO);
+        // 前端空下拉会传空字符串，写入数字字段前需要转换为 null。
+        blankStringToNull(data, "deptId");
+        blankStringToNull(data, "sex");
+        blankStringToNull(data, "status");
+        return data;
+    }
+
+    private void blankStringToNull(Map<String, Object> data, String key) {
+        Object value = data.get(key);
+        if (value instanceof String text && !StringUtils.hasText(text)) {
+            data.put(key, null);
+        }
+    }
+
+    private void requireText(Object value, String message) {
+        if (value == null || !StringUtils.hasText(String.valueOf(value))) {
+            throw new ServiceException(400, message);
+        }
+    }
+
+    private Long currentTenantId() {
+        var loginUser = SecurityFrameworkUtils.getLoginUser();
+        return loginUser == null || loginUser.getTenantId() == null ? 1L : loginUser.getTenantId();
     }
 
     private void removeSensitiveUserFields(Map<String, Object> user) {
@@ -784,5 +1111,9 @@ public class SystemBasicController {
 
     private static Set<String> cols(String... columns) {
         return Set.of(columns);
+    }
+
+    private record DeptImportRow(int rowNo, String name, Long parentId, Long leaderUserId, String phone, String email,
+                                 Integer sort, Integer status) {
     }
 }
