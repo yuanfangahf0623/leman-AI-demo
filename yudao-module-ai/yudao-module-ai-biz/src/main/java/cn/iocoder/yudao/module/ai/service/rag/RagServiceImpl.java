@@ -70,6 +70,7 @@ import static cn.iocoder.yudao.module.ai.enums.AiRagErrorCodeConstants.RAG_REQUE
 public class RagServiceImpl implements RagService {
 
     private static final String ALL_DEPARTMENTS = "*";
+    private static final Long ALL_KNOWLEDGE_BASE_ID = 0L;
     private static final String FALLBACK_ANSWER = "根据当前知识库资料无法确认";
     private static final String QUESTION_CACHE_VERSION = "rag-v2-user-context-multi-hit";
     private static final int DEFAULT_STATUS = 0;
@@ -126,7 +127,11 @@ public class RagServiceImpl implements RagService {
         String currentUserNickname = AiUserContextHolder.getNickname();
         boolean admin = AiUserContextHolder.isAdmin();
 
-        AiKnowledgeBaseDO knowledgeBase = validateKnowledgeAccessible(request.getKnowledgeBaseId(), tenantId, departmentId);
+        List<AiKnowledgeBaseDO> knowledgeBases = validateKnowledgeAccessible(request.getKnowledgeBaseId(), tenantId,
+                departmentId);
+        AiKnowledgeBaseDO primaryKnowledgeBase = knowledgeBases.get(0);
+        Long conversationKnowledgeBaseId = request.getKnowledgeBaseId();
+        boolean allKnowledgeBase = isAllKnowledgeBase(conversationKnowledgeBaseId);
         String normalizedQuestion = normalizeQuestion(request.getQuestion());
         boolean personalSensitive = personalSensitiveDataPolicy.isSensitiveQuestion(request.getQuestion(), normalizedQuestion);
         validatePersonalSensitiveQuestionAccess(request.getQuestion(), normalizedQuestion, currentUserNickname, admin,
@@ -142,17 +147,17 @@ public class RagServiceImpl implements RagService {
 
         String questionHash = sha256Hex(QUESTION_CACHE_VERSION + ":" + normalizedQuestion);
         boolean userContextSensitive = isUserContextSensitiveQuestion(normalizedQuestion);
-        boolean cacheableQuestion = !userContextSensitive && !personalSensitive;
+        boolean cacheableQuestion = !allKnowledgeBase && !userContextSensitive && !personalSensitive;
         if (cacheableQuestion) {
             AiChatQuestionCacheDO cachedAnswer = chatQuestionCacheMapper.selectLatest(tenantId, departmentId,
-                    knowledgeBase.getId(), questionHash);
+                    primaryKnowledgeBase.getId(), questionHash);
             if (cachedAnswer != null && cachedAnswer.getAnswer() != null && !cachedAnswer.getAnswer().isBlank()) {
-                return saveCachedAnswer(conversation, userMessage, tenantId, departmentId, userId, knowledgeBase,
+                return saveCachedAnswer(conversation, userMessage, tenantId, departmentId, userId, primaryKnowledgeBase,
                         cachedAnswer, startNanos);
             }
         }
 
-        List<KnowledgeHit> hits = searchKnowledge(request, knowledgeBase, tenantId, departmentId);
+        List<KnowledgeHit> hits = searchKnowledge(request, knowledgeBases, tenantId, departmentId);
         if (personalSensitive && !admin) {
             hits = filterPersonalSensitiveHitsForCurrentUser(hits, currentUserNickname);
         }
@@ -162,13 +167,14 @@ public class RagServiceImpl implements RagService {
             RagChatResponse response = saveFallbackAnswer(conversation, userMessage, tenantId, departmentId, userId,
                     prompt.getDebugInfo());
             log.info("RAG chat no effective context, tenantId={}, departmentId={}, knowledgeBaseId={}, conversationId={}, hitCount={}, elapsedMs={}",
-                    tenantId, departmentId, knowledgeBase.getId(), conversation.getId(), hitCount, elapsedMillis(startNanos));
+                    tenantId, departmentId, conversationKnowledgeBaseId, conversation.getId(), hitCount,
+                    elapsedMillis(startNanos));
             return response;
         }
 
         long modelStartNanos = System.nanoTime();
         AiChatModelResponse modelResponse = aiChatModelService.chat(AiChatModelRequest.builder()
-                .model(knowledgeBase.getChatModel())
+                .model(primaryKnowledgeBase.getChatModel())
                 .systemPrompt(prompt.getSystemPrompt())
                 .userPrompt(prompt.getUserPrompt())
                 .build());
@@ -178,15 +184,15 @@ public class RagServiceImpl implements RagService {
         AiChatMessageDO assistantMessage = saveMessage(tenantId, departmentId, conversation.getId(), userId,
                 ChatMessageRoleEnum.ASSISTANT.getCode(), answer, modelResponse, modelLatencyMs);
         List<RagChatCitation> citations = saveCitations(tenantId, departmentId, assistantMessage.getId(),
-                knowledgeBase.getId(), prompt.getKnowledgeHits());
+                conversationKnowledgeBaseId, prompt.getKnowledgeHits());
         if (cacheableQuestion) {
-            saveQuestionCache(tenantId, departmentId, userId, knowledgeBase.getId(), request.getQuestion(),
+            saveQuestionCache(tenantId, departmentId, userId, primaryKnowledgeBase.getId(), request.getQuestion(),
                     normalizedQuestion, questionHash, answer, modelResponse, modelLatencyMs, citations);
         }
         updateConversationLastMessageTime(conversation.getId(), tenantId, departmentId);
 
         log.info("RAG chat success, tenantId={}, departmentId={}, knowledgeBaseId={}, conversationId={}, hitCount={}, citationCount={}, elapsedMs={}",
-                tenantId, departmentId, knowledgeBase.getId(), conversation.getId(), hitCount, citations.size(),
+                tenantId, departmentId, conversationKnowledgeBaseId, conversation.getId(), hitCount, citations.size(),
                 elapsedMillis(startNanos));
         return RagChatResponse.builder()
                 .conversationId(conversation.getId())
@@ -225,7 +231,16 @@ public class RagServiceImpl implements RagService {
                 personalSensitiveDataPolicy.getAccessDeniedMessage());
     }
 
-    private AiKnowledgeBaseDO validateKnowledgeAccessible(Long knowledgeBaseId, Long tenantId, Long departmentId) {
+    private List<AiKnowledgeBaseDO> validateKnowledgeAccessible(Long knowledgeBaseId, Long tenantId, Long departmentId) {
+        if (isAllKnowledgeBase(knowledgeBaseId)) {
+            List<AiKnowledgeBaseDO> knowledgeBases = knowledgeBaseMapper.selectListByTenantId(tenantId).stream()
+                    .filter(knowledgeBase -> isDepartmentAllowed(knowledgeBase, departmentId))
+                    .toList();
+            if (knowledgeBases.isEmpty()) {
+                throw new ServiceException(RAG_KNOWLEDGE_NOT_EXISTS, "暂无可访问的知识库");
+            }
+            return knowledgeBases;
+        }
         AiKnowledgeBaseDO knowledgeBase = knowledgeBaseMapper.selectByIdAndTenantId(knowledgeBaseId, tenantId);
         if (knowledgeBase == null) {
             throw new ServiceException(RAG_KNOWLEDGE_NOT_EXISTS, "知识库不存在");
@@ -233,7 +248,11 @@ public class RagServiceImpl implements RagService {
         if (!isDepartmentAllowed(knowledgeBase, departmentId)) {
             throw new ServiceException(RAG_KNOWLEDGE_ACCESS_DENIED, "无权访问该知识库");
         }
-        return knowledgeBase;
+        return List.of(knowledgeBase);
+    }
+
+    private boolean isAllKnowledgeBase(Long knowledgeBaseId) {
+        return ALL_KNOWLEDGE_BASE_ID.equals(knowledgeBaseId);
     }
 
     private boolean isDepartmentAllowed(AiKnowledgeBaseDO knowledgeBase, Long departmentId) {
@@ -390,11 +409,13 @@ public class RagServiceImpl implements RagService {
         List<RagChatCitation> citations = new ArrayList<>(cachedCitations.size());
         for (int i = 0; i < cachedCitations.size(); i++) {
             RagChatCitation cachedCitation = cachedCitations.get(i);
+            Long citationKnowledgeBaseId = cachedCitation.getKnowledgeBaseId() == null
+                    ? knowledgeBaseId : cachedCitation.getKnowledgeBaseId();
             AiChatCitationDO citation = AiChatCitationDO.builder()
                     .tenantId(tenantId)
                     .departmentId(departmentId)
                     .messageId(assistantMessageId)
-                    .knowledgeBaseId(knowledgeBaseId)
+                    .knowledgeBaseId(citationKnowledgeBaseId)
                     .documentId(cachedCitation.getDocumentId())
                     .chunkId(cachedCitation.getChunkId())
                     .documentTitle(cachedCitation.getDocumentTitle())
@@ -405,6 +426,7 @@ public class RagServiceImpl implements RagService {
                     .build();
             chatCitationMapper.insert(citation);
             citations.add(RagChatCitation.builder()
+                    .knowledgeBaseId(citationKnowledgeBaseId)
                     .documentId(cachedCitation.getDocumentId())
                     .chunkId(cachedCitation.getChunkId())
                     .chunkNo(cachedCitation.getChunkNo())
@@ -492,11 +514,12 @@ public class RagServiceImpl implements RagService {
         List<RagChatCitation> citations = new ArrayList<>(hits.size());
         for (int i = 0; i < hits.size(); i++) {
             KnowledgeHit hit = hits.get(i);
+            Long citationKnowledgeBaseId = hit.getKnowledgeBaseId() == null ? knowledgeBaseId : hit.getKnowledgeBaseId();
             AiChatCitationDO citation = AiChatCitationDO.builder()
                     .tenantId(tenantId)
                     .departmentId(departmentId)
                     .messageId(assistantMessageId)
-                    .knowledgeBaseId(knowledgeBaseId)
+                    .knowledgeBaseId(citationKnowledgeBaseId)
                     .documentId(hit.getDocumentId())
                     .chunkId(hit.getChunkId())
                     .documentTitle(hit.getDocumentTitle())
@@ -507,6 +530,7 @@ public class RagServiceImpl implements RagService {
                     .build();
             chatCitationMapper.insert(citation);
             citations.add(RagChatCitation.builder()
+                    .knowledgeBaseId(citationKnowledgeBaseId)
                     .documentId(hit.getDocumentId())
                     .chunkId(hit.getChunkId())
                     .chunkNo(hit.getChunkNo())
@@ -518,20 +542,24 @@ public class RagServiceImpl implements RagService {
         return citations;
     }
 
-    private List<KnowledgeHit> searchKnowledge(RagChatRequest request, AiKnowledgeBaseDO knowledgeBase,
+    private List<KnowledgeHit> searchKnowledge(RagChatRequest request, List<AiKnowledgeBaseDO> knowledgeBases,
                                                Long tenantId, Long departmentId) {
         List<Double> queryEmbedding = aiEmbeddingService.embed(request.getQuestion());
-        KnowledgeSearchRequest searchRequest = KnowledgeSearchRequest.builder()
-                .tenantId(tenantId)
-                .departmentId(departmentId)
-                .knowledgeBaseId(knowledgeBase.getId())
-                .queryEmbedding(queryEmbedding)
-                .topK(resolveTopK(request, knowledgeBase))
-                .scoreThreshold(resolveScoreThreshold(request, knowledgeBase))
-                .build();
-        List<KnowledgeHit> semanticHits = knowledgeVectorStore.search(searchRequest);
-        List<KnowledgeHit> lexicalHits = lexicalFallbackSearch(request.getQuestion(), searchRequest);
-        return mergeKnowledgeHits(semanticHits, lexicalHits);
+        Map<String, KnowledgeHit> merged = new LinkedHashMap<>();
+        for (AiKnowledgeBaseDO knowledgeBase : knowledgeBases) {
+            KnowledgeSearchRequest searchRequest = KnowledgeSearchRequest.builder()
+                    .tenantId(tenantId)
+                    .departmentId(departmentId)
+                    .knowledgeBaseId(knowledgeBase.getId())
+                    .queryEmbedding(queryEmbedding)
+                    .topK(resolveTopK(request, knowledgeBase))
+                    .scoreThreshold(resolveScoreThreshold(request, knowledgeBase))
+                    .build();
+            appendHits(merged, knowledgeVectorStore.search(searchRequest));
+            appendHits(merged, lexicalFallbackSearch(request.getQuestion(), searchRequest));
+        }
+        return selectTopMergedHits(new ArrayList<>(merged.values()), request, knowledgeBases.get(0),
+                knowledgeBases.size());
     }
 
     private List<KnowledgeHit> mergeKnowledgeHits(List<KnowledgeHit> semanticHits, List<KnowledgeHit> lexicalHits) {
@@ -539,6 +567,21 @@ public class RagServiceImpl implements RagService {
         appendHits(merged, semanticHits);
         appendHits(merged, lexicalHits);
         return new ArrayList<>(merged.values());
+    }
+
+    private List<KnowledgeHit> selectTopMergedHits(List<KnowledgeHit> hits, RagChatRequest request,
+                                                   AiKnowledgeBaseDO primaryKnowledgeBase, int knowledgeBaseCount) {
+        if (hits == null || hits.isEmpty()) {
+            return Collections.emptyList();
+        }
+        if (knowledgeBaseCount <= 1) {
+            return hits;
+        }
+        int topK = resolveTopK(request, primaryKnowledgeBase);
+        int limit = Math.min(Math.max(topK * Math.max(knowledgeBaseCount, 1), topK), 100);
+        return hits.stream()
+                .limit(limit)
+                .toList();
     }
 
     private List<KnowledgeHit> filterPersonalSensitiveHitsForCurrentUser(List<KnowledgeHit> hits,

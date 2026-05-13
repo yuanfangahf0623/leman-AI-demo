@@ -14,6 +14,10 @@ public class AiChatConversationRespVO {
 
     private Long knowledgeBaseId;
 
+    private Long displayKnowledgeBaseId;
+
+    private String displayKnowledgeBaseName;
+
     private Long userId;
 
     private Long departmentId;

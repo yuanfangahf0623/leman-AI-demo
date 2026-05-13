@@ -61,6 +61,7 @@ public class AiChatConvert {
 
     private AiChatCompletionCitationRespVO convert(RagChatCitation bean) {
         AiChatCompletionCitationRespVO result = new AiChatCompletionCitationRespVO();
+        result.setKnowledgeBaseId(bean.getKnowledgeBaseId());
         result.setDocumentId(bean.getDocumentId());
         result.setChunkId(bean.getChunkId());
         result.setChunkNo(bean.getChunkNo());
@@ -95,6 +96,8 @@ public class AiChatConvert {
         AiChatConversationRespVO result = new AiChatConversationRespVO();
         result.setId(bean.getId());
         result.setKnowledgeBaseId(bean.getKnowledgeBaseId());
+        result.setDisplayKnowledgeBaseId(bean.getDisplayKnowledgeBaseId());
+        result.setDisplayKnowledgeBaseName(bean.getDisplayKnowledgeBaseName());
         result.setUserId(bean.getUserId());
         result.setDepartmentId(bean.getDepartmentId());
         result.setTitle(bean.getTitle());

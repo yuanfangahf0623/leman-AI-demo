@@ -14,6 +14,8 @@ import lombok.NoArgsConstructor;
 @AllArgsConstructor
 public class RagChatCitation {
 
+    private Long knowledgeBaseId;
+
     private Long documentId;
 
     private Long chunkId;

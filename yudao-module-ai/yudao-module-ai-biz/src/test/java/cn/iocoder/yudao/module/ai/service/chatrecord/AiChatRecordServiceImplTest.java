@@ -5,6 +5,7 @@ import cn.iocoder.yudao.framework.common.pojo.PageResult;
 import cn.iocoder.yudao.module.ai.controller.admin.chat.vo.AiChatConversationPageReqVO;
 import cn.iocoder.yudao.module.ai.dal.dataobject.AiChatCitationDO;
 import cn.iocoder.yudao.module.ai.dal.dataobject.AiChatConversationDO;
+import cn.iocoder.yudao.module.ai.dal.dataobject.AiChatConversationKnowledgeBaseRefDO;
 import cn.iocoder.yudao.module.ai.dal.dataobject.AiChatMessageDO;
 import cn.iocoder.yudao.module.ai.dal.mysql.AiChatCitationMapper;
 import cn.iocoder.yudao.module.ai.dal.mysql.AiChatConversationMapper;
@@ -73,6 +74,28 @@ class AiChatRecordServiceImplTest {
 
         assertEquals(501L, result.getList().get(0).getId());
         verify(chatConversationMapper).selectPage(reqVO, 1L, 88L, 999L, true);
+    }
+
+    @Test
+    void getConversationPageShouldFillDisplayKnowledgeBaseForAllKnowledgeConversation() {
+        AiChatConversationPageReqVO reqVO = new AiChatConversationPageReqVO();
+        AiChatConversationDO conversation = AiChatConversationDO.builder()
+                .id(502L)
+                .knowledgeBaseId(0L)
+                .build();
+        AiChatConversationKnowledgeBaseRefDO ref = new AiChatConversationKnowledgeBaseRefDO();
+        ref.setConversationId(502L);
+        ref.setKnowledgeBaseId(6L);
+        ref.setKnowledgeBaseName("n8n");
+        when(chatConversationMapper.selectPage(reqVO, 1L, 20L, 100L, false))
+                .thenReturn(new PageResult<>(List.of(conversation), 1L));
+        when(chatCitationMapper.selectKnowledgeBaseRefsByConversationIds(1L, List.of(502L)))
+                .thenReturn(List.of(ref));
+
+        PageResult<AiChatConversationDO> result = chatRecordService.getConversationPage(reqVO);
+
+        assertEquals(6L, result.getList().get(0).getDisplayKnowledgeBaseId());
+        assertEquals("n8n", result.getList().get(0).getDisplayKnowledgeBaseName());
     }
 
     @Test

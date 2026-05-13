@@ -30,6 +30,10 @@ public class AiChatConversationDO {
     private Long departmentId;
     @TableField("knowledge_base_id")
     private Long knowledgeBaseId;
+    @TableField(exist = false)
+    private Long displayKnowledgeBaseId;
+    @TableField(exist = false)
+    private String displayKnowledgeBaseName;
     @TableField("user_id")
     private Long userId;
     @TableField("title")

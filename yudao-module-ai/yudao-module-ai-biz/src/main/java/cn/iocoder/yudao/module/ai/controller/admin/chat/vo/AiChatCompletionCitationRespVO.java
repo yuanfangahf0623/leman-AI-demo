@@ -8,6 +8,8 @@ import lombok.Data;
 @Data
 public class AiChatCompletionCitationRespVO {
 
+    private Long knowledgeBaseId;
+
     private Long documentId;
 
     private Long chunkId;

@@ -367,6 +367,69 @@ class RagServiceImplTest {
     }
 
     @Test
+    void chatShouldSearchAllAccessibleKnowledgeBasesWhenRequestAll() {
+        mockConversationAndMessageIds();
+        mockCitationId();
+        AiKnowledgeBaseDO firstKnowledge = buildKnowledge(10L, "富通天下测试", "*");
+        AiKnowledgeBaseDO secondKnowledge = buildKnowledge(20L, "n8n", "*");
+        when(knowledgeBaseMapper.selectListByTenantId(1L)).thenReturn(List.of(firstKnowledge, secondKnowledge));
+        when(aiEmbeddingService.embed("现有技术栈有哪些？")).thenReturn(List.of(1.0D, 0.0D));
+        when(knowledgeVectorStore.search(any(KnowledgeSearchRequest.class))).thenAnswer(invocation -> {
+            KnowledgeSearchRequest searchRequest = invocation.getArgument(0);
+            if (searchRequest.getKnowledgeBaseId().equals(10L)) {
+                return List.of(KnowledgeHit.builder()
+                        .tenantId(1L)
+                        .knowledgeBaseId(10L)
+                        .documentId(200L)
+                        .chunkId(300L)
+                        .chunkNo(1)
+                        .documentTitle("技术文档")
+                        .content("后端技术栈包含 Java、Spring Boot 和 MyBatis Plus。")
+                        .score(0.91D)
+                        .metadata(Map.of("title", "技术文档"))
+                        .build());
+            }
+            return List.of(KnowledgeHit.builder()
+                    .tenantId(1L)
+                    .knowledgeBaseId(20L)
+                    .documentId(201L)
+                    .chunkId(301L)
+                    .chunkNo(1)
+                    .documentTitle("n8n 接入说明")
+                    .content("n8n Webhook 可作为 API 数据源写入知识库。")
+                    .score(0.88D)
+                    .metadata(Map.of("title", "n8n 接入说明"))
+                    .build());
+        });
+        when(aiChatModelService.chat(any(AiChatModelRequest.class))).thenReturn(AiChatModelResponse.builder()
+                .model("unit-test-chat-model")
+                .content("现有技术栈包含 Java、Spring Boot、MyBatis Plus，并接入 n8n。")
+                .promptTokens(20)
+                .completionTokens(10)
+                .totalTokens(30)
+                .build());
+
+        RagChatResponse response = ragService.chat(RagChatRequest.builder()
+                .knowledgeBaseId(0L)
+                .question("现有技术栈有哪些？")
+                .build());
+
+        assertFalse(response.getNoContext());
+        assertEquals(2, response.getCitations().size());
+        assertTrue(response.getCitations().stream().anyMatch(citation -> citation.getKnowledgeBaseId().equals(10L)));
+        assertTrue(response.getCitations().stream().anyMatch(citation -> citation.getKnowledgeBaseId().equals(20L)));
+
+        ArgumentCaptor<KnowledgeSearchRequest> searchCaptor = ArgumentCaptor.forClass(KnowledgeSearchRequest.class);
+        verify(knowledgeVectorStore, times(2)).search(searchCaptor.capture());
+        assertEquals(List.of(10L, 20L), searchCaptor.getAllValues().stream()
+                .map(KnowledgeSearchRequest::getKnowledgeBaseId)
+                .toList());
+        assertTrue(searchCaptor.getAllValues().stream()
+                .allMatch(request -> request.getTenantId().equals(1L) && request.getDepartmentId().equals(20L)));
+        verify(chatQuestionCacheMapper, never()).selectLatest(any(), any(), any(), anyString());
+    }
+
+    @Test
     void chatShouldReturnFallbackAndSkipModelWhenNoHit() {
         mockConversationAndMessageIds();
         when(knowledgeBaseMapper.selectByIdAndTenantId(10L, 1L)).thenReturn(buildKnowledge("*"));
@@ -422,11 +485,15 @@ class RagServiceImplTest {
     }
 
     private AiKnowledgeBaseDO buildKnowledge(String departmentIds) {
+        return buildKnowledge(10L, "财务知识库", departmentIds);
+    }
+
+    private AiKnowledgeBaseDO buildKnowledge(Long id, String name, String departmentIds) {
         return AiKnowledgeBaseDO.builder()
-                .id(10L)
+                .id(id)
                 .tenantId(1L)
                 .departmentIds(departmentIds)
-                .name("财务知识库")
+                .name(name)
                 .topK(3)
                 .build();
     }

@@ -5,6 +5,7 @@ import cn.iocoder.yudao.framework.common.pojo.PageResult;
 import cn.iocoder.yudao.module.ai.controller.admin.chat.vo.AiChatConversationPageReqVO;
 import cn.iocoder.yudao.module.ai.dal.dataobject.AiChatCitationDO;
 import cn.iocoder.yudao.module.ai.dal.dataobject.AiChatConversationDO;
+import cn.iocoder.yudao.module.ai.dal.dataobject.AiChatConversationKnowledgeBaseRefDO;
 import cn.iocoder.yudao.module.ai.dal.dataobject.AiChatMessageDO;
 import cn.iocoder.yudao.module.ai.dal.mysql.AiChatCitationMapper;
 import cn.iocoder.yudao.module.ai.dal.mysql.AiChatConversationMapper;
@@ -16,6 +17,10 @@ import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 import static cn.iocoder.yudao.module.ai.enums.AiRagErrorCodeConstants.RAG_CONVERSATION_ACCESS_DENIED;
 import static cn.iocoder.yudao.module.ai.enums.AiRagErrorCodeConstants.RAG_CONVERSATION_NOT_EXISTS;
@@ -27,14 +32,18 @@ import static cn.iocoder.yudao.module.ai.enums.AiRagErrorCodeConstants.RAG_CONVE
 @RequiredArgsConstructor
 public class AiChatRecordServiceImpl implements AiChatRecordService {
 
+    private static final Long ALL_KNOWLEDGE_BASE_ID = 0L;
+
     private final AiChatConversationMapper chatConversationMapper;
     private final AiChatMessageMapper chatMessageMapper;
     private final AiChatCitationMapper chatCitationMapper;
 
     @Override
     public PageResult<AiChatConversationDO> getConversationPage(AiChatConversationPageReqVO pageReqVO) {
-        return chatConversationMapper.selectPage(pageReqVO, AiUserContextHolder.getTenantId(),
+        PageResult<AiChatConversationDO> pageResult = chatConversationMapper.selectPage(pageReqVO, AiUserContextHolder.getTenantId(),
                 AiUserContextHolder.getDepartmentId(), AiUserContextHolder.getUserId(), AiUserContextHolder.isAdmin());
+        fillDisplayKnowledgeBase(pageResult.getList(), AiUserContextHolder.getTenantId());
+        return pageResult;
     }
 
     @Override
@@ -94,6 +103,36 @@ public class AiChatRecordServiceImpl implements AiChatRecordService {
             throw new ServiceException(RAG_CONVERSATION_ACCESS_DENIED, "无权查看该会话");
         }
         return conversation;
+    }
+
+    private void fillDisplayKnowledgeBase(List<AiChatConversationDO> conversations, Long tenantId) {
+        if (conversations == null || conversations.isEmpty()) {
+            return;
+        }
+        List<Long> allKnowledgeConversationIds = conversations.stream()
+                .filter(conversation -> Objects.equals(ALL_KNOWLEDGE_BASE_ID, conversation.getKnowledgeBaseId()))
+                .map(AiChatConversationDO::getId)
+                .filter(Objects::nonNull)
+                .toList();
+        if (allKnowledgeConversationIds.isEmpty()) {
+            return;
+        }
+        List<AiChatConversationKnowledgeBaseRefDO> refs = chatCitationMapper.selectKnowledgeBaseRefsByConversationIds(
+                tenantId, allKnowledgeConversationIds);
+        if (refs == null || refs.isEmpty()) {
+            return;
+        }
+        Map<Long, AiChatConversationKnowledgeBaseRefDO> refMap = refs.stream()
+                .collect(Collectors.toMap(AiChatConversationKnowledgeBaseRefDO::getConversationId,
+                        Function.identity(), (first, ignored) -> first));
+        conversations.forEach(conversation -> {
+            AiChatConversationKnowledgeBaseRefDO ref = refMap.get(conversation.getId());
+            if (ref == null) {
+                return;
+            }
+            conversation.setDisplayKnowledgeBaseId(ref.getKnowledgeBaseId());
+            conversation.setDisplayKnowledgeBaseName(ref.getKnowledgeBaseName());
+        });
     }
 
 }

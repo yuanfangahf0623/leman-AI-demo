@@ -94,12 +94,15 @@ class AiChatControllerTest {
         AiChatConversationPageReqVO reqVO = new AiChatConversationPageReqVO();
         reqVO.setKnowledgeBaseId(1001L);
         when(chatRecordService.getConversationPage(reqVO)).thenReturn(new PageResult<>(List.of(
-                AiChatConversationDO.builder().id(3001L).knowledgeBaseId(1001L).title("A 类设备点检周期").build()), 1L));
+                AiChatConversationDO.builder().id(3001L).knowledgeBaseId(0L).displayKnowledgeBaseId(6L)
+                        .displayKnowledgeBaseName("n8n").title("A 类设备点检周期").build()), 1L));
 
         CommonResult<PageResult<AiChatConversationRespVO>> result = controller.getConversationPage(reqVO);
 
         assertEquals(1L, result.getData().getTotal());
         assertEquals(3001L, result.getData().getList().get(0).getId());
+        assertEquals(6L, result.getData().getList().get(0).getDisplayKnowledgeBaseId());
+        assertEquals("n8n", result.getData().getList().get(0).getDisplayKnowledgeBaseName());
         assertEquals("A 类设备点检周期", result.getData().getList().get(0).getTitle());
     }
 
