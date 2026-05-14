@@ -160,26 +160,6 @@ const remainingRouter: AppRouteRecordRaw[] = [
     ]
   },
   {
-    path: '/system/user',
-    component: Layout,
-    name: 'SystemUserCenter',
-    meta: {
-      hidden: true
-    },
-    children: [
-      {
-        path: '',
-        component: () => import('@/views/system/user/index.vue'),
-        name: 'SystemUser',
-        meta: {
-          title: '用户管理',
-          icon: 'ep:user',
-          noCache: true
-        }
-      }
-    ]
-  },
-  {
     path: '/system/tenant',
     component: Layout,
     redirect: '/system/tenant/list',

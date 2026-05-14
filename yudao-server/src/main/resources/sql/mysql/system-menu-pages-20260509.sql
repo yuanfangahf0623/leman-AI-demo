@@ -39,7 +39,7 @@ VALUES
 (910002, '岗位管理', '', 2, 2, 910000, 'post', 'ep:postcard', 'system/post/index', 'SystemPost', 0, b'1', b'1', b'1', 'admin', NOW(), 'admin', NOW(), b'0'),
 
 -- 用户管理
-(910100, '用户管理', '', 2, 12, 0, '/system/user', 'ep:user', 'system/user/index', 'SystemUser', 0, b'1', b'1', b'1', 'admin', NOW(), 'admin', NOW(), b'0'),
+(910100, '用户管理', '', 2, 1, 910300, 'user', 'ep:user', 'system/user/index', 'SystemUser', 0, b'1', b'1', b'1', 'admin', NOW(), 'admin', NOW(), b'0'),
 
 -- 租户管理
 (910200, '租户管理', '', 1, 13, 0, '/system/tenant', 'ep:management', NULL, NULL, 0, b'1', b'1', b'1', 'admin', NOW(), 'admin', NOW(), b'0'),
@@ -48,11 +48,11 @@ VALUES
 
 -- 系统管理
 (910300, '系统管理', '', 1, 14, 0, '/system', 'ep:setting', NULL, NULL, 0, b'1', b'1', b'1', 'admin', NOW(), 'admin', NOW(), b'0'),
-(910301, '角色管理', '', 2, 1, 910300, 'role', 'ep:user-filled', 'system/role/index', 'SystemRole', 0, b'1', b'1', b'1', 'admin', NOW(), 'admin', NOW(), b'0'),
-(910302, '菜单管理', '', 2, 2, 910300, 'menu', 'ep:menu', 'system/menu/index', 'SystemMenu', 0, b'1', b'1', b'1', 'admin', NOW(), 'admin', NOW(), b'0'),
-(910303, '字典管理', '', 2, 3, 910300, 'dict', 'ep:collection', 'system/dict/index', 'SystemDictType', 0, b'1', b'1', b'1', 'admin', NOW(), 'admin', NOW(), b'0'),
-(910304, '操作日志', '', 2, 4, 910300, 'operatelog', 'ep:document', 'system/operatelog/index', 'SystemOperateLog', 0, b'1', b'1', b'1', 'admin', NOW(), 'admin', NOW(), b'0'),
-(910305, '登录日志', '', 2, 5, 910300, 'loginlog', 'ep:monitor', 'system/loginlog/index', 'SystemLoginLog', 0, b'1', b'1', b'1', 'admin', NOW(), 'admin', NOW(), b'0'),
+(910301, '角色管理', '', 2, 2, 910300, 'role', 'ep:user-filled', 'system/role/index', 'SystemRole', 0, b'1', b'1', b'1', 'admin', NOW(), 'admin', NOW(), b'0'),
+(910302, '菜单管理', '', 2, 3, 910300, 'menu', 'ep:menu', 'system/menu/index', 'SystemMenu', 0, b'1', b'1', b'1', 'admin', NOW(), 'admin', NOW(), b'0'),
+(910303, '字典管理', '', 2, 4, 910300, 'dict', 'ep:collection', 'system/dict/index', 'SystemDictType', 0, b'1', b'1', b'1', 'admin', NOW(), 'admin', NOW(), b'0'),
+(910304, '操作日志', '', 2, 5, 910300, 'operatelog', 'ep:document', 'system/operatelog/index', 'SystemOperateLog', 0, b'1', b'1', b'1', 'admin', NOW(), 'admin', NOW(), b'0'),
+(910305, '登录日志', '', 2, 6, 910300, 'loginlog', 'ep:monitor', 'system/loginlog/index', 'SystemLoginLog', 0, b'1', b'1', b'1', 'admin', NOW(), 'admin', NOW(), b'0'),
 
 -- 工作流
 (910400, '工作流', '', 1, 50, 0, '/bpm', 'ep:share', NULL, NULL, 0, b'1', b'1', b'1', 'admin', NOW(), 'admin', NOW(), b'0'),
@@ -194,3 +194,22 @@ VALUES
 (910660, '问答记录查询', 'ai:chat-record:query', 3, 1, 910606, '', '', '', NULL, 0, b'1', b'1', b'1', 'admin', NOW(), 'admin', NOW(), b'0')
 ON DUPLICATE KEY UPDATE
   `id` = `id`;
+
+-- 菜单迁移：用户管理从一级菜单移动到系统管理下。
+-- 因为上面的 INSERT 遇到已存在菜单时不会覆盖用户在页面上的配置，这里显式同步基础归属和排序。
+UPDATE `system_menu`
+SET `parent_id` = 910300,
+    `sort` = 1,
+    `path` = 'user',
+    `component` = 'system/user/index',
+    `component_name` = 'SystemUser',
+    `updater` = 'admin',
+    `update_time` = NOW(),
+    `deleted` = b'0'
+WHERE `id` = 910100;
+
+UPDATE `system_menu` SET `sort` = 2, `updater` = 'admin', `update_time` = NOW() WHERE `id` = 910301;
+UPDATE `system_menu` SET `sort` = 3, `updater` = 'admin', `update_time` = NOW() WHERE `id` = 910302;
+UPDATE `system_menu` SET `sort` = 4, `updater` = 'admin', `update_time` = NOW() WHERE `id` = 910303;
+UPDATE `system_menu` SET `sort` = 5, `updater` = 'admin', `update_time` = NOW() WHERE `id` = 910304;
+UPDATE `system_menu` SET `sort` = 6, `updater` = 'admin', `update_time` = NOW() WHERE `id` = 910305;

@@ -336,6 +336,16 @@ public class AiProperties {
          */
         private Boolean enableQueryRewrite = false;
 
+        /**
+         * Whether requests may supplement RAG hits with online search results.
+         */
+        private Boolean enableWebSearch = true;
+
+        /**
+         * Max online search results appended to a single RAG request.
+         */
+        private Integer webSearchTopK = 5;
+
         public Integer getDefaultTopK() {
             return defaultTopK;
         }
@@ -374,6 +384,22 @@ public class AiProperties {
 
         public void setEnableQueryRewrite(Boolean enableQueryRewrite) {
             this.enableQueryRewrite = enableQueryRewrite;
+        }
+
+        public Boolean getEnableWebSearch() {
+            return enableWebSearch;
+        }
+
+        public void setEnableWebSearch(Boolean enableWebSearch) {
+            this.enableWebSearch = enableWebSearch;
+        }
+
+        public Integer getWebSearchTopK() {
+            return webSearchTopK;
+        }
+
+        public void setWebSearchTopK(Integer webSearchTopK) {
+            this.webSearchTopK = webSearchTopK;
         }
     }
 

@@ -24,4 +24,6 @@ public class RagChatRequest {
 
     private Double scoreThreshold;
 
+    private Boolean webSearchEnabled;
+
 }

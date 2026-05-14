@@ -558,6 +558,21 @@ public class SystemBasicController {
         return CommonResult.success(true);
     }
 
+    @PutMapping("/role/update-status")
+    @PreAuthorize("@ss.hasPermission('system:role:update')")
+    public CommonResult<Boolean> updateRoleStatus(@RequestBody Map<String, Object> reqVO) {
+        Long id = dataService.longValue(reqVO.get("id"));
+        Integer status = intValue(reqVO.get("status"));
+        if (id == null) {
+            throw new ServiceException(400, "角色编号不能为空");
+        }
+        if (status == null || (status != 0 && status != 1)) {
+            throw new ServiceException(400, "角色状态不正确");
+        }
+        dataService.updateColumns("system_role", id, Map.of("status", status));
+        return CommonResult.success(true);
+    }
+
     @DeleteMapping("/role/delete")
     @PreAuthorize("@ss.hasPermission('system:role:delete')")
     public CommonResult<Boolean> deleteRole(@RequestParam("id") Long id) {
@@ -1079,6 +1094,20 @@ public class SystemBasicController {
 
     private String stringValue(Object value) {
         return value == null ? null : String.valueOf(value);
+    }
+
+    private Integer intValue(Object value) {
+        if (value == null || !StringUtils.hasText(String.valueOf(value))) {
+            return null;
+        }
+        if (value instanceof Number number) {
+            return number.intValue();
+        }
+        try {
+            return Integer.parseInt(normalizeNumberText(String.valueOf(value)));
+        } catch (NumberFormatException ex) {
+            return null;
+        }
     }
 
     private ResponseEntity<byte[]> download(String filename, byte[] content) {

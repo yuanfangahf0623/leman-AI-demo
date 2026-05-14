@@ -245,8 +245,11 @@ const getList = async () => {
   loading.value = true
   try {
     const data = await UserApi.getUserPage(queryParams)
-    list.value = data.list
-    total.value = data.total
+    list.value = data?.list || []
+    total.value = data?.total || 0
+  } catch {
+    list.value = []
+    total.value = 0
   } finally {
     loading.value = false
   }

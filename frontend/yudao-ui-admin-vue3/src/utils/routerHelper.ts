@@ -179,6 +179,9 @@ export const getRedirect = (parentPath: string, children: AppCustomRouteRecordRa
   if (children[0].children) return getRedirect(path, children[0].children)
 }
 const generateRoutePath = (parentPath: string, path: string) => {
+  if (path.startsWith('/')) {
+    return path.replace(/\/+/g, '/')
+  }
   if (parentPath.endsWith('/')) {
     parentPath = parentPath.slice(0, -1) // 移除默认的 /
   }
@@ -190,6 +193,7 @@ const generateRoutePath = (parentPath: string, path: string) => {
 export const pathResolve = (parentPath: string, path: string) => {
   if (isUrl(path)) return path
   if (!path) return parentPath // 修复 path 为空时返回 parentPath，避免拼接出错 https://t.zsxq.com/QVr6b
+  if (path.startsWith('/')) return path.replace(/\/+/g, '/')
   const childPath = path.startsWith('/') ? path : `/${path}`
   return `${parentPath}${childPath}`.replace(/\/+/g, '/')
 }

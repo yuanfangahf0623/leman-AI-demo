@@ -62,8 +62,12 @@ let currentNodeId: number | null = null // 当前选中的节点 ID
 
 /** 加载部门树 */
 const loadTree = async () => {
-  const res = await DeptApi.getSimpleDeptList()
-  deptList.value = handleTree(res)
+  try {
+    const res = await DeptApi.getSimpleDeptList()
+    deptList.value = handleTree(res || [])
+  } catch {
+    deptList.value = []
+  }
 }
 
 /** 基于名字过滤 */

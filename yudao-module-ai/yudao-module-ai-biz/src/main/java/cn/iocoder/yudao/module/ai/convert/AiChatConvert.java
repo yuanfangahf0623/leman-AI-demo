@@ -34,6 +34,7 @@ public class AiChatConvert {
                 .question(bean.getQuestion())
                 .topK(bean.getTopK())
                 .scoreThreshold(bean.getScoreThreshold())
+                .webSearchEnabled(Boolean.TRUE.equals(bean.getWebSearchEnabled()))
                 .build();
     }
 

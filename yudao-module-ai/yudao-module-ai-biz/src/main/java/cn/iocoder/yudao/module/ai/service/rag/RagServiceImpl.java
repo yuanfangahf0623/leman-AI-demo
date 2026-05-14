@@ -25,6 +25,8 @@ import cn.iocoder.yudao.module.ai.service.chatmodel.AiChatModelResponse;
 import cn.iocoder.yudao.module.ai.service.chatmodel.AiChatModelService;
 import cn.iocoder.yudao.module.ai.service.embedding.AiEmbeddingService;
 import cn.iocoder.yudao.module.ai.service.rag.sensitive.PersonalSensitiveDataPolicy;
+import cn.iocoder.yudao.module.ai.service.websearch.WebSearchResult;
+import cn.iocoder.yudao.module.ai.service.websearch.WebSearchService;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -81,11 +83,19 @@ public class RagServiceImpl implements RagService {
     private static final int LEXICAL_FALLBACK_MULTIPLIER = 6;
     private static final int LEXICAL_RESULT_MULTIPLIER = 2;
     private static final int LEXICAL_KEYWORD_LIMIT = 12;
+    private static final int DEFAULT_WEB_SEARCH_TOP_K = 5;
+    private static final int TABLE_INVENTORY_CHUNK_LIMIT = 500;
+    private static final int TABLE_INVENTORY_CITATION_LIMIT = 10;
+    private static final int CONVERSATION_CONTEXT_MESSAGE_LIMIT = 6;
+    private static final int CONVERSATION_CONTEXT_MAX_CHARS = 1200;
+    private static final int SHORT_FOLLOW_UP_MAX_LENGTH = 18;
+    private static final double WEB_SEARCH_SCORE = 0.5D;
     private static final TypeReference<Map<String, Object>> METADATA_TYPE = new TypeReference<>() {
     };
     private static final TypeReference<List<RagChatCitation>> RAG_CITATION_LIST_TYPE = new TypeReference<>() {
     };
     private static final Pattern ASCII_WORD_PATTERN = Pattern.compile("[A-Za-z][A-Za-z0-9.+#-]{1,}");
+    private static final Pattern TABLE_NAME_PATTERN = Pattern.compile("表：\\s*([^\\s]+)");
     private static final Set<String> QUERY_STOP_WORDS = Set.of("目前", "现在", "现有", "当前", "请问", "哪些", "什么",
             "是什么", "有哪些", "有那些", "多少", "如何", "怎么", "可以", "一下", "如果", "情况下", "的情况下");
     private static final Set<String> SELF_IDENTITY_QUESTIONS = Set.of("我是谁", "请问我是谁", "我叫什么",
@@ -93,6 +103,7 @@ public class RagServiceImpl implements RagService {
     private static final List<String> DOMAIN_KEYWORDS = List.of("前端", "后端", "技术栈", "技术", "Vue", "Vite",
             "TypeScript", "Element", "Element Plus", "pnpm", "Java", "Spring", "MyBatis", "MySQL",
             "PostgreSQL", "pgvector", "Qdrant", "Redis", "Nacos", "MinIO", "RabbitMQ", "RAG", "Embedding",
+            "MES", "数据表", "数据库表", "表结构", "表名", "字段", "字段名", "数据字典", "Table",
             "考勤", "全勤", "全勤奖", "绩效", "满绩效", "工资", "薪资", "奖金", "补贴", "岗位",
             "车间主任", "应发", "实发", "金额");
     private static final List<List<String>> INTENT_COVERAGE_KEYWORD_GROUPS = List.of(
@@ -101,6 +112,10 @@ public class RagServiceImpl implements RagService {
             List.of("工资", "薪资", "奖金", "补贴", "金额", "多少钱"),
             List.of("车间主任", "岗位", "职务")
     );
+    private static final List<String> FOLLOW_UP_CUES = List.of("上面", "刚才", "继续", "这个", "那个",
+            "它", "他", "她", "这里", "那里", "换成", "改成", "如果是", "那如果");
+    private static final List<String> STANDALONE_INTENT_WORDS = List.of("什么", "哪些", "多少", "怎么",
+            "如何", "为什么", "是否", "能不能", "需要", "可以", "排查", "统计", "查询", "翻译", "总结", "是谁");
 
     private final AiKnowledgeBaseMapper knowledgeBaseMapper;
     private final AiChatConversationMapper chatConversationMapper;
@@ -110,6 +125,7 @@ public class RagServiceImpl implements RagService {
     private final AiDocumentChunkMapper documentChunkMapper;
     private final AiEmbeddingService aiEmbeddingService;
     private final KnowledgeVectorStore knowledgeVectorStore;
+    private final WebSearchService webSearchService;
     private final PromptBuilder promptBuilder;
     private final AiChatModelService aiChatModelService;
     private final ObjectMapper objectMapper;
@@ -132,11 +148,23 @@ public class RagServiceImpl implements RagService {
         AiKnowledgeBaseDO primaryKnowledgeBase = knowledgeBases.get(0);
         Long conversationKnowledgeBaseId = request.getKnowledgeBaseId();
         boolean allKnowledgeBase = isAllKnowledgeBase(conversationKnowledgeBaseId);
+        boolean webSearchRequested = Boolean.TRUE.equals(request.getWebSearchEnabled());
+        boolean webSearchEnabled = webSearchRequested && isWebSearchEnabled();
         String normalizedQuestion = normalizeQuestion(request.getQuestion());
-        boolean personalSensitive = personalSensitiveDataPolicy.isSensitiveQuestion(request.getQuestion(), normalizedQuestion);
+        boolean rawPersonalSensitive = personalSensitiveDataPolicy.isSensitiveQuestion(request.getQuestion(), normalizedQuestion);
         validatePersonalSensitiveQuestionAccess(request.getQuestion(), normalizedQuestion, currentUserNickname, admin,
-                personalSensitive);
+                rawPersonalSensitive);
         AiChatConversationDO conversation = getOrCreateConversation(request, tenantId, departmentId, userId);
+        List<AiChatMessageDO> conversationContext = loadRecentConversationContext(conversation, tenantId);
+        String effectiveQuestion = buildEffectiveQuestion(request.getQuestion(), conversationContext);
+        boolean conversationContextApplied = !effectiveQuestion.equals(request.getQuestion());
+        String normalizedEffectiveQuestion = normalizeQuestion(effectiveQuestion);
+        boolean personalSensitive = rawPersonalSensitive || personalSensitiveDataPolicy.isSensitiveQuestion(effectiveQuestion,
+                normalizedEffectiveQuestion);
+        if (!rawPersonalSensitive && personalSensitive) {
+            validatePersonalSensitiveQuestionAccess(effectiveQuestion, normalizedEffectiveQuestion,
+                    currentUserNickname, admin, true);
+        }
         AiChatMessageDO userMessage = saveMessage(tenantId, departmentId, conversation.getId(), userId,
                 ChatMessageRoleEnum.USER.getCode(), request.getQuestion(), null, 0L);
 
@@ -145,9 +173,19 @@ public class RagServiceImpl implements RagService {
                     currentUserNickname, startNanos);
         }
 
-        String questionHash = sha256Hex(QUESTION_CACHE_VERSION + ":" + normalizedQuestion);
-        boolean userContextSensitive = isUserContextSensitiveQuestion(normalizedQuestion);
-        boolean cacheableQuestion = !allKnowledgeBase && !userContextSensitive && !personalSensitive;
+        boolean tableInventoryQuestion = isTableInventoryQuestion(effectiveQuestion, normalizedEffectiveQuestion);
+        if (tableInventoryQuestion) {
+            RagChatResponse tableInventoryResponse = tryAnswerTableInventory(request, knowledgeBases, conversation,
+                    userMessage, tenantId, departmentId, userId, startNanos, effectiveQuestion);
+            if (tableInventoryResponse != null) {
+                return tableInventoryResponse;
+            }
+        }
+
+        String questionHash = sha256Hex(QUESTION_CACHE_VERSION + ":" + normalizedEffectiveQuestion);
+        boolean userContextSensitive = isUserContextSensitiveQuestion(normalizedEffectiveQuestion);
+        boolean cacheableQuestion = !conversationContextApplied && !tableInventoryQuestion && !webSearchRequested
+                && !allKnowledgeBase && !userContextSensitive && !personalSensitive;
         if (cacheableQuestion) {
             AiChatQuestionCacheDO cachedAnswer = chatQuestionCacheMapper.selectLatest(tenantId, departmentId,
                     primaryKnowledgeBase.getId(), questionHash);
@@ -157,12 +195,18 @@ public class RagServiceImpl implements RagService {
             }
         }
 
-        List<KnowledgeHit> hits = searchKnowledge(request, knowledgeBases, tenantId, departmentId);
+        List<KnowledgeHit> hits = searchKnowledge(effectiveQuestion, request, knowledgeBases, tenantId, departmentId);
         if (personalSensitive && !admin) {
             hits = filterPersonalSensitiveHitsForCurrentUser(hits, currentUserNickname);
         }
+        if (webSearchEnabled && !personalSensitive) {
+            hits = appendWebSearchHits(effectiveQuestion, hits, tenantId, conversationKnowledgeBaseId);
+        } else if (webSearchRequested && personalSensitive) {
+            log.info("RAG web search skipped for personal sensitive question, tenantId={}, departmentId={}, knowledgeBaseId={}, conversationId={}",
+                    tenantId, departmentId, conversationKnowledgeBaseId, conversation.getId());
+        }
         int hitCount = hits == null ? 0 : hits.size();
-        PromptBuildResult prompt = promptBuilder.build(request.getQuestion(), hits, currentUserNickname);
+        PromptBuildResult prompt = promptBuilder.build(effectiveQuestion, hits, currentUserNickname);
         if (prompt.isNoContext()) {
             RagChatResponse response = saveFallbackAnswer(conversation, userMessage, tenantId, departmentId, userId,
                     prompt.getDebugInfo());
@@ -307,6 +351,75 @@ public class RagServiceImpl implements RagService {
         return conversation;
     }
 
+    private List<AiChatMessageDO> loadRecentConversationContext(AiChatConversationDO conversation, Long tenantId) {
+        if (conversation == null || conversation.getId() == null) {
+            return Collections.emptyList();
+        }
+        List<AiChatMessageDO> messages = chatMessageMapper.selectListByConversationId(conversation.getId(), tenantId);
+        if (messages == null || messages.isEmpty()) {
+            return Collections.emptyList();
+        }
+        List<AiChatMessageDO> effectiveMessages = messages.stream()
+                .filter(message -> message.getContent() != null && !message.getContent().isBlank())
+                .filter(message -> ChatMessageRoleEnum.USER.getCode().equals(message.getRole())
+                        || ChatMessageRoleEnum.ASSISTANT.getCode().equals(message.getRole()))
+                .toList();
+        int fromIndex = Math.max(0, effectiveMessages.size() - CONVERSATION_CONTEXT_MESSAGE_LIMIT);
+        return new ArrayList<>(effectiveMessages.subList(fromIndex, effectiveMessages.size()));
+    }
+
+    private String buildEffectiveQuestion(String question, List<AiChatMessageDO> conversationContext) {
+        String safeQuestion = question == null ? "" : question.trim();
+        if (!shouldUseConversationContext(safeQuestion, conversationContext)) {
+            return safeQuestion;
+        }
+        StringBuilder context = new StringBuilder();
+        for (AiChatMessageDO message : conversationContext) {
+            String role = ChatMessageRoleEnum.USER.getCode().equals(message.getRole()) ? "用户" : "助手";
+            String content = truncateForContext(message.getContent(), 240);
+            if (content.isBlank()) {
+                continue;
+            }
+            context.append(role).append("：").append(content).append('\n');
+            if (context.length() >= CONVERSATION_CONTEXT_MAX_CHARS) {
+                break;
+            }
+        }
+        if (context.length() == 0) {
+            return safeQuestion;
+        }
+        return """
+                多轮对话上下文：
+                %s
+                当前用户追问或补充：
+                %s
+                请结合上下文，将当前追问理解为完整问题后回答。
+                """.formatted(truncateForContext(context.toString(), CONVERSATION_CONTEXT_MAX_CHARS), safeQuestion);
+    }
+
+    private boolean shouldUseConversationContext(String question, List<AiChatMessageDO> conversationContext) {
+        if (question == null || question.isBlank() || conversationContext == null || conversationContext.isEmpty()) {
+            return false;
+        }
+        String normalized = normalizeQuestion(question);
+        if (containsAnyIgnoreCase(question, FOLLOW_UP_CUES)) {
+            return true;
+        }
+        return normalized.length() <= SHORT_FOLLOW_UP_MAX_LENGTH
+                && !containsAnyIgnoreCase(question, STANDALONE_INTENT_WORDS);
+    }
+
+    private String truncateForContext(String value, int maxLength) {
+        if (value == null) {
+            return "";
+        }
+        String normalized = value.trim();
+        if (normalized.length() <= maxLength) {
+            return normalized;
+        }
+        return normalized.substring(0, maxLength);
+    }
+
     private AiChatMessageDO saveMessage(Long tenantId, Long departmentId, Long conversationId, Long userId, String role,
                                         String content, AiChatModelResponse modelResponse, Long latencyMs) {
         AiChatMessageDO message = AiChatMessageDO.builder()
@@ -368,6 +481,140 @@ public class RagServiceImpl implements RagService {
             return "你是" + currentUserNickname.trim() + "。";
         }
         return "你是当前登录用户（用户 ID：" + userId + "）。";
+    }
+
+    private RagChatResponse tryAnswerTableInventory(RagChatRequest request, List<AiKnowledgeBaseDO> knowledgeBases,
+                                                    AiChatConversationDO conversation, AiChatMessageDO userMessage,
+                                                    Long tenantId, Long departmentId, Long userId,
+                                                    long startNanos, String effectiveQuestion) {
+        TableInventoryResult inventory = collectTableInventory(tenantId, knowledgeBases);
+        if (inventory.tableHits().isEmpty()) {
+            return null;
+        }
+        String answer = buildTableInventoryAnswer(inventory.tableHits());
+        AiChatMessageDO assistantMessage = saveMessage(tenantId, departmentId, conversation.getId(), userId,
+                ChatMessageRoleEnum.ASSISTANT.getCode(), answer, null, 0L);
+        List<RagChatCitation> citations = saveCitations(tenantId, departmentId, assistantMessage.getId(),
+                request.getKnowledgeBaseId(), buildTableInventoryCitationHits(inventory.tableHits()));
+        updateConversationLastMessageTime(conversation.getId(), tenantId, departmentId);
+        log.info("RAG table inventory answered directly, tenantId={}, departmentId={}, knowledgeBaseId={}, conversationId={}, tableCount={}, scannedChunkCount={}, citationCount={}, elapsedMs={}",
+                tenantId, departmentId, request.getKnowledgeBaseId(), conversation.getId(), inventory.tableHits().size(),
+                inventory.scannedChunkCount(), citations.size(), elapsedMillis(startNanos));
+        return RagChatResponse.builder()
+                .conversationId(conversation.getId())
+                .userMessageId(userMessage.getId())
+                .assistantMessageId(assistantMessage.getId())
+                .answer(answer)
+                .noContext(false)
+                .debugInfo(buildTableInventoryDebugInfo(effectiveQuestion, inventory))
+                .citations(citations)
+                .build();
+    }
+
+    private TableInventoryResult collectTableInventory(Long tenantId, List<AiKnowledgeBaseDO> knowledgeBases) {
+        Map<String, KnowledgeHit> tableHits = new LinkedHashMap<>();
+        int scannedChunkCount = 0;
+        for (AiKnowledgeBaseDO knowledgeBase : knowledgeBases) {
+            List<AiDocumentChunkDO> chunks = documentChunkMapper.selectTableInventoryCandidates(tenantId,
+                    knowledgeBase.getId(), TABLE_INVENTORY_CHUNK_LIMIT);
+            if (chunks == null || chunks.isEmpty()) {
+                continue;
+            }
+            scannedChunkCount += chunks.size();
+            for (AiDocumentChunkDO chunk : chunks) {
+                List<String> tableNames = extractTableNames(chunk.getContent());
+                if (tableNames.isEmpty()) {
+                    continue;
+                }
+                for (String tableName : tableNames) {
+                    tableHits.putIfAbsent(tableName, toTableInventoryHit(knowledgeBase, chunk, tableName));
+                }
+            }
+        }
+        return new TableInventoryResult(tableHits, scannedChunkCount);
+    }
+
+    private List<String> extractTableNames(String content) {
+        if (content == null || content.isBlank()) {
+            return Collections.emptyList();
+        }
+        List<String> tableNames = new ArrayList<>();
+        Matcher matcher = TABLE_NAME_PATTERN.matcher(content);
+        while (matcher.find()) {
+            String tableName = normalizeTableName(matcher.group(1));
+            if (!tableName.isBlank() && !tableNames.contains(tableName)) {
+                tableNames.add(tableName);
+            }
+        }
+        return tableNames;
+    }
+
+    private String normalizeTableName(String tableName) {
+        if (tableName == null) {
+            return "";
+        }
+        return tableName.trim()
+                .replaceAll("^[`'\"“”‘’]+", "")
+                .replaceAll("[`'\"“”‘’，,。；;：:]+$", "");
+    }
+
+    private KnowledgeHit toTableInventoryHit(AiKnowledgeBaseDO knowledgeBase, AiDocumentChunkDO chunk,
+                                             String tableName) {
+        Map<String, Object> metadata = parseMetadata(chunk.getMetadataJson());
+        String documentTitle = extractDocumentTitle(metadata);
+        return KnowledgeHit.builder()
+                .tenantId(chunk.getTenantId())
+                .knowledgeBaseId(knowledgeBase.getId())
+                .documentId(chunk.getDocumentId())
+                .chunkId(chunk.getId())
+                .chunkNo(chunk.getChunkIndex())
+                .documentTitle(documentTitle == null ? knowledgeBase.getName() : documentTitle)
+                .content("表名：" + tableName + "\n\n来源切片：\n" + chunk.getContent())
+                .score(1.0D)
+                .metadata(metadata)
+                .build();
+    }
+
+    private String buildTableInventoryAnswer(Map<String, KnowledgeHit> tableHits) {
+        StringBuilder answer = new StringBuilder();
+        answer.append("根据当前知识库资料，识别到 MES 数据表共 ")
+                .append(tableHits.size())
+                .append(" 张。");
+        answer.append("\n\n数据表清单：\n");
+        int index = 1;
+        for (String tableName : tableHits.keySet()) {
+            answer.append(index++).append(". `").append(tableName).append("`\n");
+        }
+        answer.append("\n说明：本次统计依据为已解析文档切片中的 `表：xxx` 标记；如果原始文档后续有新增或删除表，需要重新解析并向量化后再统计。");
+        return answer.toString();
+    }
+
+    private List<KnowledgeHit> buildTableInventoryCitationHits(Map<String, KnowledgeHit> tableHits) {
+        return tableHits.values().stream()
+                .limit(TABLE_INVENTORY_CITATION_LIMIT)
+                .toList();
+    }
+
+    private String buildTableInventoryDebugInfo(String question, TableInventoryResult inventory) {
+        return """
+                ## 数据表清单统计调试信息
+                - 用户问题：%s
+                - 识别逻辑：命中“数据表/表结构/表名 + 统计/数量/哪些/清单”等问题意图后，跳过通用 topK 向量召回，直接扫描当前可访问知识库中已解析成功的 chunk。
+                - 扫描条件：tenantId、knowledgeBaseId、chunk.status=SUCCESS，且 chunk 内容包含 `表：`。
+                - 表名提取规则：正则 `表：\\s*([^\\s]+)`，按出现顺序去重。
+                - 扫描 chunk 数：%d
+                - 识别表数量：%d
+                - 说明：该分支用于全量清单/数量类问题，避免通用 RAG 只取少量 topK 片段导致漏表。
+                """.formatted(question, inventory.scannedChunkCount(), inventory.tableHits().size());
+    }
+
+    private boolean isTableInventoryQuestion(String question, String normalizedQuestion) {
+        String source = ((question == null ? "" : question) + "\n"
+                + (normalizedQuestion == null ? "" : normalizedQuestion)).toLowerCase(Locale.ROOT);
+        boolean tableTerm = containsAnyIgnoreCase(source, List.of("数据表", "数据库表", "表结构", "表名", "table", "tables"));
+        boolean inventoryTerm = containsAnyIgnoreCase(source, List.of("哪些", "有哪些", "有那些", "数量", "多少",
+                "统计", "清单", "列表", "几个", "count", "list"));
+        return tableTerm && inventoryTerm;
     }
 
     private RagChatResponse saveCachedAnswer(AiChatConversationDO conversation, AiChatMessageDO userMessage,
@@ -542,9 +789,66 @@ public class RagServiceImpl implements RagService {
         return citations;
     }
 
-    private List<KnowledgeHit> searchKnowledge(RagChatRequest request, List<AiKnowledgeBaseDO> knowledgeBases,
+    private boolean isWebSearchEnabled() {
+        return aiProperties.getRag() == null || !Boolean.FALSE.equals(aiProperties.getRag().getEnableWebSearch());
+    }
+
+    private int resolveWebSearchTopK() {
+        Integer topK = aiProperties.getRag() == null ? null : aiProperties.getRag().getWebSearchTopK();
+        if (topK == null || topK <= 0) {
+            return DEFAULT_WEB_SEARCH_TOP_K;
+        }
+        return Math.min(topK, 10);
+    }
+
+    private List<KnowledgeHit> appendWebSearchHits(String question, List<KnowledgeHit> hits, Long tenantId,
+                                                   Long knowledgeBaseId) {
+        List<WebSearchResult> webResults = webSearchService.search(question, resolveWebSearchTopK());
+        if (webResults == null || webResults.isEmpty()) {
+            return hits == null ? Collections.emptyList() : hits;
+        }
+        Map<String, KnowledgeHit> merged = new LinkedHashMap<>();
+        appendHits(merged, hits);
+        for (int i = 0; i < webResults.size(); i++) {
+            appendHits(merged, List.of(toWebSearchHit(webResults.get(i), i + 1, tenantId, knowledgeBaseId)));
+        }
+        log.info("RAG web search appended, tenantId={}, knowledgeBaseId={}, resultCount={}",
+                tenantId, knowledgeBaseId, webResults.size());
+        return new ArrayList<>(merged.values());
+    }
+
+    private KnowledgeHit toWebSearchHit(WebSearchResult result, int index, Long tenantId, Long knowledgeBaseId) {
+        String title = result.getTitle() == null || result.getTitle().isBlank()
+                ? "Web Search Result" : result.getTitle().trim();
+        String url = result.getUrl() == null ? "" : result.getUrl().trim();
+        String content = buildWebSearchContent(title, url, result.getSnippet());
+        return KnowledgeHit.builder()
+                .vectorId("web:" + sha256Hex(url.isBlank() ? title + ":" + index : url))
+                .tenantId(tenantId)
+                .knowledgeBaseId(knowledgeBaseId)
+                .documentTitle("联网搜索：" + title)
+                .content(content)
+                .score(Math.max(0.01D, WEB_SEARCH_SCORE - index * 0.01D))
+                .metadata(Map.of("sourceType", "WEB_SEARCH", "url", url, "title", title))
+                .build();
+    }
+
+    private String buildWebSearchContent(String title, String url, String snippet) {
+        StringBuilder content = new StringBuilder();
+        content.append("标题：").append(title);
+        if (url != null && !url.isBlank()) {
+            content.append("\nURL：").append(url);
+        }
+        if (snippet != null && !snippet.isBlank()) {
+            content.append("\n摘要：").append(snippet.trim());
+        }
+        return truncate(content.toString(), QUOTE_TEXT_MAX_LENGTH);
+    }
+
+    private List<KnowledgeHit> searchKnowledge(String question, RagChatRequest request,
+                                               List<AiKnowledgeBaseDO> knowledgeBases,
                                                Long tenantId, Long departmentId) {
-        List<Double> queryEmbedding = aiEmbeddingService.embed(request.getQuestion());
+        List<Double> queryEmbedding = aiEmbeddingService.embed(question);
         Map<String, KnowledgeHit> merged = new LinkedHashMap<>();
         for (AiKnowledgeBaseDO knowledgeBase : knowledgeBases) {
             KnowledgeSearchRequest searchRequest = KnowledgeSearchRequest.builder()
@@ -556,7 +860,7 @@ public class RagServiceImpl implements RagService {
                     .scoreThreshold(resolveScoreThreshold(request, knowledgeBase))
                     .build();
             appendHits(merged, knowledgeVectorStore.search(searchRequest));
-            appendHits(merged, lexicalFallbackSearch(request.getQuestion(), searchRequest));
+            appendHits(merged, lexicalFallbackSearch(question, searchRequest));
         }
         return selectTopMergedHits(new ArrayList<>(merged.values()), request, knowledgeBases.get(0),
                 knowledgeBases.size());
@@ -918,6 +1222,9 @@ public class RagServiceImpl implements RagService {
 
     private long elapsedMillis(long startNanos) {
         return Duration.ofNanos(System.nanoTime() - startNanos).toMillis();
+    }
+
+    private record TableInventoryResult(Map<String, KnowledgeHit> tableHits, int scannedChunkCount) {
     }
 
 }

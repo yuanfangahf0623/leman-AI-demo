@@ -6,6 +6,7 @@ export interface UserVO {
   nickname: string
   deptId: number
   postIds: string[]
+  roleIds: number[]
   email: string
   mobile: string
   sex: number

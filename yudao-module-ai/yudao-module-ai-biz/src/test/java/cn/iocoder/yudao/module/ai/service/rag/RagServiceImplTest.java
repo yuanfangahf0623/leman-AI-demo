@@ -13,6 +13,7 @@ import cn.iocoder.yudao.module.ai.dal.mysql.AiChatMessageMapper;
 import cn.iocoder.yudao.module.ai.dal.mysql.AiChatQuestionCacheMapper;
 import cn.iocoder.yudao.module.ai.dal.mysql.AiDocumentChunkMapper;
 import cn.iocoder.yudao.module.ai.dal.mysql.AiKnowledgeBaseMapper;
+import cn.iocoder.yudao.module.ai.enums.ChatMessageRoleEnum;
 import cn.iocoder.yudao.module.ai.framework.config.AiProperties;
 import cn.iocoder.yudao.module.ai.framework.tenant.AiUserContextHolder;
 import cn.iocoder.yudao.module.ai.framework.vector.KnowledgeHit;
@@ -23,6 +24,8 @@ import cn.iocoder.yudao.module.ai.service.chatmodel.AiChatModelResponse;
 import cn.iocoder.yudao.module.ai.service.chatmodel.AiChatModelService;
 import cn.iocoder.yudao.module.ai.service.embedding.AiEmbeddingService;
 import cn.iocoder.yudao.module.ai.service.rag.sensitive.PersonalSensitiveDataPolicy;
+import cn.iocoder.yudao.module.ai.service.websearch.WebSearchResult;
+import cn.iocoder.yudao.module.ai.service.websearch.WebSearchService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -73,6 +76,8 @@ class RagServiceImplTest {
     @Mock
     private KnowledgeVectorStore knowledgeVectorStore;
     @Mock
+    private WebSearchService webSearchService;
+    @Mock
     private AiChatModelService aiChatModelService;
 
     private RagServiceImpl ragService;
@@ -86,7 +91,7 @@ class RagServiceImplTest {
         objectMapper = new ObjectMapper();
         ragService = new RagServiceImpl(knowledgeBaseMapper, chatConversationMapper, chatMessageMapper,
                 chatCitationMapper, chatQuestionCacheMapper, documentChunkMapper, aiEmbeddingService,
-                knowledgeVectorStore, new PromptBuilder(aiProperties), aiChatModelService, objectMapper,
+                knowledgeVectorStore, webSearchService, new PromptBuilder(aiProperties), aiChatModelService, objectMapper,
                 aiProperties, new PersonalSensitiveDataPolicy(null));
     }
 
@@ -367,6 +372,99 @@ class RagServiceImplTest {
     }
 
     @Test
+    void chatShouldAppendWebSearchHitsAndSkipQuestionCacheWhenEnabled() {
+        mockConversationAndMessageIds();
+        mockCitationId();
+        String question = "Hanon Systems profile?";
+        when(knowledgeBaseMapper.selectByIdAndTenantId(10L, 1L)).thenReturn(buildKnowledge("*"));
+        when(aiEmbeddingService.embed(question)).thenReturn(List.of(1.0D, 0.0D));
+        when(knowledgeVectorStore.search(any(KnowledgeSearchRequest.class))).thenReturn(List.of());
+        when(webSearchService.search(eq(question), anyInt())).thenReturn(List.of(WebSearchResult.builder()
+                .title("Hanon Systems")
+                .url("https://example.com/hanon")
+                .snippet("Hanon Systems is an automotive thermal management supplier.")
+                .build()));
+        when(aiChatModelService.chat(any(AiChatModelRequest.class))).thenReturn(AiChatModelResponse.builder()
+                .model("unit-test-chat-model")
+                .content("Hanon Systems is an automotive thermal management supplier.")
+                .promptTokens(12)
+                .completionTokens(8)
+                .totalTokens(20)
+                .build());
+
+        RagChatResponse response = ragService.chat(RagChatRequest.builder()
+                .knowledgeBaseId(10L)
+                .question(question)
+                .webSearchEnabled(true)
+                .build());
+
+        assertFalse(response.getNoContext());
+        assertEquals(1, response.getCitations().size());
+        assertEquals("联网搜索：Hanon Systems", response.getCitations().get(0).getDocumentTitle());
+        verify(webSearchService).search(eq(question), anyInt());
+        verify(chatQuestionCacheMapper, never()).selectLatest(any(), any(), any(), anyString());
+        verify(chatQuestionCacheMapper, never()).insert(any(AiChatQuestionCacheDO.class));
+    }
+
+    @Test
+    void chatShouldUseRecentConversationContextForShortFollowUp() {
+        mockExistingConversationAndMessageIds();
+        mockCitationId();
+        String previousQuestion = "我在北侧电脑组，如果我的电脑不能联网了，应该如何排查？";
+        String followUp = "二楼北电脑组";
+        when(knowledgeBaseMapper.selectByIdAndTenantId(10L, 1L)).thenReturn(buildKnowledge("*"));
+        when(chatMessageMapper.selectListByConversationId(500L, 1L)).thenReturn(List.of(
+                buildMessage(900L, ChatMessageRoleEnum.USER.getCode(), previousQuestion),
+                buildMessage(901L, ChatMessageRoleEnum.ASSISTANT.getCode(),
+                        "可以按本机网线、交换机、防火墙、路由器逐级排查。")
+        ));
+        when(aiEmbeddingService.embed(anyString())).thenReturn(List.of(1.0D, 0.0D));
+        when(knowledgeVectorStore.search(any(KnowledgeSearchRequest.class))).thenReturn(List.of(KnowledgeHit.builder()
+                .tenantId(1L)
+                .knowledgeBaseId(10L)
+                .documentId(210L)
+                .chunkId(310L)
+                .chunkNo(8)
+                .documentTitle("01-理文网络拓扑图")
+                .content("二楼北电脑组连接二楼北东墙面板，再连接二楼北西交换机。电脑不能联网时先查本机网线、墙面板和交换机端口。")
+                .score(0.92D)
+                .metadata(Map.of("title", "01-理文网络拓扑图"))
+                .build()));
+        when(aiChatModelService.chat(any(AiChatModelRequest.class))).thenReturn(AiChatModelResponse.builder()
+                .model("unit-test-chat-model")
+                .content("二楼北电脑组应优先检查本机网线、墙面板和二楼北西交换机端口。")
+                .promptTokens(20)
+                .completionTokens(10)
+                .totalTokens(30)
+                .build());
+
+        RagChatResponse response = ragService.chat(RagChatRequest.builder()
+                .knowledgeBaseId(10L)
+                .conversationId(500L)
+                .question(followUp)
+                .build());
+
+        assertFalse(response.getNoContext());
+        assertTrue(response.getAnswer().contains("二楼北电脑组"));
+
+        ArgumentCaptor<String> embeddingCaptor = ArgumentCaptor.forClass(String.class);
+        verify(aiEmbeddingService).embed(embeddingCaptor.capture());
+        assertTrue(embeddingCaptor.getValue().contains(previousQuestion));
+        assertTrue(embeddingCaptor.getValue().contains(followUp));
+
+        ArgumentCaptor<AiChatModelRequest> chatCaptor = ArgumentCaptor.forClass(AiChatModelRequest.class);
+        verify(aiChatModelService).chat(chatCaptor.capture());
+        assertTrue(chatCaptor.getValue().getUserPrompt().contains("多轮对话上下文"));
+        assertTrue(chatCaptor.getValue().getUserPrompt().contains(previousQuestion));
+        assertTrue(chatCaptor.getValue().getUserPrompt().contains(followUp));
+
+        ArgumentCaptor<AiChatMessageDO> messageCaptor = ArgumentCaptor.forClass(AiChatMessageDO.class);
+        verify(chatMessageMapper, times(2)).insert(messageCaptor.capture());
+        assertEquals(followUp, messageCaptor.getAllValues().get(0).getContent());
+        verify(chatQuestionCacheMapper, never()).selectLatest(any(), any(), any(), anyString());
+    }
+
+    @Test
     void chatShouldSearchAllAccessibleKnowledgeBasesWhenRequestAll() {
         mockConversationAndMessageIds();
         mockCitationId();
@@ -430,6 +528,36 @@ class RagServiceImplTest {
     }
 
     @Test
+    void chatShouldAnswerTableInventoryDirectlyFromParsedChunks() {
+        mockConversationAndMessageIds();
+        mockCitationId();
+        String question = "目前 MES 里面都有哪些数据表？";
+        when(knowledgeBaseMapper.selectByIdAndTenantId(10L, 1L)).thenReturn(buildKnowledge("*"));
+        when(documentChunkMapper.selectTableInventoryCandidates(eq(1L), eq(10L), eq(500)))
+                .thenReturn(List.of(
+                        buildChunk(401L, 24L, 1, "MES 技术说明",
+                                "表：a_banci\n字段名\t类型\nid\tint\n\n表：a_workorder\n字段名\t类型\nid\tint"),
+                        buildChunk(402L, 24L, 2, "MES 技术说明",
+                                "表：mgy_device\n字段名\t类型\nid\tint\n\n表：a_banci\n字段名\t类型\nid\tint")
+                ));
+
+        RagChatResponse response = ragService.chat(RagChatRequest.builder()
+                .knowledgeBaseId(10L)
+                .question(question)
+                .build());
+
+        assertFalse(response.getNoContext());
+        assertTrue(response.getAnswer().contains("共 3 张"));
+        assertTrue(response.getAnswer().contains("`a_banci`"));
+        assertTrue(response.getAnswer().contains("`a_workorder`"));
+        assertTrue(response.getAnswer().contains("`mgy_device`"));
+        assertEquals(3, response.getCitations().size());
+        assertTrue(response.getDebugInfo().contains("跳过通用 topK 向量召回"));
+        verifyNoInteractions(chatQuestionCacheMapper, aiEmbeddingService, knowledgeVectorStore, webSearchService,
+                aiChatModelService);
+    }
+
+    @Test
     void chatShouldReturnFallbackAndSkipModelWhenNoHit() {
         mockConversationAndMessageIds();
         when(knowledgeBaseMapper.selectByIdAndTenantId(10L, 1L)).thenReturn(buildKnowledge("*"));
@@ -484,6 +612,25 @@ class RagServiceImplTest {
         });
     }
 
+    private void mockExistingConversationAndMessageIds() {
+        when(chatConversationMapper.selectByIdAndTenantIdAndDepartmentIdAndUserId(500L, 1L, 20L, 100L))
+                .thenReturn(AiChatConversationDO.builder()
+                        .id(500L)
+                        .tenantId(1L)
+                        .departmentId(20L)
+                        .knowledgeBaseId(10L)
+                        .userId(100L)
+                        .title("网络排查")
+                        .build());
+        AtomicLong messageId = new AtomicLong(1000L);
+        when(chatMessageMapper.insert(any(AiChatMessageDO.class))).thenAnswer(invocation -> {
+            AiChatMessageDO message = invocation.getArgument(0);
+            message.setId(messageId.getAndIncrement());
+            return 1;
+        });
+        when(chatConversationMapper.updateLastMessageTime(eq(500L), eq(1L), eq(20L), any())).thenReturn(1);
+    }
+
     private AiKnowledgeBaseDO buildKnowledge(String departmentIds) {
         return buildKnowledge(10L, "财务知识库", departmentIds);
     }
@@ -508,6 +655,18 @@ class RagServiceImplTest {
                 .content(content)
                 .metadataJson("{\"title\":\"" + title + "\"}")
                 .status(10)
+                .build();
+    }
+
+    private AiChatMessageDO buildMessage(Long id, String role, String content) {
+        return AiChatMessageDO.builder()
+                .id(id)
+                .tenantId(1L)
+                .departmentId(20L)
+                .conversationId(500L)
+                .userId(100L)
+                .role(role)
+                .content(content)
                 .build();
     }
 

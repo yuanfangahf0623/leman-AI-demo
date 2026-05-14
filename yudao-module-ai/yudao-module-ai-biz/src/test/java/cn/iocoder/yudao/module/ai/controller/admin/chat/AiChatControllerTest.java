@@ -41,6 +41,7 @@ class AiChatControllerTest {
         reqVO.setConversationId(3001L);
         reqVO.setQuestion("A 类设备点检周期是多久？");
         reqVO.setStream(false);
+        reqVO.setWebSearchEnabled(true);
         when(ragService.chat(org.mockito.ArgumentMatchers.any(RagChatRequest.class))).thenReturn(RagChatResponse.builder()
                 .conversationId(3001L)
                 .userMessageId(4001L)
@@ -69,6 +70,7 @@ class AiChatControllerTest {
         verify(ragService).chat(requestCaptor.capture());
         assertEquals(1001L, requestCaptor.getValue().getKnowledgeBaseId());
         assertEquals(3001L, requestCaptor.getValue().getConversationId());
+        assertEquals(true, requestCaptor.getValue().getWebSearchEnabled());
         assertEquals("A 类设备点检周期是多久？", requestCaptor.getValue().getQuestion());
     }
 

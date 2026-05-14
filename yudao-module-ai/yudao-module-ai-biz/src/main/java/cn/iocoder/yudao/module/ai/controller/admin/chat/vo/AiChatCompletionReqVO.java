@@ -43,4 +43,9 @@ public class AiChatCompletionReqVO {
      */
     private Boolean stream = false;
 
+    /**
+     * Whether this request may supplement knowledge-base hits with online search results.
+     */
+    private Boolean webSearchEnabled = false;
+
 }

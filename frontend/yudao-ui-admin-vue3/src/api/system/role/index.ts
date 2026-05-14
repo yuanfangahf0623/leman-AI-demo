@@ -37,6 +37,11 @@ export const updateRole = async (data: RoleVO) => {
   return await request.put({ url: '/system/role/update', data })
 }
 
+// 修改角色状态
+export const updateRoleStatus = async (id: number, status: number) => {
+  return await request.put({ url: '/system/role/update-status', data: { id, status } })
+}
+
 // 删除角色
 export const deleteRole = async (id: number) => {
   return await request.delete({ url: '/system/role/delete?id=' + id })

@@ -7,6 +7,7 @@ export interface AiChatCompletionReqVO {
   topK?: number
   scoreThreshold?: number
   stream: boolean
+  webSearchEnabled?: boolean
 }
 
 export interface AiChatCompletionCitationVO {

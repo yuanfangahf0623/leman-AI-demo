@@ -123,6 +123,12 @@
               :value="item.id"
             />
           </el-select>
+          <el-switch
+            v-model="formData.webSearchEnabled"
+            class="web-search-switch"
+            active-text="联网查询"
+            inactive-text="仅知识库"
+          />
           <el-tag v-if="activeConversationId" type="info">会话 {{ activeConversationId }}</el-tag>
           <el-tag v-else type="success">新对话</el-tag>
         </div>
@@ -320,7 +326,8 @@ const queryParams = reactive({
 
 const formData = reactive({
   knowledgeBaseId: ALL_KNOWLEDGE_BASE_ID as number | undefined,
-  question: ''
+  question: '',
+  webSearchEnabled: false
 })
 
 const currentQuestions = computed(() =>
@@ -542,7 +549,8 @@ const handleSend = async () => {
       knowledgeBaseId: formData.knowledgeBaseId,
       conversationId: activeConversationId.value,
       question,
-      stream: false
+      stream: false,
+      webSearchEnabled: formData.webSearchEnabled
     })
     const responseIds = applyCompletionResponse(data, userTempId, assistantTempId)
     await getConversationList()
@@ -1016,6 +1024,10 @@ onBeforeUnmount(() => {
 
 .knowledge-select {
   width: 260px;
+}
+
+.web-search-switch {
+  flex-shrink: 0;
 }
 
 .question-summary {

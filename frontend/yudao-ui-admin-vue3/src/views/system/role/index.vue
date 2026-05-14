@@ -108,7 +108,13 @@
       <el-table-column align="center" label="备注" prop="remark" />
       <el-table-column align="center" label="状态" prop="status">
         <template #default="scope">
-          <dict-tag :type="DICT_TYPE.COMMON_STATUS" :value="scope.row.status" />
+          <el-switch
+            v-model="scope.row.status"
+            :active-value="0"
+            :inactive-value="1"
+            :disabled="!checkPermi(['system:role:update'])"
+            @change="handleStatusChange(scope.row)"
+          />
         </template>
       </el-table-column>
       <el-table-column
@@ -179,6 +185,8 @@
 import { DICT_TYPE, getIntDictOptions } from '@/utils/dict'
 import { dateFormatter } from '@/utils/formatTime'
 import download from '@/utils/download'
+import { CommonStatusEnum } from '@/utils/constants'
+import { checkPermi } from '@/utils/permission'
 import * as RoleApi from '@/api/system/role'
 import RoleForm from './RoleForm.vue'
 import RoleAssignMenuForm from './RoleAssignMenuForm.vue'
@@ -243,6 +251,19 @@ const openDataPermissionForm = async (row: RoleApi.RoleVO) => {
 const assignMenuFormRef = ref()
 const openAssignMenuForm = async (row: RoleApi.RoleVO) => {
   assignMenuFormRef.value.open(row)
+}
+
+/** 修改角色状态 */
+const handleStatusChange = async (row: RoleApi.RoleVO) => {
+  try {
+    const text = row.status === CommonStatusEnum.ENABLE ? '启用' : '停用'
+    await message.confirm('确认要"' + text + '""' + row.name + '"角色吗?')
+    await RoleApi.updateRoleStatus(row.id, row.status)
+    await getList()
+  } catch {
+    row.status =
+      row.status === CommonStatusEnum.ENABLE ? CommonStatusEnum.DISABLE : CommonStatusEnum.ENABLE
+  }
 }
 
 /** 删除按钮操作 */

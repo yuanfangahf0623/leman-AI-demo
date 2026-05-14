@@ -77,4 +77,20 @@ public interface AiDocumentChunkMapper extends BaseMapper<AiDocumentChunkDO> {
                 .last("LIMIT " + safeLimit));
     }
 
+    default List<AiDocumentChunkDO> selectTableInventoryCandidates(Long tenantId, Long knowledgeBaseId,
+                                                                   Integer limit) {
+        if (tenantId == null || knowledgeBaseId == null) {
+            return Collections.emptyList();
+        }
+        int safeLimit = limit == null || limit <= 0 ? 200 : Math.min(limit, 500);
+        return selectList(Wrappers.lambdaQuery(AiDocumentChunkDO.class)
+                .eq(AiDocumentChunkDO::getTenantId, tenantId)
+                .eq(AiDocumentChunkDO::getKnowledgeBaseId, knowledgeBaseId)
+                .eq(AiDocumentChunkDO::getStatus, ChunkStatusEnum.SUCCESS.getCode())
+                .like(AiDocumentChunkDO::getContent, "表：")
+                .orderByAsc(AiDocumentChunkDO::getDocumentId)
+                .orderByAsc(AiDocumentChunkDO::getChunkIndex)
+                .last("LIMIT " + safeLimit));
+    }
+
 }
