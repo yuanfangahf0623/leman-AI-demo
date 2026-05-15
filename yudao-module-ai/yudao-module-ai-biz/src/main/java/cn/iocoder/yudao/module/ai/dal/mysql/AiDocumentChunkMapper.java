@@ -93,4 +93,20 @@ public interface AiDocumentChunkMapper extends BaseMapper<AiDocumentChunkDO> {
                 .last("LIMIT " + safeLimit));
     }
 
+    default List<AiDocumentChunkDO> selectClothingSizeSeedCandidates(Long tenantId, Long knowledgeBaseId,
+                                                                     Integer limit) {
+        if (tenantId == null || knowledgeBaseId == null) {
+            return Collections.emptyList();
+        }
+        int safeLimit = limit == null || limit <= 0 ? 20 : Math.min(limit, 100);
+        return selectList(Wrappers.lambdaQuery(AiDocumentChunkDO.class)
+                .eq(AiDocumentChunkDO::getTenantId, tenantId)
+                .eq(AiDocumentChunkDO::getKnowledgeBaseId, knowledgeBaseId)
+                .eq(AiDocumentChunkDO::getStatus, ChunkStatusEnum.SUCCESS.getCode())
+                .like(AiDocumentChunkDO::getContent, "工装尺寸")
+                .orderByAsc(AiDocumentChunkDO::getDocumentId)
+                .orderByAsc(AiDocumentChunkDO::getChunkIndex)
+                .last("LIMIT " + safeLimit));
+    }
+
 }

@@ -2,6 +2,7 @@ package cn.iocoder.yudao.module.ai.service.rag;
 
 import cn.iocoder.yudao.module.ai.framework.config.AiProperties;
 import cn.iocoder.yudao.module.ai.framework.vector.KnowledgeHit;
+import cn.iocoder.yudao.module.ai.service.rag.retrieval.RetrievalPlan;
 import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
@@ -41,6 +42,11 @@ public class PromptBuilder {
     }
 
     public PromptBuildResult build(String question, List<KnowledgeHit> knowledgeHits, String currentUserNickname) {
+        return build(question, knowledgeHits, currentUserNickname, null);
+    }
+
+    public PromptBuildResult build(String question, List<KnowledgeHit> knowledgeHits, String currentUserNickname,
+                                   RetrievalPlan retrievalPlan) {
         String safeQuestion = question == null ? "" : question.trim();
         String userContext = buildUserContext(currentUserNickname);
         int originalHitCount = knowledgeHits == null ? 0 : knowledgeHits.size();
@@ -61,7 +67,7 @@ public class PromptBuilder {
                 .context(contextBuildResult.context())
                 .estimatedContextTokens(estimateTokens(contextBuildResult.context()))
                 .debugInfo(buildDebugInfo(safeQuestion, userContext, originalHitCount, effectiveHits, contextBuildResult,
-                        SYSTEM_PROMPT, userPrompt, PromptBuildResult.STATUS_NORMAL))
+                        SYSTEM_PROMPT, userPrompt, PromptBuildResult.STATUS_NORMAL, retrievalPlan))
                 .knowledgeHits(contextBuildResult.knowledgeHits())
                 .build();
     }
@@ -148,7 +154,7 @@ public class PromptBuilder {
                 .context("")
                 .estimatedContextTokens(0)
                 .debugInfo(buildDebugInfo(question, userContext, originalHitCount, List.of(), contextBuildResult,
-                        SYSTEM_PROMPT, userPrompt, PromptBuildResult.STATUS_NO_CONTEXT))
+                        SYSTEM_PROMPT, userPrompt, PromptBuildResult.STATUS_NO_CONTEXT, null))
                 .knowledgeHits(List.of())
                 .build();
     }
@@ -179,8 +185,9 @@ public class PromptBuilder {
     private String buildDebugInfo(String question, String userContext, int originalHitCount,
                                   List<KnowledgeHit> effectiveHits,
                                   ContextBuildResult contextBuildResult, String systemPrompt, String userPrompt,
-                                  String status) {
+                                  String status, RetrievalPlan retrievalPlan) {
         StringBuilder debug = new StringBuilder();
+        appendRetrievalPlanDebug(debug, retrievalPlan);
         debug.append("## RAG Prompt 调试信息\n");
         debug.append("> 说明：以下为可复现的 RAG 构造过程，不包含模型内部思考过程。\n\n");
         debug.append("### 1. 如何选择命中的 KnowledgeHit\n");
@@ -230,6 +237,21 @@ public class PromptBuilder {
         debug.append("\n### 7. 用户问题\n");
         debug.append(question);
         return debug.toString();
+    }
+
+    private void appendRetrievalPlanDebug(StringBuilder debug, RetrievalPlan retrievalPlan) {
+        if (retrievalPlan == null) {
+            return;
+        }
+        debug.append("### 0. 检索计划\n");
+        debug.append("- mode：").append(retrievalPlan.getMode()).append("\n");
+        debug.append("- questionType：").append(retrievalPlan.getQuestionType()).append("\n");
+        debug.append("- reason：").append(retrievalPlan.getReason()).append("\n");
+        debug.append("- fullDocumentRequired：").append(retrievalPlan.isFullDocumentRequired()).append("\n");
+        debug.append("- structuredDataRequired：").append(retrievalPlan.isStructuredDataRequired()).append("\n");
+        debug.append("- strictEvidenceRequired：").append(retrievalPlan.isStrictEvidenceRequired()).append("\n\n");
+        debug.append("- preferredFileTypes：").append(retrievalPlan.getPreferredFileTypes()).append("\n");
+        debug.append("- executionNotes：").append(retrievalPlan.getExecutionNotes()).append("\n\n");
     }
 
     private String normalizeDocumentTitle(KnowledgeHit hit) {

@@ -23,6 +23,7 @@ import cn.iocoder.yudao.module.ai.service.chatmodel.AiChatModelRequest;
 import cn.iocoder.yudao.module.ai.service.chatmodel.AiChatModelResponse;
 import cn.iocoder.yudao.module.ai.service.chatmodel.AiChatModelService;
 import cn.iocoder.yudao.module.ai.service.embedding.AiEmbeddingService;
+import cn.iocoder.yudao.module.ai.service.rag.retrieval.RetrievalPlanner;
 import cn.iocoder.yudao.module.ai.service.rag.sensitive.PersonalSensitiveDataPolicy;
 import cn.iocoder.yudao.module.ai.service.websearch.WebSearchResult;
 import cn.iocoder.yudao.module.ai.service.websearch.WebSearchService;
@@ -91,8 +92,8 @@ class RagServiceImplTest {
         objectMapper = new ObjectMapper();
         ragService = new RagServiceImpl(knowledgeBaseMapper, chatConversationMapper, chatMessageMapper,
                 chatCitationMapper, chatQuestionCacheMapper, documentChunkMapper, aiEmbeddingService,
-                knowledgeVectorStore, webSearchService, new PromptBuilder(aiProperties), aiChatModelService, objectMapper,
-                aiProperties, new PersonalSensitiveDataPolicy(null));
+                knowledgeVectorStore, webSearchService, new PromptBuilder(aiProperties), new RetrievalPlanner(),
+                aiChatModelService, objectMapper, aiProperties, new PersonalSensitiveDataPolicy(null));
     }
 
     @AfterEach
@@ -462,6 +463,169 @@ class RagServiceImplTest {
         verify(chatMessageMapper, times(2)).insert(messageCaptor.capture());
         assertEquals(followUp, messageCaptor.getAllValues().get(0).getContent());
         verify(chatQuestionCacheMapper, never()).selectLatest(any(), any(), any(), anyString());
+    }
+
+    @Test
+    void chatShouldCorrectClothingSizeCountWithoutCallingModel() {
+        mockExistingConversationAndMessageIds();
+        String previousAnswer = """
+                结论：按当前知识库片段中可见且已填写尺寸的工装记录统计，共 **86 件**。
+
+                | 工装尺寸 | 数量 |
+                |---|---:|
+                | S | 1 |
+                | M | 5 |
+                | L | 8 |
+                | XL | 18 |
+                | 2XL | 21 |
+                | 3XL | 22 |
+                | 4XL | 8 |
+                | 5XL | 3 |
+                | **合计** | **86** |
+
+                其中“姬华”这一行在片段中未显示工装尺寸，未纳入统计。
+                """;
+        when(knowledgeBaseMapper.selectByIdAndTenantId(10L, 1L)).thenReturn(buildKnowledge("*"));
+        when(chatMessageMapper.selectListByConversationId(500L, 1L)).thenReturn(List.of(
+                buildMessage(900L, ChatMessageRoleEnum.USER.getCode(), "帮我统计一下工装对应尺寸的数量"),
+                buildMessage(901L, ChatMessageRoleEnum.ASSISTANT.getCode(), previousAnswer)
+        ));
+
+        RagChatResponse response = ragService.chat(RagChatRequest.builder()
+                .knowledgeBaseId(10L)
+                .conversationId(500L)
+                .question("我看了一下姬华是4XL")
+                .build());
+
+        assertFalse(response.getNoContext());
+        assertTrue(response.getAnswer().contains("工装合计更新为 **87 件**"));
+        assertTrue(response.getAnswer().contains("| 4XL | 9 |"));
+        assertTrue(response.getCitations().isEmpty());
+        verifyNoInteractions(chatQuestionCacheMapper, aiEmbeddingService, knowledgeVectorStore, webSearchService,
+                aiChatModelService);
+    }
+
+    @Test
+    void chatShouldCountClothingSizesFromAllDocumentChunks() {
+        mockConversationAndMessageIds();
+        mockCitationId();
+        String chunkOneContent = """
+                Sheet: 工装统计表
+                人员\t工装尺寸\t部门\t车间\t
+                张三\tM\t生产部\t
+                李四\tXL\t生产部\t
+                王五\t2XL\t生产部\t""";
+        String chunkTwoContent = """
+                王五\t2XL\t生产部\t
+                姬华\t4XL\t信息化部\t
+                赵六\t4XL\t信息化部\t""";
+        AiDocumentChunkDO chunkOne = buildChunk(410L, 27L, 1, "理文科技夏季工装统计表(1)", chunkOneContent);
+        AiDocumentChunkDO chunkTwo = buildChunk(411L, 27L, 2, "理文科技夏季工装统计表(1)", chunkTwoContent);
+        when(knowledgeBaseMapper.selectByIdAndTenantId(10L, 1L)).thenReturn(buildKnowledge("*"));
+        when(documentChunkMapper.selectClothingSizeSeedCandidates(eq(1L), eq(10L), eq(50)))
+                .thenReturn(List.of(chunkOne));
+        when(documentChunkMapper.selectListByDocumentIdAndTenantId(27L, 10L, 1L))
+                .thenReturn(List.of(chunkOne, chunkTwo));
+
+        RagChatResponse response = ragService.chat(RagChatRequest.builder()
+                .knowledgeBaseId(10L)
+                .question("帮我统计一下工装对应尺寸的数量")
+                .build());
+
+        assertFalse(response.getNoContext());
+        assertTrue(response.getAnswer().contains("共 **5 条**"));
+        assertTrue(response.getAnswer().contains("| M | 1 |"));
+        assertTrue(response.getAnswer().contains("| XL | 1 |"));
+        assertTrue(response.getAnswer().contains("| 2XL | 1 |"));
+        assertTrue(response.getAnswer().contains("| 4XL | 2 |"));
+        assertTrue(response.getDebugInfo().contains("同一 documentId 下全部有效 chunk"));
+        assertEquals(2, response.getCitations().size());
+        verifyNoInteractions(chatQuestionCacheMapper, aiEmbeddingService, knowledgeVectorStore, webSearchService,
+                aiChatModelService);
+    }
+
+    @Test
+    void chatShouldReusePreviousClothingCorrectionWhenUserRetries() {
+        mockExistingConversationAndMessageIds();
+        String previousAnswer = """
+                结论：已确认 **姬华为 4XL**。按上一轮统计口径修正后，工装合计由 **86 件** 更新为 **87 件**，其中 **4XL 由 8 件更新为 9 件**。
+
+                | 工装尺寸 | 修正后数量 |
+                |---|---:|
+                | 4XL | 9 |
+                | **合计** | **87** |
+                """;
+        when(knowledgeBaseMapper.selectByIdAndTenantId(10L, 1L)).thenReturn(buildKnowledge("*"));
+        when(chatMessageMapper.selectListByConversationId(500L, 1L)).thenReturn(List.of(
+                buildMessage(900L, ChatMessageRoleEnum.USER.getCode(), "我看了一下姬华是4xl"),
+                buildMessage(901L, ChatMessageRoleEnum.ASSISTANT.getCode(), previousAnswer)
+        ));
+
+        RagChatResponse response = ragService.chat(RagChatRequest.builder()
+                .knowledgeBaseId(10L)
+                .conversationId(500L)
+                .question("我看了一下姬华是4XL")
+                .build());
+
+        assertFalse(response.getNoContext());
+        assertEquals(previousAnswer, response.getAnswer());
+        verifyNoInteractions(chatQuestionCacheMapper, aiEmbeddingService, knowledgeVectorStore, webSearchService,
+                aiChatModelService);
+    }
+
+    @Test
+    void chatShouldExpandFullStructuredDocumentForStatisticalQuestion() {
+        mockConversationAndMessageIds();
+        mockCitationId();
+        String question = "帮我统计废品表的合计数量";
+        String firstChunkContent = """
+                Sheet: 废品统计表
+                项目\t数量
+                A\t1
+                B\t2""";
+        String secondChunkContent = """
+                B\t2
+                C\t3""";
+        AiDocumentChunkDO firstChunk = buildChunk(510L, 30L, 1, "废品统计表", firstChunkContent);
+        AiDocumentChunkDO secondChunk = buildChunk(511L, 30L, 2, "废品统计表", secondChunkContent);
+        when(knowledgeBaseMapper.selectByIdAndTenantId(10L, 1L)).thenReturn(buildKnowledge("*"));
+        when(aiEmbeddingService.embed(question)).thenReturn(List.of(1.0D, 0.0D));
+        when(knowledgeVectorStore.search(any(KnowledgeSearchRequest.class))).thenReturn(List.of(KnowledgeHit.builder()
+                .tenantId(1L)
+                .knowledgeBaseId(10L)
+                .documentId(30L)
+                .chunkId(510L)
+                .chunkNo(1)
+                .documentTitle("废品统计表")
+                .content(firstChunkContent)
+                .score(0.91D)
+                .metadata(Map.of("title", "废品统计表", "source", Map.of("parser", "ExcelDocumentParser")))
+                .build()));
+        when(documentChunkMapper.selectListByDocumentIdAndTenantId(30L, 10L, 1L))
+                .thenReturn(List.of(firstChunk, secondChunk));
+        when(aiChatModelService.chat(any(AiChatModelRequest.class))).thenReturn(AiChatModelResponse.builder()
+                .model("unit-test-chat-model")
+                .content("废品数量合计为 6。")
+                .promptTokens(20)
+                .completionTokens(6)
+                .totalTokens(26)
+                .build());
+
+        RagChatResponse response = ragService.chat(RagChatRequest.builder()
+                .knowledgeBaseId(10L)
+                .question(question)
+                .build());
+
+        assertFalse(response.getNoContext());
+        assertEquals("废品数量合计为 6。", response.getAnswer());
+        assertEquals(1, response.getCitations().size());
+        assertEquals(30L, response.getCitations().get(0).getDocumentId());
+
+        ArgumentCaptor<AiChatModelRequest> chatCaptor = ArgumentCaptor.forClass(AiChatModelRequest.class);
+        verify(aiChatModelService).chat(chatCaptor.capture());
+        assertTrue(chatCaptor.getValue().getUserPrompt().contains("C\t3"));
+        assertEquals(1, chatCaptor.getValue().getUserPrompt().split("B\t2", -1).length - 1);
+        verify(documentChunkMapper).selectListByDocumentIdAndTenantId(30L, 10L, 1L);
     }
 
     @Test

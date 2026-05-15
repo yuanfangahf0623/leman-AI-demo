@@ -14,6 +14,7 @@ import cn.iocoder.yudao.module.ai.dal.mysql.AiChatQuestionCacheMapper;
 import cn.iocoder.yudao.module.ai.dal.mysql.AiDocumentChunkMapper;
 import cn.iocoder.yudao.module.ai.dal.mysql.AiKnowledgeBaseMapper;
 import cn.iocoder.yudao.module.ai.enums.ChatMessageRoleEnum;
+import cn.iocoder.yudao.module.ai.enums.ChunkStatusEnum;
 import cn.iocoder.yudao.module.ai.enums.KnowledgeVisibilityEnum;
 import cn.iocoder.yudao.module.ai.framework.config.AiProperties;
 import cn.iocoder.yudao.module.ai.framework.tenant.AiUserContextHolder;
@@ -24,6 +25,9 @@ import cn.iocoder.yudao.module.ai.service.chatmodel.AiChatModelRequest;
 import cn.iocoder.yudao.module.ai.service.chatmodel.AiChatModelResponse;
 import cn.iocoder.yudao.module.ai.service.chatmodel.AiChatModelService;
 import cn.iocoder.yudao.module.ai.service.embedding.AiEmbeddingService;
+import cn.iocoder.yudao.module.ai.service.rag.retrieval.RetrievalModeEnum;
+import cn.iocoder.yudao.module.ai.service.rag.retrieval.RetrievalPlan;
+import cn.iocoder.yudao.module.ai.service.rag.retrieval.RetrievalPlanner;
 import cn.iocoder.yudao.module.ai.service.rag.sensitive.PersonalSensitiveDataPolicy;
 import cn.iocoder.yudao.module.ai.service.websearch.WebSearchResult;
 import cn.iocoder.yudao.module.ai.service.websearch.WebSearchService;
@@ -89,6 +93,10 @@ public class RagServiceImpl implements RagService {
     private static final int CONVERSATION_CONTEXT_MESSAGE_LIMIT = 6;
     private static final int CONVERSATION_CONTEXT_MAX_CHARS = 1200;
     private static final int SHORT_FOLLOW_UP_MAX_LENGTH = 18;
+    private static final int STRUCTURED_DOCUMENT_EXPANSION_MAX_CHUNKS = 500;
+    private static final int STRUCTURED_DOCUMENT_EXPANSION_MAX_CHARS = 120_000;
+    private static final int CLOTHING_SIZE_SEED_LIMIT = 50;
+    private static final int CLOTHING_SIZE_CITATION_LIMIT = 4;
     private static final double WEB_SEARCH_SCORE = 0.5D;
     private static final TypeReference<Map<String, Object>> METADATA_TYPE = new TypeReference<>() {
     };
@@ -96,6 +104,9 @@ public class RagServiceImpl implements RagService {
     };
     private static final Pattern ASCII_WORD_PATTERN = Pattern.compile("[A-Za-z][A-Za-z0-9.+#-]{1,}");
     private static final Pattern TABLE_NAME_PATTERN = Pattern.compile("表：\\s*([^\\s]+)");
+    private static final Pattern CLOTHING_SIZE_PATTERN = Pattern.compile("(?i)(?:^|[^A-Z0-9])([2-9]XL|10XL|XL|XS|S|M|L)(?:[^A-Z0-9]|$)");
+    private static final Pattern CLOTHING_SIZE_COUNT_PATTERN = Pattern.compile("\\|\\s*(XS|S|M|L|XL|[2-9]XL|10XL)\\s*\\|\\s*\\*?\\*?(\\d+)\\*?\\*?\\s*\\|",
+            Pattern.CASE_INSENSITIVE);
     private static final Set<String> QUERY_STOP_WORDS = Set.of("目前", "现在", "现有", "当前", "请问", "哪些", "什么",
             "是什么", "有哪些", "有那些", "多少", "如何", "怎么", "可以", "一下", "如果", "情况下", "的情况下");
     private static final Set<String> SELF_IDENTITY_QUESTIONS = Set.of("我是谁", "请问我是谁", "我叫什么",
@@ -116,6 +127,13 @@ public class RagServiceImpl implements RagService {
             "它", "他", "她", "这里", "那里", "换成", "改成", "如果是", "那如果");
     private static final List<String> STANDALONE_INTENT_WORDS = List.of("什么", "哪些", "多少", "怎么",
             "如何", "为什么", "是否", "能不能", "需要", "可以", "排查", "统计", "查询", "翻译", "总结", "是谁");
+    private static final List<String> STATISTICAL_QUESTION_KEYWORDS = List.of("统计", "汇总", "合计", "总数", "数量",
+            "多少", "几条", "几项", "几个", "占比", "比例", "平均", "最大", "最小", "明细", "清单", "对应", "count",
+            "total", "sum", "average", "avg", "max", "min");
+    private static final List<String> STRUCTURED_DOCUMENT_KEYWORDS = List.of("Sheet:", "\t", "表：", "表:", "字段名称",
+            "字段名", "工装尺寸", "数据表", "数据库表");
+    private static final List<String> CLOTHING_SIZE_ORDER = List.of("XS", "S", "M", "L", "XL", "2XL", "3XL", "4XL",
+            "5XL", "6XL", "7XL", "8XL", "9XL", "10XL");
 
     private final AiKnowledgeBaseMapper knowledgeBaseMapper;
     private final AiChatConversationMapper chatConversationMapper;
@@ -127,6 +145,7 @@ public class RagServiceImpl implements RagService {
     private final KnowledgeVectorStore knowledgeVectorStore;
     private final WebSearchService webSearchService;
     private final PromptBuilder promptBuilder;
+    private final RetrievalPlanner retrievalPlanner;
     private final AiChatModelService aiChatModelService;
     private final ObjectMapper objectMapper;
     private final AiProperties aiProperties;
@@ -167,10 +186,26 @@ public class RagServiceImpl implements RagService {
         }
         AiChatMessageDO userMessage = saveMessage(tenantId, departmentId, conversation.getId(), userId,
                 ChatMessageRoleEnum.USER.getCode(), request.getQuestion(), null, 0L);
+        RetrievalPlan retrievalPlan = retrievalPlanner.plan(effectiveQuestion);
 
         if (isSelfIdentityQuestion(normalizedQuestion)) {
             return saveCurrentUserIdentityAnswer(conversation, userMessage, tenantId, departmentId, userId,
                     currentUserNickname, startNanos);
+        }
+
+        boolean clothingSizeCountQuestion = isClothingSizeCountQuestion(effectiveQuestion, normalizedEffectiveQuestion);
+        if (clothingSizeCountQuestion) {
+            RagChatResponse clothingSizeCountResponse = tryAnswerClothingSizeCount(request, knowledgeBases,
+                    conversation, userMessage, tenantId, departmentId, userId, startNanos, effectiveQuestion);
+            if (clothingSizeCountResponse != null) {
+                return clothingSizeCountResponse;
+            }
+        }
+
+        RagChatResponse clothingCorrectionResponse = tryAnswerClothingSizeCorrection(request.getQuestion(),
+                conversationContext, conversation, userMessage, tenantId, departmentId, userId, startNanos);
+        if (clothingCorrectionResponse != null) {
+            return clothingCorrectionResponse;
         }
 
         boolean tableInventoryQuestion = isTableInventoryQuestion(effectiveQuestion, normalizedEffectiveQuestion);
@@ -184,8 +219,9 @@ public class RagServiceImpl implements RagService {
 
         String questionHash = sha256Hex(QUESTION_CACHE_VERSION + ":" + normalizedEffectiveQuestion);
         boolean userContextSensitive = isUserContextSensitiveQuestion(normalizedEffectiveQuestion);
-        boolean cacheableQuestion = !conversationContextApplied && !tableInventoryQuestion && !webSearchRequested
-                && !allKnowledgeBase && !userContextSensitive && !personalSensitive;
+        boolean cacheableQuestion = !conversationContextApplied && !clothingSizeCountQuestion && !tableInventoryQuestion
+                && retrievalPlan.isCacheable() && !webSearchRequested && !allKnowledgeBase
+                && !userContextSensitive && !personalSensitive;
         if (cacheableQuestion) {
             AiChatQuestionCacheDO cachedAnswer = chatQuestionCacheMapper.selectLatest(tenantId, departmentId,
                     primaryKnowledgeBase.getId(), questionHash);
@@ -205,8 +241,9 @@ public class RagServiceImpl implements RagService {
             log.info("RAG web search skipped for personal sensitive question, tenantId={}, departmentId={}, knowledgeBaseId={}, conversationId={}",
                     tenantId, departmentId, conversationKnowledgeBaseId, conversation.getId());
         }
+        hits = expandHitsByRetrievalPlan(retrievalPlan, hits, tenantId);
         int hitCount = hits == null ? 0 : hits.size();
-        PromptBuildResult prompt = promptBuilder.build(effectiveQuestion, hits, currentUserNickname);
+        PromptBuildResult prompt = promptBuilder.build(effectiveQuestion, hits, currentUserNickname, retrievalPlan);
         if (prompt.isNoContext()) {
             RagChatResponse response = saveFallbackAnswer(conversation, userMessage, tenantId, departmentId, userId,
                     prompt.getDebugInfo());
@@ -481,6 +518,348 @@ public class RagServiceImpl implements RagService {
             return "你是" + currentUserNickname.trim() + "。";
         }
         return "你是当前登录用户（用户 ID：" + userId + "）。";
+    }
+
+    private RagChatResponse tryAnswerClothingSizeCount(RagChatRequest request, List<AiKnowledgeBaseDO> knowledgeBases,
+                                                       AiChatConversationDO conversation, AiChatMessageDO userMessage,
+                                                       Long tenantId, Long departmentId, Long userId,
+                                                       long startNanos, String effectiveQuestion) {
+        ClothingSizeCountResult result = collectClothingSizeCounts(tenantId, knowledgeBases);
+        if (result.totalCount() <= 0) {
+            return null;
+        }
+        String answer = buildClothingSizeCountAnswer(result);
+        AiChatMessageDO assistantMessage = saveMessage(tenantId, departmentId, conversation.getId(), userId,
+                ChatMessageRoleEnum.ASSISTANT.getCode(), answer, null, 0L);
+        List<RagChatCitation> citations = saveCitations(tenantId, departmentId, assistantMessage.getId(),
+                request.getKnowledgeBaseId(), buildClothingSizeCitationHits(result));
+        updateConversationLastMessageTime(conversation.getId(), tenantId, departmentId);
+        log.info("RAG clothing size count answered directly, tenantId={}, departmentId={}, knowledgeBaseId={}, conversationId={}, documentCount={}, totalCount={}, citationCount={}, elapsedMs={}",
+                tenantId, departmentId, request.getKnowledgeBaseId(), conversation.getId(),
+                result.documentCount(), result.totalCount(), citations.size(), elapsedMillis(startNanos));
+        return RagChatResponse.builder()
+                .conversationId(conversation.getId())
+                .userMessageId(userMessage.getId())
+                .assistantMessageId(assistantMessage.getId())
+                .answer(answer)
+                .noContext(false)
+                .debugInfo(buildClothingSizeCountDebugInfo(effectiveQuestion, result))
+                .citations(citations)
+                .build();
+    }
+
+    private ClothingSizeCountResult collectClothingSizeCounts(Long tenantId, List<AiKnowledgeBaseDO> knowledgeBases) {
+        Map<String, Integer> sizeCounts = initSizeCountMap();
+        Map<String, KnowledgeHit> citationHits = new LinkedHashMap<>();
+        Set<Long> handledDocumentIds = new LinkedHashSet<>();
+        int total = 0;
+        for (AiKnowledgeBaseDO knowledgeBase : knowledgeBases) {
+            List<AiDocumentChunkDO> seedChunks = documentChunkMapper.selectClothingSizeSeedCandidates(tenantId,
+                    knowledgeBase.getId(), CLOTHING_SIZE_SEED_LIMIT);
+            if (seedChunks == null || seedChunks.isEmpty()) {
+                continue;
+            }
+            for (AiDocumentChunkDO seedChunk : seedChunks) {
+                if (!handledDocumentIds.add(seedChunk.getDocumentId())) {
+                    continue;
+                }
+                List<AiDocumentChunkDO> documentChunks = documentChunkMapper.selectListByDocumentIdAndTenantId(
+                        seedChunk.getDocumentId(), seedChunk.getKnowledgeBaseId(), tenantId);
+                String content = mergeChunkContents(documentChunks);
+                ClothingSizeParseResult parseResult = parseClothingSizeRows(content);
+                if (parseResult.totalCount() <= 0) {
+                    continue;
+                }
+                total += parseResult.totalCount();
+                parseResult.sizeCounts().forEach((size, count) ->
+                        sizeCounts.put(size, sizeCounts.getOrDefault(size, 0) + count));
+                appendClothingSizeCitationHits(citationHits, knowledgeBase, documentChunks);
+            }
+        }
+        sizeCounts.entrySet().removeIf(entry -> entry.getValue() == null || entry.getValue() <= 0);
+        return new ClothingSizeCountResult(sizeCounts, total, handledDocumentIds.size(),
+                new ArrayList<>(citationHits.values()));
+    }
+
+    private Map<String, Integer> initSizeCountMap() {
+        Map<String, Integer> sizeCounts = new LinkedHashMap<>();
+        for (String size : CLOTHING_SIZE_ORDER) {
+            sizeCounts.put(size, 0);
+        }
+        return sizeCounts;
+    }
+
+    private String mergeChunkContents(List<AiDocumentChunkDO> chunks) {
+        if (chunks == null || chunks.isEmpty()) {
+            return "";
+        }
+        StringBuilder merged = new StringBuilder();
+        chunks.stream()
+                .sorted(Comparator.comparing(AiDocumentChunkDO::getChunkIndex,
+                        Comparator.nullsLast(Integer::compareTo)))
+                .forEach(chunk -> appendChunkWithoutDuplicateOverlap(merged, chunk.getContent()));
+        return merged.toString();
+    }
+
+    private void appendChunkWithoutDuplicateOverlap(StringBuilder merged, String nextContent) {
+        if (nextContent == null || nextContent.isBlank()) {
+            return;
+        }
+        if (merged.length() == 0) {
+            merged.append(nextContent);
+            return;
+        }
+        int overlapLength = findOverlapLength(merged, nextContent);
+        if (overlapLength > 0) {
+            merged.append(nextContent.substring(overlapLength));
+            return;
+        }
+        merged.append('\n').append(nextContent);
+    }
+
+    private int findOverlapLength(StringBuilder merged, String nextContent) {
+        int maxLength = Math.min(merged.length(), nextContent.length());
+        for (int length = maxLength; length > 0; length--) {
+            if (endsWith(merged, nextContent, length)) {
+                return length;
+            }
+        }
+        return 0;
+    }
+
+    private boolean endsWith(StringBuilder merged, String nextContent, int length) {
+        int offset = merged.length() - length;
+        for (int i = 0; i < length; i++) {
+            if (merged.charAt(offset + i) != nextContent.charAt(i)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private ClothingSizeParseResult parseClothingSizeRows(String content) {
+        Map<String, Integer> sizeCounts = initSizeCountMap();
+        int total = 0;
+        if (content == null || content.isBlank()) {
+            return new ClothingSizeParseResult(sizeCounts, total);
+        }
+        for (String line : content.split("\\R")) {
+            String normalizedLine = line == null ? "" : line.trim();
+            if (normalizedLine.isBlank() || normalizedLine.startsWith("Sheet:")
+                    || normalizedLine.startsWith("人员\t")) {
+                continue;
+            }
+            String[] columns = normalizedLine.split("\\t", -1);
+            if (columns.length < 2) {
+                continue;
+            }
+            String name = columns[0].trim();
+            String size = normalizeClothingSize(columns[1]);
+            if (name.isBlank() || size == null) {
+                continue;
+            }
+            sizeCounts.put(size, sizeCounts.getOrDefault(size, 0) + 1);
+            total++;
+        }
+        sizeCounts.entrySet().removeIf(entry -> entry.getValue() == null || entry.getValue() <= 0);
+        return new ClothingSizeParseResult(sizeCounts, total);
+    }
+
+    private String normalizeClothingSize(String value) {
+        if (value == null) {
+            return null;
+        }
+        String normalized = value.trim().toUpperCase(Locale.ROOT);
+        return CLOTHING_SIZE_ORDER.contains(normalized) ? normalized : null;
+    }
+
+    private void appendClothingSizeCitationHits(Map<String, KnowledgeHit> citationHits, AiKnowledgeBaseDO knowledgeBase,
+                                                List<AiDocumentChunkDO> chunks) {
+        if (chunks == null || chunks.isEmpty()) {
+            return;
+        }
+        for (AiDocumentChunkDO chunk : chunks) {
+            if (citationHits.size() >= CLOTHING_SIZE_CITATION_LIMIT) {
+                return;
+            }
+            Map<String, Object> metadata = parseMetadata(chunk.getMetadataJson());
+            citationHits.putIfAbsent(buildChunkCitationKey(chunk), KnowledgeHit.builder()
+                    .tenantId(chunk.getTenantId())
+                    .knowledgeBaseId(knowledgeBase.getId())
+                    .documentId(chunk.getDocumentId())
+                    .chunkId(chunk.getId())
+                    .chunkNo(chunk.getChunkIndex())
+                    .documentTitle(extractDocumentTitle(metadata))
+                    .content(chunk.getContent())
+                    .score(1.0D)
+                    .metadata(metadata)
+                    .build());
+        }
+    }
+
+    private String buildChunkCitationKey(AiDocumentChunkDO chunk) {
+        return "chunk:" + chunk.getId();
+    }
+
+    private List<KnowledgeHit> buildClothingSizeCitationHits(ClothingSizeCountResult result) {
+        return result.citationHits().stream()
+                .limit(CLOTHING_SIZE_CITATION_LIMIT)
+                .toList();
+    }
+
+    private String buildClothingSizeCountAnswer(ClothingSizeCountResult result) {
+        StringBuilder answer = new StringBuilder();
+        answer.append("结论：按当前知识库中已解析的工装统计表逐行统计，共 **")
+                .append(result.totalCount())
+                .append(" 条**。\n\n");
+        answer.append("| 工装尺寸 | 数量 |\n");
+        answer.append("|---|---:|\n");
+        for (String size : CLOTHING_SIZE_ORDER) {
+            Integer count = result.sizeCounts().get(size);
+            if (count != null && count > 0) {
+                answer.append("| ").append(size).append(" | ").append(count).append(" |\n");
+            }
+        }
+        answer.append("| **合计** | **").append(result.totalCount()).append("** |\n\n");
+        answer.append("说明：本次统计不是让模型从少量引用片段里人工数表，而是把同一文档的所有 chunk 按 overlap 合并还原后，按“人员 / 工装尺寸”列逐行统计。");
+        return answer.toString();
+    }
+
+    private String buildClothingSizeCountDebugInfo(String question, ClothingSizeCountResult result) {
+        return """
+                ## 工装尺寸统计调试信息
+                - 用户问题：%s
+                - 识别逻辑：命中“工装 + 尺寸 + 统计/数量/多少/对应”等问题意图后，跳过通用 topK 向量召回和模型人工计数。
+                - 扫描方式：先找到包含“工装尺寸”表头的 chunk，再读取同一 documentId 下全部有效 chunk。
+                - 合并方式：按 chunk_index 排序，自动移除切片 overlap，避免重复计数和半行截断。
+                - 统计方式：按行解析“人员 / 工装尺寸”两列，识别 XS/S/M/L/XL/2XL...10XL。
+                - 参与统计文档数：%d
+                - 识别总条数：%d
+                """.formatted(question, result.documentCount(), result.totalCount());
+    }
+
+    private boolean isClothingSizeCountQuestion(String question, String normalizedQuestion) {
+        String source = ((question == null ? "" : question) + "\n"
+                + (normalizedQuestion == null ? "" : normalizedQuestion));
+        boolean clothingTerm = containsAnyIgnoreCase(source, List.of("工装", "衣服", "尺码"));
+        boolean sizeTerm = containsAnyIgnoreCase(source, List.of("尺寸", "尺码", "size"));
+        boolean countTerm = containsAnyIgnoreCase(source, List.of("统计", "数量", "多少", "合计", "对应", "count"));
+        return clothingTerm && sizeTerm && countTerm;
+    }
+
+    private RagChatResponse tryAnswerClothingSizeCorrection(String question, List<AiChatMessageDO> conversationContext,
+                                                            AiChatConversationDO conversation,
+                                                            AiChatMessageDO userMessage, Long tenantId,
+                                                            Long departmentId, Long userId, long startNanos) {
+        String correctedSize = extractClothingSize(question);
+        if (correctedSize == null || conversationContext == null || conversationContext.isEmpty()) {
+            return null;
+        }
+        AiChatMessageDO latestAssistant = findLatestAssistantMessage(conversationContext);
+        if (latestAssistant == null || latestAssistant.getContent() == null
+                || !latestAssistant.getContent().contains("工装尺寸")) {
+            return null;
+        }
+        if (!latestAssistant.getContent().contains("未纳入统计")
+                && !latestAssistant.getContent().contains("未显示工装尺寸")
+                && !latestAssistant.getContent().contains("已确认")) {
+            return null;
+        }
+        if (latestAssistant.getContent().contains("已确认") && latestAssistant.getContent().contains(correctedSize)) {
+            return saveDirectAnswer(conversation, userMessage, tenantId, departmentId, userId,
+                    latestAssistant.getContent(), "命中上一轮工装尺寸修正结果，避免重复调用模型。", startNanos);
+        }
+
+        Map<String, Integer> sizeCounts = parseClothingSizeCounts(latestAssistant.getContent());
+        if (sizeCounts.isEmpty()) {
+            return null;
+        }
+        int total = sizeCounts.values().stream().reduce(0, Integer::sum);
+        sizeCounts.put(correctedSize, sizeCounts.getOrDefault(correctedSize, 0) + 1);
+        String answer = buildClothingSizeCorrectionAnswer(question, correctedSize, sizeCounts, total + 1);
+        return saveDirectAnswer(conversation, userMessage, tenantId, departmentId, userId, answer,
+                "命中工装尺寸人工修正，基于上一轮统计表格直接更新数量，跳过 embedding、向量检索和模型调用。", startNanos);
+    }
+
+    private AiChatMessageDO findLatestAssistantMessage(List<AiChatMessageDO> conversationContext) {
+        for (int i = conversationContext.size() - 1; i >= 0; i--) {
+            AiChatMessageDO message = conversationContext.get(i);
+            if (message != null && ChatMessageRoleEnum.ASSISTANT.getCode().equals(message.getRole())) {
+                return message;
+            }
+        }
+        return null;
+    }
+
+    private String extractClothingSize(String question) {
+        if (question == null || question.isBlank()) {
+            return null;
+        }
+        Matcher matcher = CLOTHING_SIZE_PATTERN.matcher(question.toUpperCase(Locale.ROOT));
+        if (!matcher.find()) {
+            return null;
+        }
+        return matcher.group(1).toUpperCase(Locale.ROOT);
+    }
+
+    private Map<String, Integer> parseClothingSizeCounts(String content) {
+        Map<String, Integer> sizeCounts = new LinkedHashMap<>();
+        if (content == null || content.isBlank()) {
+            return sizeCounts;
+        }
+        Matcher matcher = CLOTHING_SIZE_COUNT_PATTERN.matcher(content);
+        while (matcher.find()) {
+            String size = matcher.group(1).toUpperCase(Locale.ROOT);
+            if (!CLOTHING_SIZE_ORDER.contains(size)) {
+                continue;
+            }
+            sizeCounts.put(size, Integer.parseInt(matcher.group(2)));
+        }
+        return sizeCounts;
+    }
+
+    private String buildClothingSizeCorrectionAnswer(String question, String correctedSize,
+                                                     Map<String, Integer> sizeCounts, int total) {
+        StringBuilder answer = new StringBuilder();
+        answer.append("结论：已按你的修正确认 `")
+                .append(question == null ? "" : question.trim())
+                .append("`。按上一轮统计口径修正后，工装合计更新为 **")
+                .append(total)
+                .append(" 件**，其中 **")
+                .append(correctedSize)
+                .append(" 更新为 ")
+                .append(sizeCounts.get(correctedSize))
+                .append(" 件**。\n\n");
+        answer.append("| 工装尺寸 | 修正后数量 |\n");
+        answer.append("|---|---:|\n");
+        for (String size : CLOTHING_SIZE_ORDER) {
+            Integer count = sizeCounts.get(size);
+            if (count != null) {
+                answer.append("| ").append(size).append(" | ").append(count).append(" |\n");
+            }
+        }
+        answer.append("| **合计** | **").append(total).append("** |\n\n");
+        answer.append("说明：这是基于上一轮统计结果和你本轮人工确认信息的快速修正；如果要把该修正长期纳入知识库，需要同步更新原始工装统计表后重新上传/解析/向量化。");
+        return answer.toString();
+    }
+
+    private RagChatResponse saveDirectAnswer(AiChatConversationDO conversation, AiChatMessageDO userMessage,
+                                             Long tenantId, Long departmentId, Long userId, String answer,
+                                             String debugInfo, long startNanos) {
+        AiChatMessageDO assistantMessage = saveMessage(tenantId, departmentId, conversation.getId(), userId,
+                ChatMessageRoleEnum.ASSISTANT.getCode(), answer, null, 0L);
+        updateConversationLastMessageTime(conversation.getId(), tenantId, departmentId);
+        log.info("RAG chat answered directly, tenantId={}, departmentId={}, knowledgeBaseId={}, conversationId={}, elapsedMs={}",
+                tenantId, departmentId, conversation.getKnowledgeBaseId(), conversation.getId(), elapsedMillis(startNanos));
+        return RagChatResponse.builder()
+                .conversationId(conversation.getId())
+                .userMessageId(userMessage.getId())
+                .assistantMessageId(assistantMessage.getId())
+                .answer(answer)
+                .noContext(false)
+                .debugInfo(debugInfo)
+                .citations(Collections.emptyList())
+                .build();
     }
 
     private RagChatResponse tryAnswerTableInventory(RagChatRequest request, List<AiKnowledgeBaseDO> knowledgeBases,
@@ -815,6 +1194,132 @@ public class RagServiceImpl implements RagService {
         log.info("RAG web search appended, tenantId={}, knowledgeBaseId={}, resultCount={}",
                 tenantId, knowledgeBaseId, webResults.size());
         return new ArrayList<>(merged.values());
+    }
+
+    /**
+     * 统计、汇总、数量类问题不能只依赖 topK 片段，否则 Excel/表格文档容易出现漏行、半行和重复行。
+     * 这里在进入 PromptBuilder 前，把命中的结构化文档扩展为同一 documentId 下的完整有效 chunk。
+     */
+    private List<KnowledgeHit> expandStructuredDocumentHitsForStatisticalQuestion(String question,
+                                                                                  List<KnowledgeHit> hits,
+                                                                                  Long tenantId) {
+        if (!isStatisticalQuestion(question) || hits == null || hits.isEmpty()) {
+            return hits == null ? Collections.emptyList() : hits;
+        }
+        Map<String, KnowledgeHit> expandedHits = new LinkedHashMap<>();
+        Set<String> expandedDocumentKeys = new LinkedHashSet<>();
+        for (KnowledgeHit hit : hits) {
+            if (!isExpandableStructuredDocumentHit(hit)) {
+                continue;
+            }
+            String documentKey = buildDocumentKey(hit);
+            if (!expandedDocumentKeys.add(documentKey)) {
+                continue;
+            }
+            KnowledgeHit expandedHit = buildExpandedStructuredDocumentHit(hit, tenantId);
+            if (expandedHit != null) {
+                expandedHits.put(buildHitKey(expandedHit), expandedHit);
+            } else {
+                expandedDocumentKeys.remove(documentKey);
+            }
+        }
+        if (expandedHits.isEmpty()) {
+            return hits;
+        }
+        for (KnowledgeHit hit : hits) {
+            if (hit == null || expandedDocumentKeys.contains(buildDocumentKey(hit))) {
+                continue;
+            }
+            expandedHits.putIfAbsent(buildHitKey(hit), hit);
+        }
+        log.info("RAG structured document expanded for statistical question, tenantId={}, expandedDocumentCount={}, beforeHitCount={}, afterHitCount={}",
+                tenantId, expandedDocumentKeys.size(), hits.size(), expandedHits.size());
+        return new ArrayList<>(expandedHits.values());
+    }
+
+    private boolean isStatisticalQuestion(String question) {
+        return containsAnyIgnoreCase(question, STATISTICAL_QUESTION_KEYWORDS);
+    }
+
+    private boolean isExpandableStructuredDocumentHit(KnowledgeHit hit) {
+        if (hit == null || hit.getDocumentId() == null || hit.getKnowledgeBaseId() == null) {
+            return false;
+        }
+        String searchText = buildHitSearchText(hit);
+        if (containsAnyIgnoreCase(searchText, STRUCTURED_DOCUMENT_KEYWORDS)) {
+            return true;
+        }
+        Map<String, Object> metadata = hit.getMetadata();
+        if (metadata == null || metadata.isEmpty()) {
+            return false;
+        }
+        String metadataText = metadata.toString();
+        return containsAnyIgnoreCase(metadataText, List.of("ExcelDocumentParser", "Workbook", "sheetCount",
+                "rowCount", ".xls", ".xlsx", ".xlsb", "application/vnd.ms-excel",
+                "spreadsheetml.sheet"));
+    }
+
+    private KnowledgeHit buildExpandedStructuredDocumentHit(KnowledgeHit seedHit, Long tenantId) {
+        List<AiDocumentChunkDO> chunks = documentChunkMapper.selectListByDocumentIdAndTenantId(
+                seedHit.getDocumentId(), seedHit.getKnowledgeBaseId(), tenantId);
+        if (chunks == null || chunks.isEmpty()) {
+            return null;
+        }
+        List<AiDocumentChunkDO> safeChunks = chunks.stream()
+                .filter(chunk -> chunk != null && ChunkStatusEnum.SUCCESS.getCode().equals(chunk.getStatus())
+                        && chunk.getContent() != null && !chunk.getContent().isBlank())
+                .sorted(Comparator.comparing(AiDocumentChunkDO::getChunkIndex,
+                        Comparator.nullsLast(Integer::compareTo)))
+                .limit(STRUCTURED_DOCUMENT_EXPANSION_MAX_CHUNKS)
+                .toList();
+        String content = mergeChunkContents(safeChunks);
+        if (content.isBlank()) {
+            return null;
+        }
+        boolean truncated = content.length() > STRUCTURED_DOCUMENT_EXPANSION_MAX_CHARS;
+        if (truncated) {
+            content = content.substring(0, STRUCTURED_DOCUMENT_EXPANSION_MAX_CHARS)
+                    + "\n[结构化文档内容超过当前上下文保护阈值，已截断；生产环境应转入结构化查询引擎处理]";
+        }
+        Map<String, Object> metadata = new LinkedHashMap<>();
+        if (seedHit.getMetadata() != null) {
+            metadata.putAll(seedHit.getMetadata());
+        }
+        metadata.put("structuredDocumentExpanded", true);
+        metadata.put("sourceChunkCount", safeChunks.size());
+        metadata.put("sourceDocumentId", seedHit.getDocumentId());
+        metadata.put("truncated", truncated);
+        return KnowledgeHit.builder()
+                .vectorId("structured-doc:" + seedHit.getKnowledgeBaseId() + ":" + seedHit.getDocumentId())
+                .tenantId(seedHit.getTenantId())
+                .knowledgeBaseId(seedHit.getKnowledgeBaseId())
+                .documentId(seedHit.getDocumentId())
+                .chunkId(null)
+                .chunkNo(null)
+                .documentTitle(seedHit.getDocumentTitle())
+                .content(content)
+                .score(seedHit.getScore() == null ? 1.0D : seedHit.getScore())
+                .metadata(metadata)
+                .build();
+    }
+
+    private String buildDocumentKey(KnowledgeHit hit) {
+        if (hit == null) {
+            return "";
+        }
+        return "kb:" + hit.getKnowledgeBaseId() + ":document:" + hit.getDocumentId();
+    }
+
+    private List<KnowledgeHit> expandHitsByRetrievalPlan(RetrievalPlan retrievalPlan, List<KnowledgeHit> hits,
+                                                         Long tenantId) {
+        if (retrievalPlan == null || hits == null || hits.isEmpty()) {
+            return hits == null ? Collections.emptyList() : hits;
+        }
+        if (RetrievalModeEnum.STRUCTURED_QUERY.equals(retrievalPlan.getMode())) {
+            return expandStructuredDocumentHitsForStatisticalQuestion("统计", hits, tenantId);
+        }
+        // 全文、章节、相邻片段扩展会在检索计划分类稳定后逐步接入执行器。
+        return hits;
     }
 
     private KnowledgeHit toWebSearchHit(WebSearchResult result, int index, Long tenantId, Long knowledgeBaseId) {
@@ -1225,6 +1730,13 @@ public class RagServiceImpl implements RagService {
     }
 
     private record TableInventoryResult(Map<String, KnowledgeHit> tableHits, int scannedChunkCount) {
+    }
+
+    private record ClothingSizeParseResult(Map<String, Integer> sizeCounts, int totalCount) {
+    }
+
+    private record ClothingSizeCountResult(Map<String, Integer> sizeCounts, int totalCount, int documentCount,
+                                           List<KnowledgeHit> citationHits) {
     }
 
 }
