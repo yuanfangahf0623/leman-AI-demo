@@ -333,6 +333,25 @@ CREATE TABLE IF NOT EXISTS `bpm_oa_leave` (
   PRIMARY KEY (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='请假流程表';
 
+CREATE TABLE IF NOT EXISTS `infra_config` (
+  `id` bigint NOT NULL AUTO_INCREMENT COMMENT 'config id',
+  `category` varchar(64) COLLATE utf8mb4_unicode_ci NOT NULL COMMENT 'config category',
+  `name` varchar(128) COLLATE utf8mb4_unicode_ci NOT NULL COMMENT 'config name',
+  `key` varchar(128) COLLATE utf8mb4_unicode_ci NOT NULL COMMENT 'config key',
+  `value` varchar(1024) COLLATE utf8mb4_unicode_ci NOT NULL COMMENT 'config value',
+  `type` tinyint NOT NULL DEFAULT 0 COMMENT 'config type',
+  `visible` bit(1) NOT NULL DEFAULT b'1' COMMENT 'visible in admin',
+  `remark` varchar(512) COLLATE utf8mb4_unicode_ci DEFAULT NULL COMMENT 'remark',
+  `creator` varchar(64) COLLATE utf8mb4_unicode_ci DEFAULT '',
+  `create_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updater` varchar(64) COLLATE utf8mb4_unicode_ci DEFAULT '',
+  `update_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  `deleted` tinyint(1) NOT NULL DEFAULT 0,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_infra_config_key_deleted` (`key`, `deleted`),
+  KEY `idx_infra_config_category` (`category`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='system config table';
+
 INSERT IGNORE INTO `system_dept` (`id`, `tenant_id`, `name`, `parent_id`, `sort`, `status`, `creator`, `updater`)
 VALUES (100, 1, '默认部门', 0, 0, 0, 'system', 'system');
 
@@ -354,7 +373,8 @@ VALUES (1, '默认租户', 'admin', 0, 1, 999, 'system', 'system');
 INSERT IGNORE INTO `system_dict_type` (`id`, `name`, `type`, `status`, `creator`, `updater`) VALUES
 (1, '通用状态', 'common_status', 0, 'system', 'system'),
 (2, '用户性别', 'system_user_sex', 0, 'system', 'system'),
-(3, '是否', 'infra_boolean_string', 0, 'system', 'system');
+(3, '是否', 'infra_boolean_string', 0, 'system', 'system'),
+(4, '参数配置类型', 'infra_config_type', 0, 'system', 'system');
 
 INSERT IGNORE INTO `system_dict_data` (`id`, `sort`, `label`, `value`, `dict_type`, `status`, `color_type`, `creator`, `updater`) VALUES
 (1, 0, '开启', '0', 'common_status', 0, 'success', 'system', 'system'),
@@ -363,7 +383,15 @@ INSERT IGNORE INTO `system_dict_data` (`id`, `sort`, `label`, `value`, `dict_typ
 (4, 1, '女', '2', 'system_user_sex', 0, 'danger', 'system', 'system'),
 (5, 2, '未知', '0', 'system_user_sex', 0, 'info', 'system', 'system'),
 (6, 0, '是', 'true', 'infra_boolean_string', 0, 'success', 'system', 'system'),
-(7, 1, '否', 'false', 'infra_boolean_string', 0, 'danger', 'system', 'system');
+(7, 1, '否', 'false', 'infra_boolean_string', 0, 'danger', 'system', 'system'),
+(8, 0, '自定义', '0', 'infra_config_type', 0, 'success', 'system', 'system'),
+(9, 1, '系统内置', '1', 'infra_config_type', 0, 'primary', 'system', 'system');
+
+INSERT INTO `infra_config`
+(`category`, `name`, `key`, `value`, `type`, `visible`, `remark`, `creator`, `updater`)
+VALUES
+('AI', 'RAG 引擎', 'ai.rag.engine', 'fastgpt', 1, b'1', 'fastgpt=FastGPT RAG engine; local=local pgvector RAG engine', 'system', 'system')
+ON DUPLICATE KEY UPDATE `key` = `key`;
 
 INSERT IGNORE INTO `bpm_category` (`id`, `tenant_id`, `name`, `code`, `status`, `sort`, `creator`, `updater`)
 VALUES (1, 1, '默认分类', 'default', 0, 0, 'system', 'system');

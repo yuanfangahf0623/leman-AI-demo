@@ -29,9 +29,10 @@ public interface AiChatCitationMapper extends BaseMapper<AiChatCitationDO> {
             <script>
             SELECT ref.conversation_id AS conversationId,
                    ref.knowledge_base_id AS knowledgeBaseId,
-                   kb.name AS knowledgeBaseName
+                   COALESCE(NULLIF(ref.external_knowledge_base_name, ''), kb.name) AS knowledgeBaseName
             FROM (
-                SELECT m.conversation_id, c.knowledge_base_id, m.id AS message_id, c.sort_order, c.id AS citation_id
+                SELECT m.conversation_id, c.knowledge_base_id, c.external_knowledge_base_name,
+                       m.id AS message_id, c.sort_order, c.id AS citation_id
                 FROM ai_chat_message m
                 INNER JOIN ai_chat_citation c ON c.message_id = m.id
                     AND c.tenant_id = m.tenant_id
@@ -43,9 +44,10 @@ public interface AiChatCitationMapper extends BaseMapper<AiChatCitationDO> {
                       #{conversationId}
                   </foreach>
             ) ref
-            INNER JOIN ai_knowledge_base kb ON kb.id = ref.knowledge_base_id
+            LEFT JOIN ai_knowledge_base kb ON kb.id = ref.knowledge_base_id
                 AND kb.tenant_id = #{tenantId}
                 AND kb.deleted = 0
+            WHERE kb.id IS NOT NULL OR NULLIF(ref.external_knowledge_base_name, '') IS NOT NULL
             ORDER BY ref.conversation_id ASC, ref.message_id DESC, ref.sort_order ASC, ref.citation_id ASC
             </script>
             """)

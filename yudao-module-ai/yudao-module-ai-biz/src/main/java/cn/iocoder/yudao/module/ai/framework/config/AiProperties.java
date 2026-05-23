@@ -27,6 +27,16 @@ public class AiProperties {
     private RagProperties rag = new RagProperties();
 
     /**
+     * FastGPT RAG engine configuration. Secrets must come from environment variables or config center.
+     */
+    private FastGptProperties fastgpt = new FastGptProperties();
+
+    /**
+     * Synology/NAS file connector for FastGPT API dataset.
+     */
+    private SynologyFileProperties synologyFile = new SynologyFileProperties();
+
+    /**
      * 文档切片配置。
      */
     private DocumentProperties document = new DocumentProperties();
@@ -53,6 +63,22 @@ public class AiProperties {
 
     public void setRag(RagProperties rag) {
         this.rag = rag;
+    }
+
+    public FastGptProperties getFastgpt() {
+        return fastgpt;
+    }
+
+    public void setFastgpt(FastGptProperties fastgpt) {
+        this.fastgpt = fastgpt;
+    }
+
+    public SynologyFileProperties getSynologyFile() {
+        return synologyFile;
+    }
+
+    public void setSynologyFile(SynologyFileProperties synologyFile) {
+        this.synologyFile = synologyFile;
     }
 
     public DocumentProperties getDocument() {
@@ -312,6 +338,11 @@ public class AiProperties {
     public static class RagProperties {
 
         /**
+         * RAG engine type. local keeps the existing pgvector pipeline; fastgpt delegates RAG to FastGPT.
+         */
+        private String engine = "fastgpt";
+
+        /**
          * 默认召回数量。
          */
         private Integer defaultTopK = 5;
@@ -345,6 +376,14 @@ public class AiProperties {
          * Max online search results appended to a single RAG request.
          */
         private Integer webSearchTopK = 5;
+
+        public String getEngine() {
+            return engine;
+        }
+
+        public void setEngine(String engine) {
+            this.engine = engine;
+        }
 
         public Integer getDefaultTopK() {
             return defaultTopK;
@@ -400,6 +439,181 @@ public class AiProperties {
 
         public void setWebSearchTopK(Integer webSearchTopK) {
             this.webSearchTopK = webSearchTopK;
+        }
+    }
+
+    public static class FastGptProperties {
+
+        /**
+         * FastGPT OpenAPI base URL. Examples: https://fastgpt.example.com or https://fastgpt.example.com/api/v1.
+         */
+        private String baseUrl;
+
+        /**
+         * FastGPT app API key. Never hardcode a real key in code or checked-in config.
+         */
+        private String apiKey;
+
+        /**
+         * Optional app id for operations outside OpenAI-compatible chat.
+         */
+        private String appId;
+
+        /**
+         * Model value sent to the OpenAI-compatible chat endpoint.
+         */
+        private String model = "fastgpt";
+
+        /**
+         * HTTP connection timeout in seconds.
+         */
+        private Integer connectTimeoutSeconds = 10;
+
+        /**
+         * HTTP read timeout in seconds.
+         */
+        private Integer readTimeoutSeconds = 120;
+
+        public String getBaseUrl() {
+            return baseUrl;
+        }
+
+        public void setBaseUrl(String baseUrl) {
+            this.baseUrl = baseUrl;
+        }
+
+        public String getApiKey() {
+            return apiKey;
+        }
+
+        public void setApiKey(String apiKey) {
+            this.apiKey = apiKey;
+        }
+
+        public String getAppId() {
+            return appId;
+        }
+
+        public void setAppId(String appId) {
+            this.appId = appId;
+        }
+
+        public String getModel() {
+            return model;
+        }
+
+        public void setModel(String model) {
+            this.model = model;
+        }
+
+        public Integer getConnectTimeoutSeconds() {
+            return connectTimeoutSeconds;
+        }
+
+        public void setConnectTimeoutSeconds(Integer connectTimeoutSeconds) {
+            this.connectTimeoutSeconds = connectTimeoutSeconds;
+        }
+
+        public Integer getReadTimeoutSeconds() {
+            return readTimeoutSeconds;
+        }
+
+        public void setReadTimeoutSeconds(Integer readTimeoutSeconds) {
+            this.readTimeoutSeconds = readTimeoutSeconds;
+        }
+    }
+
+    public static class SynologyFileProperties {
+
+        /**
+         * Enable the FastGPT API file dataset connector.
+         */
+        private Boolean enabled = false;
+
+        /**
+         * Root directory mounted from Synology. Keep it read-only for the application process.
+         */
+        private String basePath;
+
+        /**
+         * Public base URL exposed to FastGPT, for example http://host.docker.internal:48080/api/ai/synology-file.
+         */
+        private String publicBaseUrl;
+
+        /**
+         * Bearer token used by FastGPT when calling /v1/file/* APIs.
+         */
+        private String authToken;
+
+        /**
+         * Token appended to preview/read URLs so FastGPT can download non-text files without admin login.
+         */
+        private String downloadToken;
+
+        /**
+         * Max number of entries returned by a single list request.
+         */
+        private Integer maxListSize = 500;
+
+        /**
+         * Max bytes read directly as text content. Larger or binary files are exposed through previewUrl.
+         */
+        private Long maxTextBytes = 2L * 1024L * 1024L;
+
+        public Boolean getEnabled() {
+            return enabled;
+        }
+
+        public void setEnabled(Boolean enabled) {
+            this.enabled = enabled;
+        }
+
+        public String getBasePath() {
+            return basePath;
+        }
+
+        public void setBasePath(String basePath) {
+            this.basePath = basePath;
+        }
+
+        public String getPublicBaseUrl() {
+            return publicBaseUrl;
+        }
+
+        public void setPublicBaseUrl(String publicBaseUrl) {
+            this.publicBaseUrl = publicBaseUrl;
+        }
+
+        public String getAuthToken() {
+            return authToken;
+        }
+
+        public void setAuthToken(String authToken) {
+            this.authToken = authToken;
+        }
+
+        public String getDownloadToken() {
+            return downloadToken;
+        }
+
+        public void setDownloadToken(String downloadToken) {
+            this.downloadToken = downloadToken;
+        }
+
+        public Integer getMaxListSize() {
+            return maxListSize;
+        }
+
+        public void setMaxListSize(Integer maxListSize) {
+            this.maxListSize = maxListSize;
+        }
+
+        public Long getMaxTextBytes() {
+            return maxTextBytes;
+        }
+
+        public void setMaxTextBytes(Long maxTextBytes) {
+            this.maxTextBytes = maxTextBytes;
         }
     }
 

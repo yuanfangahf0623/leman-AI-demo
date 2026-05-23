@@ -33,6 +33,8 @@ public class AiChatCitationDO {
     private Long messageId;
     @TableField("knowledge_base_id")
     private Long knowledgeBaseId;
+    @TableField("external_knowledge_base_name")
+    private String externalKnowledgeBaseName;
     @TableField("document_id")
     private Long documentId;
     @TableField("chunk_id")

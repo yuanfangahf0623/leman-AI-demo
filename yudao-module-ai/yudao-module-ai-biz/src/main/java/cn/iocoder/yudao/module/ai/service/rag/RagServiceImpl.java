@@ -22,9 +22,14 @@ import cn.iocoder.yudao.module.ai.framework.vector.KnowledgeHit;
 import cn.iocoder.yudao.module.ai.framework.vector.KnowledgeSearchRequest;
 import cn.iocoder.yudao.module.ai.framework.vector.KnowledgeVectorStore;
 import cn.iocoder.yudao.module.ai.service.chatmodel.AiChatModelRequest;
+import cn.iocoder.yudao.module.ai.service.chatmodel.AiChatModelMessage;
 import cn.iocoder.yudao.module.ai.service.chatmodel.AiChatModelResponse;
 import cn.iocoder.yudao.module.ai.service.chatmodel.AiChatModelService;
 import cn.iocoder.yudao.module.ai.service.embedding.AiEmbeddingService;
+import cn.iocoder.yudao.module.ai.service.rag.config.AiRagEngineConfigService;
+import cn.iocoder.yudao.module.ai.service.rag.fastgpt.FastGptRagClient;
+import cn.iocoder.yudao.module.ai.service.rag.fastgpt.FastGptRagRequest;
+import cn.iocoder.yudao.module.ai.service.rag.fastgpt.FastGptRagResult;
 import cn.iocoder.yudao.module.ai.service.rag.retrieval.RetrievalModeEnum;
 import cn.iocoder.yudao.module.ai.service.rag.retrieval.RetrievalPlan;
 import cn.iocoder.yudao.module.ai.service.rag.retrieval.RetrievalPlanner;
@@ -147,6 +152,8 @@ public class RagServiceImpl implements RagService {
     private final PromptBuilder promptBuilder;
     private final RetrievalPlanner retrievalPlanner;
     private final AiChatModelService aiChatModelService;
+    private final FastGptRagClient fastGptRagClient;
+    private final AiRagEngineConfigService ragEngineConfigService;
     private final ObjectMapper objectMapper;
     private final AiProperties aiProperties;
     private final PersonalSensitiveDataPolicy personalSensitiveDataPolicy;
@@ -191,6 +198,11 @@ public class RagServiceImpl implements RagService {
         if (isSelfIdentityQuestion(normalizedQuestion)) {
             return saveCurrentUserIdentityAnswer(conversation, userMessage, tenantId, departmentId, userId,
                     currentUserNickname, startNanos);
+        }
+
+        if (isFastGptEngine()) {
+            return chatWithFastGpt(request, conversation, userMessage, conversationContext, knowledgeBases,
+                    tenantId, departmentId, userId, startNanos, effectiveQuestion, conversationContextApplied);
         }
 
         boolean clothingSizeCountQuestion = isClothingSizeCountQuestion(effectiveQuestion, normalizedEffectiveQuestion);
@@ -245,8 +257,12 @@ public class RagServiceImpl implements RagService {
         int hitCount = hits == null ? 0 : hits.size();
         PromptBuildResult prompt = promptBuilder.build(effectiveQuestion, hits, currentUserNickname, retrievalPlan);
         if (prompt.isNoContext()) {
+            String debugInfo = buildLocalPlatformDebugInfo(request, knowledgeBases, retrievalPlan, conversation,
+                    tenantId, departmentId, userId, effectiveQuestion, conversationContextApplied, webSearchRequested,
+                    webSearchEnabled, personalSensitive, hitCount, prompt, null, 0L, 0, true,
+                    elapsedMillis(startNanos));
             RagChatResponse response = saveFallbackAnswer(conversation, userMessage, tenantId, departmentId, userId,
-                    prompt.getDebugInfo());
+                    appendDebugInfo(debugInfo, prompt.getDebugInfo()));
             log.info("RAG chat no effective context, tenantId={}, departmentId={}, knowledgeBaseId={}, conversationId={}, hitCount={}, elapsedMs={}",
                     tenantId, departmentId, conversationKnowledgeBaseId, conversation.getId(), hitCount,
                     elapsedMillis(startNanos));
@@ -275,13 +291,17 @@ public class RagServiceImpl implements RagService {
         log.info("RAG chat success, tenantId={}, departmentId={}, knowledgeBaseId={}, conversationId={}, hitCount={}, citationCount={}, elapsedMs={}",
                 tenantId, departmentId, conversationKnowledgeBaseId, conversation.getId(), hitCount, citations.size(),
                 elapsedMillis(startNanos));
+        String debugInfo = buildLocalPlatformDebugInfo(request, knowledgeBases, retrievalPlan, conversation, tenantId,
+                departmentId, userId, effectiveQuestion, conversationContextApplied, webSearchRequested,
+                webSearchEnabled, personalSensitive, hitCount, prompt, modelResponse, modelLatencyMs, citations.size(),
+                false, elapsedMillis(startNanos));
         return RagChatResponse.builder()
                 .conversationId(conversation.getId())
                 .userMessageId(userMessage.getId())
                 .assistantMessageId(assistantMessage.getId())
                 .answer(answer)
                 .noContext(false)
-                .debugInfo(prompt.getDebugInfo())
+                .debugInfo(appendDebugInfo(debugInfo, prompt.getDebugInfo()))
                 .citations(citations)
                 .build();
     }
@@ -518,6 +538,236 @@ public class RagServiceImpl implements RagService {
             return "你是" + currentUserNickname.trim() + "。";
         }
         return "你是当前登录用户（用户 ID：" + userId + "）。";
+    }
+
+    private boolean isFastGptEngine() {
+        return ragEngineConfigService.isFastGptEngine();
+    }
+
+    private RagChatResponse chatWithFastGpt(RagChatRequest request, AiChatConversationDO conversation,
+                                            AiChatMessageDO userMessage,
+                                            List<AiChatMessageDO> conversationContext,
+                                            List<AiKnowledgeBaseDO> knowledgeBases,
+                                            Long tenantId, Long departmentId, Long userId, long startNanos,
+                                            String effectiveQuestion, boolean conversationContextApplied) {
+        long modelStartNanos = System.nanoTime();
+        FastGptRagResult fastGptResult = fastGptRagClient.chat(FastGptRagRequest.builder()
+                .tenantId(tenantId)
+                .departmentId(departmentId)
+                .knowledgeBaseId(request.getKnowledgeBaseId())
+                .conversationId(conversation.getId())
+                .userId(userId)
+                .question(effectiveQuestion)
+                .messages(buildFastGptMessages(conversationContext, effectiveQuestion, conversationContextApplied))
+                .build());
+        long modelLatencyMs = elapsedMillis(modelStartNanos);
+        AiChatModelResponse modelResponse = fastGptResult.getModelResponse();
+        String answer = modelResponse == null || modelResponse.getContent() == null || modelResponse.getContent().isBlank()
+                ? FALLBACK_ANSWER : modelResponse.getContent();
+        AiChatMessageDO assistantMessage = saveMessage(tenantId, departmentId, conversation.getId(), userId,
+                ChatMessageRoleEnum.ASSISTANT.getCode(), answer, modelResponse, modelLatencyMs);
+        Long citationFallbackKnowledgeBaseId = resolveFastGptCitationKnowledgeBaseId(request.getKnowledgeBaseId(), knowledgeBases);
+        List<RagChatCitation> citations = saveExternalCitations(tenantId, departmentId, assistantMessage.getId(),
+                citationFallbackKnowledgeBaseId, fastGptResult.getCitations());
+        updateConversationLastMessageTime(conversation.getId(), tenantId, departmentId);
+        log.info("RAG chat delegated to FastGPT, tenantId={}, departmentId={}, knowledgeBaseId={}, conversationId={}, citationCount={}, elapsedMs={}",
+                tenantId, departmentId, request.getKnowledgeBaseId(), conversation.getId(), citations.size(),
+                elapsedMillis(startNanos));
+        return RagChatResponse.builder()
+                .conversationId(conversation.getId())
+                .userMessageId(userMessage.getId())
+                .assistantMessageId(assistantMessage.getId())
+                .answer(answer)
+                .noContext(FALLBACK_ANSWER.equals(answer) && citations.isEmpty())
+                .debugInfo(buildFastGptDebugInfo(request, knowledgeBases, tenantId, departmentId, userId,
+                        conversation.getId(), effectiveQuestion, conversationContextApplied, modelResponse,
+                        modelLatencyMs, citations.size(), elapsedMillis(startNanos), fastGptResult.getDebugInfo()))
+                .citations(citations)
+                .build();
+    }
+
+    private List<AiChatModelMessage> buildFastGptMessages(List<AiChatMessageDO> conversationContext,
+                                                          String effectiveQuestion,
+                                                          boolean conversationContextApplied) {
+        List<AiChatModelMessage> messages = new ArrayList<>();
+        if (!conversationContextApplied && conversationContext != null) {
+            for (AiChatMessageDO message : conversationContext) {
+                if (message == null || message.getContent() == null || message.getContent().isBlank()) {
+                    continue;
+                }
+                if (!ChatMessageRoleEnum.USER.getCode().equals(message.getRole())
+                        && !ChatMessageRoleEnum.ASSISTANT.getCode().equals(message.getRole())) {
+                    continue;
+                }
+                messages.add(AiChatModelMessage.builder()
+                        .role(message.getRole())
+                        .content(truncateForContext(message.getContent(), CONVERSATION_CONTEXT_MAX_CHARS))
+                        .build());
+            }
+        }
+        messages.add(AiChatModelMessage.builder()
+                .role(ChatMessageRoleEnum.USER.getCode())
+                .content(effectiveQuestion)
+                .build());
+        return messages;
+    }
+
+    private Long resolveFastGptCitationKnowledgeBaseId(Long requestedKnowledgeBaseId,
+                                                       List<AiKnowledgeBaseDO> knowledgeBases) {
+        if (!isAllKnowledgeBase(requestedKnowledgeBaseId)) {
+            return requestedKnowledgeBaseId;
+        }
+        if (knowledgeBases == null || knowledgeBases.isEmpty()) {
+            return requestedKnowledgeBaseId;
+        }
+        return knowledgeBases.get(0).getId();
+    }
+
+    private String buildFastGptDebugInfo(RagChatRequest request, List<AiKnowledgeBaseDO> knowledgeBases,
+                                         Long tenantId, Long departmentId, Long userId, Long conversationId,
+                                         String effectiveQuestion, boolean conversationContextApplied,
+                                         AiChatModelResponse modelResponse, long modelLatencyMs, int citationCount,
+                                         long elapsedMs, String fastGptDebugInfo) {
+        StringBuilder debug = new StringBuilder();
+        debug.append("## RAG 平台层执行轨迹\n");
+        debug.append("> 说明：以下为本系统可审计的编排、权限、会话、外部引擎和引用解析过程，不包含模型内部原始思考过程。\n\n");
+        debug.append("### 1. 本地编排\n");
+        debug.append("- ragEngine=fastgpt\n");
+        debug.append("- tenantId=").append(tenantId)
+                .append(", departmentId=").append(departmentId)
+                .append(", userId=").append(userId)
+                .append(", conversationId=").append(conversationId).append('\n');
+        debug.append("- requestedKnowledgeBaseId=").append(request.getKnowledgeBaseId())
+                .append(", accessibleKnowledgeBaseCount=").append(knowledgeBases == null ? 0 : knowledgeBases.size())
+                .append('\n');
+        debug.append("- accessibleKnowledgeBases=").append(formatKnowledgeBaseScope(knowledgeBases)).append('\n');
+        debug.append("- conversationContextApplied=").append(conversationContextApplied)
+                .append(", effectiveQuestionChars=").append(effectiveQuestion == null ? 0 : effectiveQuestion.length())
+                .append('\n');
+        debug.append("- localPolicy=本地只负责登录用户、租户、部门、知识库访问校验和问答日志落库；检索和生成委托给 FastGPT。\n\n");
+        debug.append("### 2. 模型与引用结果\n");
+        debug.append("- model=").append(modelResponse == null ? "" : modelResponse.getModel())
+                .append(", modelLatencyMs=").append(modelLatencyMs)
+                .append(", totalElapsedMs=").append(elapsedMs).append('\n');
+        debug.append("- promptTokens=").append(modelResponse == null ? null : modelResponse.getPromptTokens())
+                .append(", completionTokens=").append(modelResponse == null ? null : modelResponse.getCompletionTokens())
+                .append(", totalTokens=").append(modelResponse == null ? null : modelResponse.getTotalTokens())
+                .append('\n');
+        debug.append("- persistedCitationCount=").append(citationCount).append('\n');
+        if (fastGptDebugInfo == null || fastGptDebugInfo.isBlank()) {
+            return debug.toString();
+        }
+        return appendDebugInfo(debug.toString(), fastGptDebugInfo);
+    }
+
+    private String buildLocalPlatformDebugInfo(RagChatRequest request, List<AiKnowledgeBaseDO> knowledgeBases,
+                                               RetrievalPlan retrievalPlan, AiChatConversationDO conversation,
+                                               Long tenantId, Long departmentId, Long userId,
+                                               String effectiveQuestion, boolean conversationContextApplied,
+                                               boolean webSearchRequested, boolean webSearchEnabled,
+                                               boolean personalSensitive, int hitCount, PromptBuildResult prompt,
+                                               AiChatModelResponse modelResponse, long modelLatencyMs,
+                                               int citationCount, boolean noContext, long elapsedMs) {
+        StringBuilder debug = new StringBuilder();
+        debug.append("## RAG 平台层执行轨迹\n");
+        debug.append("> 说明：以下为本系统可审计的检索、扩展、Prompt、模型和引用过程，不包含模型内部原始思考过程。\n\n");
+        debug.append("### 1. 请求与权限\n");
+        debug.append("- ragEngine=local\n");
+        debug.append("- tenantId=").append(tenantId)
+                .append(", departmentId=").append(departmentId)
+                .append(", userId=").append(userId)
+                .append(", conversationId=").append(conversation == null ? null : conversation.getId()).append('\n');
+        debug.append("- requestedKnowledgeBaseId=").append(request.getKnowledgeBaseId())
+                .append(", accessibleKnowledgeBaseCount=").append(knowledgeBases == null ? 0 : knowledgeBases.size())
+                .append('\n');
+        debug.append("- accessibleKnowledgeBases=").append(formatKnowledgeBaseScope(knowledgeBases)).append('\n');
+        debug.append("- conversationContextApplied=").append(conversationContextApplied)
+                .append(", effectiveQuestionChars=").append(effectiveQuestion == null ? 0 : effectiveQuestion.length())
+                .append('\n');
+        debug.append("- personalSensitive=").append(personalSensitive)
+                .append(", webSearchRequested=").append(webSearchRequested)
+                .append(", webSearchEnabled=").append(webSearchEnabled).append("\n\n");
+
+        debug.append("### 2. 检索计划与召回\n");
+        if (retrievalPlan == null) {
+            debug.append("- retrievalPlan=null\n");
+        } else {
+            debug.append("- mode=").append(retrievalPlan.getMode())
+                    .append(", questionType=").append(retrievalPlan.getQuestionType())
+                    .append(", fullDocumentRequired=").append(retrievalPlan.isFullDocumentRequired())
+                    .append(", structuredDataRequired=").append(retrievalPlan.isStructuredDataRequired())
+                    .append(", strictEvidenceRequired=").append(retrievalPlan.isStrictEvidenceRequired()).append('\n');
+            debug.append("- reason=").append(retrievalPlan.getReason()).append('\n');
+        }
+        debug.append("- hitCountAfterMergeAndExpansion=").append(hitCount)
+                .append(", promptContextHitCount=")
+                .append(prompt == null || prompt.getKnowledgeHits() == null ? 0 : prompt.getKnowledgeHits().size())
+                .append(", estimatedContextTokens=")
+                .append(prompt == null ? null : prompt.getEstimatedContextTokens()).append('\n');
+        debug.append("- noContext=").append(noContext).append('\n');
+        appendHitSummary(debug, prompt == null ? Collections.emptyList() : prompt.getKnowledgeHits());
+
+        debug.append("\n### 3. 模型与引用结果\n");
+        debug.append("- modelCalled=").append(modelResponse != null)
+                .append(", model=").append(modelResponse == null ? "" : modelResponse.getModel())
+                .append(", modelLatencyMs=").append(modelLatencyMs)
+                .append(", totalElapsedMs=").append(elapsedMs).append('\n');
+        debug.append("- promptTokens=").append(modelResponse == null ? null : modelResponse.getPromptTokens())
+                .append(", completionTokens=").append(modelResponse == null ? null : modelResponse.getCompletionTokens())
+                .append(", totalTokens=").append(modelResponse == null ? null : modelResponse.getTotalTokens())
+                .append('\n');
+        debug.append("- persistedCitationCount=").append(citationCount).append('\n');
+        return debug.toString();
+    }
+
+    private void appendHitSummary(StringBuilder debug, List<KnowledgeHit> hits) {
+        debug.append("- contextHitSummary：");
+        if (hits == null || hits.isEmpty()) {
+            debug.append("无\n");
+            return;
+        }
+        debug.append('\n');
+        int limit = Math.min(hits.size(), 10);
+        for (int i = 0; i < limit; i++) {
+            KnowledgeHit hit = hits.get(i);
+            debug.append("  - Hit ").append(i + 1)
+                    .append(": kbId=").append(hit.getKnowledgeBaseId())
+                    .append(", documentId=").append(hit.getDocumentId())
+                    .append(", chunkId=").append(hit.getChunkId())
+                    .append(", chunkNo=").append(hit.getChunkNo())
+                    .append(", score=").append(hit.getScore())
+                    .append(", title=").append(hit.getDocumentTitle()).append('\n');
+        }
+        if (hits.size() > limit) {
+            debug.append("  - 其余 ").append(hits.size() - limit).append(" 条未展开展示。\n");
+        }
+    }
+
+    private String formatKnowledgeBaseScope(List<AiKnowledgeBaseDO> knowledgeBases) {
+        if (knowledgeBases == null || knowledgeBases.isEmpty()) {
+            return "[]";
+        }
+        List<String> names = knowledgeBases.stream()
+                .map(knowledgeBase -> knowledgeBase.getId() + ":" + safeDebugText(knowledgeBase.getName()))
+                .toList();
+        return names.toString();
+    }
+
+    private String safeDebugText(String value) {
+        if (value == null || value.isBlank()) {
+            return "";
+        }
+        return truncateForContext(value, 80);
+    }
+
+    private String appendDebugInfo(String first, String second) {
+        if (first == null || first.isBlank()) {
+            return second;
+        }
+        if (second == null || second.isBlank()) {
+            return first;
+        }
+        return first + "\n\n" + second;
     }
 
     private RagChatResponse tryAnswerClothingSizeCount(RagChatRequest request, List<AiKnowledgeBaseDO> knowledgeBases,
@@ -1130,6 +1380,49 @@ public class RagServiceImpl implements RagService {
                     tenantId, knowledgeBaseId, citations.size(), ex);
             return null;
         }
+    }
+
+    private List<RagChatCitation> saveExternalCitations(Long tenantId, Long departmentId, Long assistantMessageId,
+                                                        Long fallbackKnowledgeBaseId,
+                                                        List<RagChatCitation> sourceCitations) {
+        if (sourceCitations == null || sourceCitations.isEmpty()) {
+            return Collections.emptyList();
+        }
+        List<RagChatCitation> citations = new ArrayList<>(sourceCitations.size());
+        for (int i = 0; i < sourceCitations.size(); i++) {
+            RagChatCitation sourceCitation = sourceCitations.get(i);
+            if (sourceCitation == null) {
+                continue;
+            }
+            Long citationKnowledgeBaseId = sourceCitation.getKnowledgeBaseId() == null
+                    ? fallbackKnowledgeBaseId : sourceCitation.getKnowledgeBaseId();
+            AiChatCitationDO citation = AiChatCitationDO.builder()
+                    .tenantId(tenantId)
+                    .departmentId(departmentId)
+                    .messageId(assistantMessageId)
+                    .knowledgeBaseId(citationKnowledgeBaseId)
+                    .externalKnowledgeBaseName(truncate(sourceCitation.getKnowledgeBaseName(), 128))
+                    .documentId(sourceCitation.getDocumentId())
+                    .chunkId(sourceCitation.getChunkId())
+                    .documentTitle(sourceCitation.getDocumentTitle())
+                    .score(toBigDecimal(sourceCitation.getScore()))
+                    .sortOrder(citations.size() + 1)
+                    .contentSnapshot(truncate(sourceCitation.getQuoteText(), QUOTE_TEXT_MAX_LENGTH))
+                    .quoteText(truncate(sourceCitation.getQuoteText(), QUOTE_TEXT_MAX_LENGTH))
+                    .build();
+            chatCitationMapper.insert(citation);
+            citations.add(RagChatCitation.builder()
+                    .knowledgeBaseId(citationKnowledgeBaseId)
+                    .knowledgeBaseName(sourceCitation.getKnowledgeBaseName())
+                    .documentId(sourceCitation.getDocumentId())
+                    .chunkId(sourceCitation.getChunkId())
+                    .chunkNo(sourceCitation.getChunkNo())
+                    .documentTitle(sourceCitation.getDocumentTitle())
+                    .score(sourceCitation.getScore())
+                    .quoteText(citation.getQuoteText())
+                    .build());
+        }
+        return citations;
     }
 
     private List<RagChatCitation> saveCitations(Long tenantId, Long departmentId, Long assistantMessageId,

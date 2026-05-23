@@ -11,6 +11,7 @@ import cn.iocoder.yudao.module.ai.dal.mysql.AiChatCitationMapper;
 import cn.iocoder.yudao.module.ai.dal.mysql.AiChatConversationMapper;
 import cn.iocoder.yudao.module.ai.dal.mysql.AiChatMessageMapper;
 import cn.iocoder.yudao.module.ai.framework.tenant.AiUserContextHolder;
+import cn.iocoder.yudao.module.ai.service.rag.config.AiRagEngineConfigService;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -35,13 +36,16 @@ class AiChatRecordServiceImplTest {
     private AiChatMessageMapper chatMessageMapper;
     @Mock
     private AiChatCitationMapper chatCitationMapper;
+    @Mock
+    private AiRagEngineConfigService ragEngineConfigService;
 
     private AiChatRecordServiceImpl chatRecordService;
 
     @BeforeEach
     void setUp() {
         AiUserContextHolder.setUserContext(1L, 100L, 20L);
-        chatRecordService = new AiChatRecordServiceImpl(chatConversationMapper, chatMessageMapper, chatCitationMapper);
+        chatRecordService = new AiChatRecordServiceImpl(chatConversationMapper, chatMessageMapper, chatCitationMapper,
+                ragEngineConfigService);
     }
 
     @AfterEach
@@ -89,6 +93,7 @@ class AiChatRecordServiceImplTest {
         ref.setKnowledgeBaseName("n8n");
         when(chatConversationMapper.selectPage(reqVO, 1L, 20L, 100L, false))
                 .thenReturn(new PageResult<>(List.of(conversation), 1L));
+        when(ragEngineConfigService.isFastGptEngine()).thenReturn(false);
         when(chatCitationMapper.selectKnowledgeBaseRefsByConversationIds(1L, List.of(502L)))
                 .thenReturn(List.of(ref));
 
@@ -96,6 +101,44 @@ class AiChatRecordServiceImplTest {
 
         assertEquals(6L, result.getList().get(0).getDisplayKnowledgeBaseId());
         assertEquals("n8n", result.getList().get(0).getDisplayKnowledgeBaseName());
+    }
+
+    @Test
+    void getConversationPageShouldDisplayFastGptForAllKnowledgeConversationInFastGptMode() {
+        AiChatConversationPageReqVO reqVO = new AiChatConversationPageReqVO();
+        AiChatConversationDO conversation = AiChatConversationDO.builder()
+                .id(503L)
+                .knowledgeBaseId(0L)
+                .build();
+        when(chatConversationMapper.selectPage(reqVO, 1L, 20L, 100L, false))
+                .thenReturn(new PageResult<>(List.of(conversation), 1L));
+        when(ragEngineConfigService.isFastGptEngine()).thenReturn(true);
+
+        PageResult<AiChatConversationDO> result = chatRecordService.getConversationPage(reqVO);
+
+        assertEquals("FastGPT", result.getList().get(0).getDisplayKnowledgeBaseName());
+    }
+
+    @Test
+    void getConversationPageShouldPreferFastGptKnowledgeBaseNameWhenCitationExists() {
+        AiChatConversationPageReqVO reqVO = new AiChatConversationPageReqVO();
+        AiChatConversationDO conversation = AiChatConversationDO.builder()
+                .id(504L)
+                .knowledgeBaseId(0L)
+                .build();
+        AiChatConversationKnowledgeBaseRefDO ref = new AiChatConversationKnowledgeBaseRefDO();
+        ref.setConversationId(504L);
+        ref.setKnowledgeBaseId(10L);
+        ref.setKnowledgeBaseName("FastGPT 开票库");
+        when(chatConversationMapper.selectPage(reqVO, 1L, 20L, 100L, false))
+                .thenReturn(new PageResult<>(List.of(conversation), 1L));
+        when(chatCitationMapper.selectKnowledgeBaseRefsByConversationIds(1L, List.of(504L)))
+                .thenReturn(List.of(ref));
+        when(ragEngineConfigService.isFastGptEngine()).thenReturn(true);
+
+        PageResult<AiChatConversationDO> result = chatRecordService.getConversationPage(reqVO);
+
+        assertEquals("FastGPT 开票库", result.getList().get(0).getDisplayKnowledgeBaseName());
     }
 
     @Test

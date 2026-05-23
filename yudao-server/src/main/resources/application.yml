@@ -23,6 +23,7 @@ spring:
       schema-locations:
         - classpath:sql/mysql/system-base-20260509.sql
         - classpath:sql/mysql/ai-module.sql
+        - classpath:sql/mysql/ai-module-upgrade-20260522-fastgpt-citation-source.sql
         - classpath:sql/mysql/system-menu-pages-20260509.sql
 
 mybatis-plus:
@@ -54,9 +55,17 @@ ai:
       table-name: ${AI_PGVECTOR_TABLE_NAME:ai_vector_store}
       dimensions: ${AI_PGVECTOR_DIMENSIONS:1536}
   rag:
+    engine: ${AI_RAG_ENGINE:fastgpt}
     default-top-k: ${AI_RAG_DEFAULT_TOP_K:5}
     default-score-threshold: ${AI_RAG_DEFAULT_SCORE_THRESHOLD:0.1}
     max-context-tokens: ${AI_RAG_MAX_CONTEXT_TOKENS:6000}
+  fastgpt:
+    base-url: ${FASTGPT_BASE_URL:}
+    api-key: ${FASTGPT_API_KEY:}
+    app-id: ${FASTGPT_APP_ID:}
+    model: ${FASTGPT_MODEL:fastgpt}
+    connect-timeout-seconds: ${FASTGPT_CONNECT_TIMEOUT_SECONDS:10}
+    read-timeout-seconds: ${FASTGPT_READ_TIMEOUT_SECONDS:120}
   document:
     default-chunk-size: ${AI_DOCUMENT_DEFAULT_CHUNK_SIZE:800}
     default-chunk-overlap: ${AI_DOCUMENT_DEFAULT_CHUNK_OVERLAP:100}

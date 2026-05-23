@@ -213,3 +213,16 @@ UPDATE `system_menu` SET `sort` = 3, `updater` = 'admin', `update_time` = NOW() 
 UPDATE `system_menu` SET `sort` = 4, `updater` = 'admin', `update_time` = NOW() WHERE `id` = 910303;
 UPDATE `system_menu` SET `sort` = 5, `updater` = 'admin', `update_time` = NOW() WHERE `id` = 910304;
 UPDATE `system_menu` SET `sort` = 6, `updater` = 'admin', `update_time` = NOW() WHERE `id` = 910305;
+
+-- 系统配置项：用于管理 ai.rag.engine 等运行期参数。
+INSERT INTO `system_menu`
+(`id`, `name`, `permission`, `type`, `sort`, `parent_id`, `path`, `icon`, `component`, `component_name`, `status`, `visible`, `keep_alive`, `always_show`, `creator`, `create_time`, `updater`, `update_time`, `deleted`)
+VALUES
+(910306, '参数配置', 'infra:config:query', 2, 7, 910300, 'config', 'ep:setting', 'infra/config/index', 'InfraConfig', 0, b'1', b'1', b'1', 'admin', NOW(), 'admin', NOW(), b'0'),
+(910360, '参数查询', 'infra:config:query', 3, 1, 910306, '', '', '', NULL, 0, b'1', b'1', b'1', 'admin', NOW(), 'admin', NOW(), b'0'),
+(910361, '参数新增', 'infra:config:create', 3, 2, 910306, '', '', '', NULL, 0, b'1', b'1', b'1', 'admin', NOW(), 'admin', NOW(), b'0'),
+(910362, '参数修改', 'infra:config:update', 3, 3, 910306, '', '', '', NULL, 0, b'1', b'1', b'1', 'admin', NOW(), 'admin', NOW(), b'0'),
+(910363, '参数删除', 'infra:config:delete', 3, 4, 910306, '', '', '', NULL, 0, b'1', b'1', b'1', 'admin', NOW(), 'admin', NOW(), b'0'),
+(910364, '参数导出', 'infra:config:export', 3, 5, 910306, '', '', '', NULL, 0, b'1', b'1', b'1', 'admin', NOW(), 'admin', NOW(), b'0')
+ON DUPLICATE KEY UPDATE
+  `id` = `id`;

@@ -20,9 +20,14 @@ import cn.iocoder.yudao.module.ai.framework.vector.KnowledgeHit;
 import cn.iocoder.yudao.module.ai.framework.vector.KnowledgeSearchRequest;
 import cn.iocoder.yudao.module.ai.framework.vector.KnowledgeVectorStore;
 import cn.iocoder.yudao.module.ai.service.chatmodel.AiChatModelRequest;
+import cn.iocoder.yudao.module.ai.service.chatmodel.AiChatModelMessage;
 import cn.iocoder.yudao.module.ai.service.chatmodel.AiChatModelResponse;
 import cn.iocoder.yudao.module.ai.service.chatmodel.AiChatModelService;
 import cn.iocoder.yudao.module.ai.service.embedding.AiEmbeddingService;
+import cn.iocoder.yudao.module.ai.service.rag.config.AiRagEngineConfigService;
+import cn.iocoder.yudao.module.ai.service.rag.fastgpt.FastGptRagClient;
+import cn.iocoder.yudao.module.ai.service.rag.fastgpt.FastGptRagRequest;
+import cn.iocoder.yudao.module.ai.service.rag.fastgpt.FastGptRagResult;
 import cn.iocoder.yudao.module.ai.service.rag.retrieval.RetrievalPlanner;
 import cn.iocoder.yudao.module.ai.service.rag.sensitive.PersonalSensitiveDataPolicy;
 import cn.iocoder.yudao.module.ai.service.websearch.WebSearchResult;
@@ -80,20 +85,26 @@ class RagServiceImplTest {
     private WebSearchService webSearchService;
     @Mock
     private AiChatModelService aiChatModelService;
+    @Mock
+    private FastGptRagClient fastGptRagClient;
+    @Mock
+    private AiRagEngineConfigService ragEngineConfigService;
 
     private RagServiceImpl ragService;
     private ObjectMapper objectMapper;
+    private AiProperties aiProperties;
 
     @BeforeEach
     void setUp() {
         AiUserContextHolder.setUserContext(1L, 100L, 20L);
-        AiProperties aiProperties = new AiProperties();
+        aiProperties = new AiProperties();
         aiProperties.getRag().setDefaultScoreThreshold(0.6D);
         objectMapper = new ObjectMapper();
         ragService = new RagServiceImpl(knowledgeBaseMapper, chatConversationMapper, chatMessageMapper,
                 chatCitationMapper, chatQuestionCacheMapper, documentChunkMapper, aiEmbeddingService,
                 knowledgeVectorStore, webSearchService, new PromptBuilder(aiProperties), new RetrievalPlanner(),
-                aiChatModelService, objectMapper, aiProperties, new PersonalSensitiveDataPolicy(null));
+                aiChatModelService, fastGptRagClient, ragEngineConfigService, objectMapper, aiProperties,
+                new PersonalSensitiveDataPolicy(null));
     }
 
     @AfterEach
@@ -135,6 +146,9 @@ class RagServiceImplTest {
         assertEquals("报销需要提交发票和审批单。", response.getAnswer());
         assertEquals(1, response.getCitations().size());
         assertEquals("财务制度", response.getCitations().get(0).getDocumentTitle());
+        assertTrue(response.getDebugInfo().contains("RAG 平台层执行轨迹"));
+        assertTrue(response.getDebugInfo().contains("ragEngine=local"));
+        assertTrue(response.getDebugInfo().contains("contextHitSummary"));
 
         ArgumentCaptor<KnowledgeSearchRequest> searchCaptor = ArgumentCaptor.forClass(KnowledgeSearchRequest.class);
         verify(knowledgeVectorStore).search(searchCaptor.capture());
@@ -165,6 +179,54 @@ class RagServiceImplTest {
         assertEquals("unit-test-chat-model", assistantMessage.getModel());
         assertEquals(15, assistantMessage.getTotalTokens());
         assertTrue(assistantMessage.getLatencyMs() >= 0L);
+    }
+
+    @Test
+    void chatShouldDelegateToFastGptWhenEngineEnabled() {
+        aiProperties.getRag().setEngine("fastgpt");
+        when(ragEngineConfigService.isFastGptEngine()).thenReturn(true);
+        mockConversationAndMessageIds();
+        mockCitationId();
+        when(knowledgeBaseMapper.selectByIdAndTenantId(10L, 1L)).thenReturn(buildKnowledge("*"));
+        when(fastGptRagClient.chat(any(FastGptRagRequest.class))).thenReturn(FastGptRagResult.builder()
+                .modelResponse(AiChatModelResponse.builder()
+                        .model("fastgpt")
+                        .content("FastGPT answer")
+                        .promptTokens(11)
+                        .completionTokens(7)
+                        .totalTokens(18)
+                        .build())
+                .citations(List.of(RagChatCitation.builder()
+                        .documentTitle("FastGPT source")
+                        .quoteText("FastGPT quote")
+                        .score(0.88D)
+                        .build()))
+                .build());
+
+        RagChatResponse response = ragService.chat(RagChatRequest.builder()
+                .knowledgeBaseId(10L)
+                .question("What does FastGPT answer?")
+                .build());
+
+        assertEquals("FastGPT answer", response.getAnswer());
+        assertFalse(response.getNoContext());
+        assertEquals(1, response.getCitations().size());
+        assertEquals(10L, response.getCitations().get(0).getKnowledgeBaseId());
+        assertTrue(response.getDebugInfo().contains("RAG 平台层执行轨迹"));
+        assertTrue(response.getDebugInfo().contains("ragEngine=fastgpt"));
+        assertTrue(response.getDebugInfo().contains("检索和生成委托给 FastGPT"));
+        ArgumentCaptor<FastGptRagRequest> requestCaptor = ArgumentCaptor.forClass(FastGptRagRequest.class);
+        verify(fastGptRagClient).chat(requestCaptor.capture());
+        FastGptRagRequest fastGptRequest = requestCaptor.getValue();
+        assertEquals(1L, fastGptRequest.getTenantId());
+        assertEquals(20L, fastGptRequest.getDepartmentId());
+        assertEquals(10L, fastGptRequest.getKnowledgeBaseId());
+        assertEquals(500L, fastGptRequest.getConversationId());
+        assertEquals(100L, fastGptRequest.getUserId());
+        assertEquals("What does FastGPT answer?", fastGptRequest.getQuestion());
+        assertEquals(ChatMessageRoleEnum.USER.getCode(), fastGptRequest.getMessages().get(0).getRole());
+        assertEquals("What does FastGPT answer?", fastGptRequest.getMessages().get(0).getContent());
+        verifyNoInteractions(aiEmbeddingService, knowledgeVectorStore, aiChatModelService);
     }
 
     @Test

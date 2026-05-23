@@ -16,6 +16,8 @@ public class RagChatCitation {
 
     private Long knowledgeBaseId;
 
+    private String knowledgeBaseName;
+
     private Long documentId;
 
     private Long chunkId;

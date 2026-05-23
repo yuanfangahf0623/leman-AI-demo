@@ -181,7 +181,7 @@
                 </template>
               </div>
               <div class="message-content">
-                {{ messageItem.content || '-' }}
+                <MarkdownView :content="normalizeMessageMarkdown(messageItem.content)" />
               </div>
 
               <div v-if="isAssistantMessage(messageItem)" class="citation-area">
@@ -267,6 +267,7 @@
 
 <script lang="ts" setup>
 import { formatDate } from '@/utils/formatTime'
+import MarkdownView from '@/components/MarkdownView/index.vue'
 import { AiKnowledgeApi, AiKnowledgeVO } from '@/api/ai/knowledge'
 import {
   AiChatCompletionApi,
@@ -317,6 +318,7 @@ let highlightTimer: ReturnType<typeof setTimeout> | undefined
 let programmaticScrollTimer: ReturnType<typeof setTimeout> | undefined
 let programmaticActiveQuestionId: number | undefined
 const PROGRAMMATIC_SCROLL_LOCK_MS = 1200
+const MARKDOWN_IMAGE_PATTERN = /!\[([^\]]*)\]\s*\(\s*(https?:\/\/[^\s)]+)\s*\)/g
 
 const queryParams = reactive({
   pageNo: 1,
@@ -765,6 +767,15 @@ const getCitationContent = (citation: DisplayCitation) => {
   return citation.contentSnapshot || citation.content || citation.quoteText || '-'
 }
 
+const normalizeMessageMarkdown = (content?: string) => {
+  if (!content || !content.trim()) {
+    return '-'
+  }
+  return content.replace(MARKDOWN_IMAGE_PATTERN, (_match, alt: string, url: string) => {
+    return `![${alt || '图片'}](${url})`
+  })
+}
+
 const isCitationExpanded = (messageId: number) => {
   return Boolean(citationMap[messageId])
 }
@@ -1192,10 +1203,30 @@ onBeforeUnmount(() => {
 }
 
 .message-content {
-  white-space: pre-wrap;
   color: var(--el-text-color-primary);
   font-size: 14px;
   line-height: 24px;
+}
+
+.message-content :deep(.markdown-view) {
+  color: inherit;
+  font-size: 14px;
+  line-height: 24px;
+}
+
+.message-content :deep(.markdown-view p) {
+  margin-bottom: 8px;
+}
+
+.message-content :deep(.markdown-view img) {
+  display: block;
+  max-width: min(320px, 100%);
+  max-height: 320px;
+  margin: 10px 0;
+  border: 1px solid var(--el-border-color-lighter);
+  border-radius: 6px;
+  background: #fff;
+  object-fit: contain;
 }
 
 .citation-area {

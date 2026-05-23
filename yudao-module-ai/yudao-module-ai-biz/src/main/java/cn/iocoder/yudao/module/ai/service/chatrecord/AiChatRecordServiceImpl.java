@@ -12,6 +12,7 @@ import cn.iocoder.yudao.module.ai.dal.mysql.AiChatConversationMapper;
 import cn.iocoder.yudao.module.ai.dal.mysql.AiChatMessageMapper;
 import cn.iocoder.yudao.module.ai.enums.AiChatConversationStatusEnum;
 import cn.iocoder.yudao.module.ai.framework.tenant.AiUserContextHolder;
+import cn.iocoder.yudao.module.ai.service.rag.config.AiRagEngineConfigService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
@@ -33,10 +34,12 @@ import static cn.iocoder.yudao.module.ai.enums.AiRagErrorCodeConstants.RAG_CONVE
 public class AiChatRecordServiceImpl implements AiChatRecordService {
 
     private static final Long ALL_KNOWLEDGE_BASE_ID = 0L;
+    private static final String FASTGPT_DISPLAY_NAME = "FastGPT";
 
     private final AiChatConversationMapper chatConversationMapper;
     private final AiChatMessageMapper chatMessageMapper;
     private final AiChatCitationMapper chatCitationMapper;
+    private final AiRagEngineConfigService ragEngineConfigService;
 
     @Override
     public PageResult<AiChatConversationDO> getConversationPage(AiChatConversationPageReqVO pageReqVO) {
@@ -119,20 +122,26 @@ public class AiChatRecordServiceImpl implements AiChatRecordService {
         }
         List<AiChatConversationKnowledgeBaseRefDO> refs = chatCitationMapper.selectKnowledgeBaseRefsByConversationIds(
                 tenantId, allKnowledgeConversationIds);
-        if (refs == null || refs.isEmpty()) {
-            return;
+        if (refs != null && !refs.isEmpty()) {
+            Map<Long, AiChatConversationKnowledgeBaseRefDO> refMap = refs.stream()
+                    .collect(Collectors.toMap(AiChatConversationKnowledgeBaseRefDO::getConversationId,
+                            Function.identity(), (first, ignored) -> first));
+            conversations.forEach(conversation -> {
+                AiChatConversationKnowledgeBaseRefDO ref = refMap.get(conversation.getId());
+                if (ref == null) {
+                    return;
+                }
+                conversation.setDisplayKnowledgeBaseId(ref.getKnowledgeBaseId());
+                conversation.setDisplayKnowledgeBaseName(ref.getKnowledgeBaseName());
+            });
         }
-        Map<Long, AiChatConversationKnowledgeBaseRefDO> refMap = refs.stream()
-                .collect(Collectors.toMap(AiChatConversationKnowledgeBaseRefDO::getConversationId,
-                        Function.identity(), (first, ignored) -> first));
-        conversations.forEach(conversation -> {
-            AiChatConversationKnowledgeBaseRefDO ref = refMap.get(conversation.getId());
-            if (ref == null) {
-                return;
-            }
-            conversation.setDisplayKnowledgeBaseId(ref.getKnowledgeBaseId());
-            conversation.setDisplayKnowledgeBaseName(ref.getKnowledgeBaseName());
-        });
+        // FastGPT 没有返回结构化引用时，至少标明来源引擎，避免继续显示“全部知识库”。
+        if (ragEngineConfigService.isFastGptEngine()) {
+            conversations.stream()
+                    .filter(conversation -> Objects.equals(ALL_KNOWLEDGE_BASE_ID, conversation.getKnowledgeBaseId()))
+                    .filter(conversation -> conversation.getDisplayKnowledgeBaseName() == null)
+                    .forEach(conversation -> conversation.setDisplayKnowledgeBaseName(FASTGPT_DISPLAY_NAME));
+        }
     }
 
 }

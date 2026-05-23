@@ -44,7 +44,7 @@
             {{ conversation.title || `会话 ${conversation.id}` }}
           </div>
           <div class="text-12px text-gray-500">
-            知识库：{{ getKnowledgeName(conversation.knowledgeBaseId) }}
+            知识库：{{ getConversationKnowledgeName(conversation) }}
           </div>
           <div class="mt-4px text-12px text-gray-500">
             {{ formatDateTime(conversation.lastMessageTime || conversation.createTime) }}
@@ -96,8 +96,8 @@
             </div>
           </div>
 
-          <div class="whitespace-pre-wrap rounded-4px bg-gray-50 p-12px text-14px leading-24px">
-            {{ messageItem.content || '-' }}
+          <div class="chat-record-message rounded-4px bg-gray-50 p-12px text-14px leading-24px">
+            <MarkdownView :content="normalizeMessageMarkdown(messageItem.content)" />
           </div>
 
           <div
@@ -152,6 +152,7 @@
 
 <script lang="ts" setup>
 import { formatDate } from '@/utils/formatTime'
+import MarkdownView from '@/components/MarkdownView/index.vue'
 import { AiKnowledgeApi, AiKnowledgeVO } from '@/api/ai/knowledge'
 import {
   AiChatCitationVO,
@@ -161,6 +162,8 @@ import {
 } from '@/api/ai/chat/record'
 
 defineOptions({ name: 'AiKnowledgeChatRecord' })
+
+const MARKDOWN_IMAGE_PATTERN = /!\[([^\]]*)\]\s*\(\s*(https?:\/\/[^\s)]+)\s*\)/g
 
 const knowledgeOptions = ref<AiKnowledgeVO[]>([])
 const conversationLoading = ref(false)
@@ -251,6 +254,16 @@ const getKnowledgeName = (knowledgeBaseId?: number) => {
   return knowledgeOptions.value.find((item) => item.id === knowledgeBaseId)?.name || knowledgeBaseId || '-'
 }
 
+const getConversationKnowledgeName = (conversation: AiChatConversationVO) => {
+  if (conversation.displayKnowledgeBaseName) {
+    return conversation.displayKnowledgeBaseName
+  }
+  if (conversation.displayKnowledgeBaseId) {
+    return getKnowledgeName(conversation.displayKnowledgeBaseId)
+  }
+  return getKnowledgeName(conversation.knowledgeBaseId)
+}
+
 const isAssistantMessage = (messageItem: AiChatMessageVO) => {
   return messageItem.role === 'assistant'
 }
@@ -269,6 +282,15 @@ const getRoleTagType = (role?: string) => {
   return 'info'
 }
 
+const normalizeMessageMarkdown = (content?: string) => {
+  if (!content || !content.trim()) {
+    return '-'
+  }
+  return content.replace(MARKDOWN_IMAGE_PATTERN, (_match, alt: string, url: string) => {
+    return `![${alt || '图片'}](${url})`
+  })
+}
+
 const formatDateTime = (value?: string) => {
   return value ? formatDate(new Date(value)) : '-'
 }
@@ -285,3 +307,26 @@ onMounted(async () => {
   await getConversationList()
 })
 </script>
+
+<style lang="scss" scoped>
+.chat-record-message :deep(.markdown-view) {
+  color: inherit;
+  font-size: 14px;
+  line-height: 24px;
+}
+
+.chat-record-message :deep(.markdown-view p) {
+  margin-bottom: 8px;
+}
+
+.chat-record-message :deep(.markdown-view img) {
+  display: block;
+  max-width: min(320px, 100%);
+  max-height: 320px;
+  margin: 10px 0;
+  border: 1px solid var(--el-border-color-lighter);
+  border-radius: 6px;
+  background: #fff;
+  object-fit: contain;
+}
+</style>

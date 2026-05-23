@@ -225,6 +225,7 @@ CREATE TABLE IF NOT EXISTS `ai_chat_citation` (
   `department_id` bigint NOT NULL DEFAULT 0 COMMENT '部门编号',
   `message_id` bigint NOT NULL COMMENT '消息编号',
   `knowledge_base_id` bigint NOT NULL COMMENT '知识库编号',
+  `external_knowledge_base_name` varchar(128) COLLATE utf8mb4_unicode_ci DEFAULT NULL COMMENT '外部知识库名称，例如 FastGPT 数据集名称',
   `document_id` bigint DEFAULT NULL COMMENT '文档编号，联网来源可为空',
   `chunk_id` bigint DEFAULT NULL COMMENT '切片编号，联网来源可为空',
   `document_title` varchar(256) COLLATE utf8mb4_unicode_ci DEFAULT NULL COMMENT '引用文档标题快照',
