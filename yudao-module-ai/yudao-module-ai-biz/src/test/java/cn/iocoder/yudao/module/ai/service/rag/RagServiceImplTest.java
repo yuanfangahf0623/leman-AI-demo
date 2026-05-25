@@ -230,6 +230,36 @@ class RagServiceImplTest {
     }
 
     @Test
+    void chatShouldNotMapFastGptExternalDatasetIdToLocalKnowledgeBaseWhenAllKnowledgeSelected() {
+        aiProperties.getRag().setEngine("fastgpt");
+        when(ragEngineConfigService.isFastGptEngine()).thenReturn(true);
+        mockConversationAndMessageIds();
+        mockCitationId();
+        when(knowledgeBaseMapper.selectListByTenantId(1L)).thenReturn(List.of(buildKnowledge("*")));
+        when(fastGptRagClient.chat(any(FastGptRagRequest.class))).thenReturn(FastGptRagResult.builder()
+                .modelResponse(AiChatModelResponse.builder()
+                        .model("fastgpt")
+                        .content("FastGPT answer")
+                        .build())
+                .citations(List.of(RagChatCitation.builder()
+                        .knowledgeBaseId(12L)
+                        .documentTitle("开票资料.docx")
+                        .quoteText("开票信息")
+                        .build()))
+                .build());
+
+        RagChatResponse response = ragService.chat(RagChatRequest.builder()
+                .knowledgeBaseId(0L)
+                .question("开票信息")
+                .build());
+
+        assertEquals(0L, response.getCitations().get(0).getKnowledgeBaseId());
+        ArgumentCaptor<AiChatCitationDO> citationCaptor = ArgumentCaptor.forClass(AiChatCitationDO.class);
+        verify(chatCitationMapper).insert(citationCaptor.capture());
+        assertEquals(0L, citationCaptor.getValue().getKnowledgeBaseId());
+    }
+
+    @Test
     void chatShouldAnswerCurrentLoginNicknameWhenAskedWhoAmI() {
         AiUserContextHolder.setUserContext(1L, 100L, 20L, "管理员", false);
         mockConversationAndMessageIds();

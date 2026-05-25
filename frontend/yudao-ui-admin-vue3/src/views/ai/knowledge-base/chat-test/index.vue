@@ -14,6 +14,7 @@
           class="!w-1/1"
           @change="handleKnowledgeFilterChange"
         >
+          <el-option label="FastGPT" :value="FASTGPT_KNOWLEDGE_BASE_ID" />
           <el-option
             v-for="item in knowledgeOptions"
             :key="item.id"
@@ -116,6 +117,7 @@
             @change="handleActiveKnowledgeChange"
           >
             <el-option label="全部知识库" :value="ALL_KNOWLEDGE_BASE_ID" />
+            <el-option label="FastGPT" :value="FASTGPT_KNOWLEDGE_BASE_ID" />
             <el-option
               v-for="item in knowledgeOptions"
               :key="item.id"
@@ -295,6 +297,8 @@ type ConversationCommand = 'rename' | 'pin' | 'archive' | 'delete'
 
 const FALLBACK_ANSWER = '根据当前知识库资料无法确认'
 const ALL_KNOWLEDGE_BASE_ID = 0
+const FASTGPT_KNOWLEDGE_BASE_ID = -1
+const FASTGPT_KNOWLEDGE_BASE_NAME = 'FastGPT'
 
 const message = useMessage()
 
@@ -366,7 +370,10 @@ const getKnowledgeOptions = async () => {
 const getConversationList = async () => {
   conversationLoading.value = true
   try {
-    const data = await AiChatRecordApi.getConversationPage(queryParams)
+    const data = await AiChatRecordApi.getConversationPage({
+      ...queryParams,
+      knowledgeBaseId: normalizeKnowledgeBaseIdForRequest(queryParams.knowledgeBaseId)
+    })
     conversationList.value = data.list
     conversationTotal.value = data.total
     if (data.total === 0 && activeConversationId.value) {
@@ -418,7 +425,7 @@ const resolveDefaultKnowledgeBaseId = () => {
 const handleSelectConversation = async (conversation: AiChatConversationVO) => {
   activeConversationId.value = conversation.id
   activeConversation.value = conversation
-  formData.knowledgeBaseId = conversation.knowledgeBaseId
+  formData.knowledgeBaseId = resolveConversationKnowledgeBaseId(conversation)
   formData.question = ''
   clearCitationState()
   await getMessageList(conversation.id)
@@ -548,7 +555,7 @@ const handleSend = async () => {
 
   try {
     const data = await AiChatCompletionApi.completions({
-      knowledgeBaseId: formData.knowledgeBaseId,
+      knowledgeBaseId: normalizeKnowledgeBaseIdForRequest(formData.knowledgeBaseId)!,
       conversationId: activeConversationId.value,
       question,
       stream: false,
@@ -728,6 +735,9 @@ const getMessageAnchorId = (messageId: number) => {
 }
 
 const getKnowledgeName = (knowledgeBaseId?: number) => {
+  if (knowledgeBaseId === FASTGPT_KNOWLEDGE_BASE_ID) {
+    return FASTGPT_KNOWLEDGE_BASE_NAME
+  }
   if (!knowledgeBaseId || knowledgeBaseId === ALL_KNOWLEDGE_BASE_ID) {
     return '全部知识库'
   }
@@ -746,6 +756,23 @@ const getConversationKnowledgeName = (conversation: AiChatConversationVO) => {
     return getKnowledgeName(conversation.displayKnowledgeBaseId)
   }
   return getKnowledgeName(conversation.knowledgeBaseId)
+}
+
+const normalizeKnowledgeBaseIdForRequest = (knowledgeBaseId?: number) => {
+  if (knowledgeBaseId === FASTGPT_KNOWLEDGE_BASE_ID) {
+    return ALL_KNOWLEDGE_BASE_ID
+  }
+  return knowledgeBaseId
+}
+
+const resolveConversationKnowledgeBaseId = (conversation: AiChatConversationVO) => {
+  if (
+    conversation.displayKnowledgeBaseName === FASTGPT_KNOWLEDGE_BASE_NAME &&
+    (!conversation.knowledgeBaseId || conversation.knowledgeBaseId === ALL_KNOWLEDGE_BASE_ID)
+  ) {
+    return FASTGPT_KNOWLEDGE_BASE_ID
+  }
+  return conversation.knowledgeBaseId
 }
 
 const isUserMessage = (messageItem: AiChatMessageVO) => {

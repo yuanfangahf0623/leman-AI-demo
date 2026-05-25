@@ -617,10 +617,8 @@ public class RagServiceImpl implements RagService {
         if (!isAllKnowledgeBase(requestedKnowledgeBaseId)) {
             return requestedKnowledgeBaseId;
         }
-        if (knowledgeBases == null || knowledgeBases.isEmpty()) {
-            return requestedKnowledgeBaseId;
-        }
-        return knowledgeBases.get(0).getId();
+        // 全部知识库模式下不能随意选一个本地知识库作为引用来源，否则会误显示为 n8n 等本地知识库。
+        return requestedKnowledgeBaseId;
     }
 
     private String buildFastGptDebugInfo(RagChatRequest request, List<AiKnowledgeBaseDO> knowledgeBases,
@@ -1394,8 +1392,8 @@ public class RagServiceImpl implements RagService {
             if (sourceCitation == null) {
                 continue;
             }
-            Long citationKnowledgeBaseId = sourceCitation.getKnowledgeBaseId() == null
-                    ? fallbackKnowledgeBaseId : sourceCitation.getKnowledgeBaseId();
+            // FastGPT 返回的 datasetId/collectionId 属于外部平台，不能当作本地知识库 ID 关联。
+            Long citationKnowledgeBaseId = fallbackKnowledgeBaseId;
             AiChatCitationDO citation = AiChatCitationDO.builder()
                     .tenantId(tenantId)
                     .departmentId(departmentId)
