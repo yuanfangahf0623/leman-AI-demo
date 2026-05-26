@@ -22,6 +22,34 @@ export interface AiDataSourcePageReqVO extends PageParam {
   status?: number
 }
 
+export interface AiDataSourceRawRecordVO {
+  id: number
+  knowledgeBaseId: number
+  dataSourceId: number
+  syncJobId?: number
+  provider: string
+  moduleName: string
+  objectType: string
+  externalId: string
+  sourceUri?: string
+  payloadJson: string
+  payloadHash: string
+  recordTime?: string
+  status?: number
+  createTime?: string
+  updateTime?: string
+}
+
+export interface AiDataSourceRawRecordPageReqVO extends PageParam {
+  knowledgeBaseId?: number
+  dataSourceId?: number
+  syncJobId?: number
+  provider?: string
+  moduleName?: string
+  objectType?: string
+  externalId?: string
+}
+
 export const AiDataSourceApi = {
   // 查询数据源分页
   getDataSourcePage: async (params: AiDataSourcePageReqVO) => {
@@ -46,5 +74,13 @@ export const AiDataSourceApi = {
   // 删除数据源
   deleteDataSource: async (id: number) => {
     return await request.delete({ url: '/ai/datasource/delete?id=' + id })
+  },
+
+  // 查询数据源原始记录，后端返回值已经脱敏
+  getRawRecordPage: async (params: AiDataSourceRawRecordPageReqVO) => {
+    return await request.get<PageResult<AiDataSourceRawRecordVO[]>>({
+      url: '/ai/datasource/raw-record/page',
+      params
+    })
   }
 }

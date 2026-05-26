@@ -135,8 +135,16 @@
         :formatter="dateFormatter"
         width="180"
       />
-      <el-table-column label="操作" align="center" fixed="right" width="140">
+      <el-table-column label="操作" align="center" fixed="right" width="220">
         <template #default="scope">
+          <el-button
+            link
+            type="primary"
+            @click="openRawRecordDialog(scope.row)"
+            v-hasPermi="['ai:datasource:query']"
+          >
+            原始数据
+          </el-button>
           <el-button
             link
             type="primary"
@@ -169,13 +177,51 @@
     :knowledge-options="knowledgeOptions"
     @success="handleFormSuccess"
   />
+
+  <el-dialog v-model="rawRecordDialogVisible" title="接口原始数据（已脱敏）" width="80%" top="5vh">
+    <el-table
+      v-loading="rawRecordLoading"
+      :data="rawRecordList"
+      :stripe="true"
+      :show-overflow-tooltip="true"
+      max-height="560"
+    >
+      <el-table-column label="模块" align="center" prop="moduleName" width="120" />
+      <el-table-column label="对象类型" align="center" prop="objectType" min-width="180" />
+      <el-table-column label="外部编号" align="center" prop="externalId" min-width="180" />
+      <el-table-column label="同步任务" align="center" prop="syncJobId" width="110" />
+      <el-table-column
+        label="记录时间"
+        align="center"
+        prop="recordTime"
+        :formatter="dateFormatter"
+        width="180"
+      />
+      <el-table-column label="脱敏 JSON" min-width="420">
+        <template #default="scope">
+          <pre class="raw-record-json">{{ formatMaskedPayload(scope.row.payloadJson) }}</pre>
+        </template>
+      </el-table-column>
+    </el-table>
+    <Pagination
+      :total="rawRecordTotal"
+      v-model:page="rawRecordQuery.pageNo"
+      v-model:limit="rawRecordQuery.pageSize"
+      @pagination="getRawRecordList"
+    />
+  </el-dialog>
 </template>
 
 <script lang="ts" setup>
 import { CommonStatusEnum } from '@/utils/constants'
 import { dateFormatter } from '@/utils/formatTime'
 import { AiKnowledgeApi, AiKnowledgeVO } from '@/api/ai/knowledge'
-import { AiDataSourceApi, AiDataSourcePageReqVO, AiDataSourceVO } from '@/api/ai/datasource'
+import {
+  AiDataSourceApi,
+  AiDataSourcePageReqVO,
+  AiDataSourceRawRecordVO,
+  AiDataSourceVO
+} from '@/api/ai/datasource'
 import DataSourceForm from './DataSourceForm.vue'
 
 defineOptions({ name: 'AiKnowledgeDataSourceManage' })
@@ -205,6 +251,15 @@ const loading = ref(true)
 const list = ref<AiDataSourceVO[]>([])
 const total = ref(0)
 const knowledgeOptions = ref<AiKnowledgeVO[]>([])
+const rawRecordDialogVisible = ref(false)
+const rawRecordLoading = ref(false)
+const rawRecordList = ref<AiDataSourceRawRecordVO[]>([])
+const rawRecordTotal = ref(0)
+const rawRecordQuery = reactive({
+  pageNo: 1,
+  pageSize: 10,
+  dataSourceId: undefined as number | undefined
+})
 const queryParams = reactive<AiDataSourcePageReqVO>({
   pageNo: 1,
   pageSize: 10,
@@ -265,6 +320,34 @@ const handleDelete = async (id?: number) => {
   } catch {}
 }
 
+const openRawRecordDialog = async (row: AiDataSourceVO) => {
+  rawRecordQuery.pageNo = 1
+  rawRecordQuery.dataSourceId = row.id
+  rawRecordDialogVisible.value = true
+  await getRawRecordList()
+}
+
+const getRawRecordList = async () => {
+  if (!rawRecordQuery.dataSourceId) return
+  rawRecordLoading.value = true
+  try {
+    const data = await AiDataSourceApi.getRawRecordPage(rawRecordQuery)
+    rawRecordList.value = data.list
+    rawRecordTotal.value = data.total
+  } finally {
+    rawRecordLoading.value = false
+  }
+}
+
+const formatMaskedPayload = (payload?: string) => {
+  if (!payload) return '-'
+  try {
+    return JSON.stringify(JSON.parse(payload), null, 2)
+  } catch {
+    return payload
+  }
+}
+
 const getKnowledgeName = (knowledgeBaseId?: number) => {
   return knowledgeOptions.value.find((item) => item.id === knowledgeBaseId)?.name || knowledgeBaseId || '-'
 }
@@ -301,3 +384,15 @@ onMounted(async () => {
   await getList()
 })
 </script>
+
+<style scoped>
+.raw-record-json {
+  max-height: 320px;
+  margin: 0;
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-size: 12px;
+  line-height: 1.5;
+}
+</style>

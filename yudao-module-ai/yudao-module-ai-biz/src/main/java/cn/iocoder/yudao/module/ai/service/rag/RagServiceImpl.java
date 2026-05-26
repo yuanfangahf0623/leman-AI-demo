@@ -201,8 +201,10 @@ public class RagServiceImpl implements RagService {
         }
 
         if (isFastGptEngine()) {
-            return chatWithFastGpt(request, conversation, userMessage, conversationContext, knowledgeBases,
-                    tenantId, departmentId, userId, startNanos, effectiveQuestion, conversationContextApplied);
+            return chatWithHybridFastGpt(request, conversation, userMessage, conversationContext, knowledgeBases,
+                    primaryKnowledgeBase, tenantId, departmentId, userId, currentUserNickname, admin, startNanos,
+                    effectiveQuestion, conversationContextApplied, retrievalPlan, webSearchRequested,
+                    webSearchEnabled, personalSensitive);
         }
 
         boolean clothingSizeCountQuestion = isClothingSizeCountQuestion(effectiveQuestion, normalizedEffectiveQuestion);
@@ -584,6 +586,320 @@ public class RagServiceImpl implements RagService {
                         modelLatencyMs, citations.size(), elapsedMillis(startNanos), fastGptResult.getDebugInfo()))
                 .citations(citations)
                 .build();
+    }
+
+    private RagChatResponse chatWithHybridFastGpt(RagChatRequest request, AiChatConversationDO conversation,
+                                                  AiChatMessageDO userMessage,
+                                                  List<AiChatMessageDO> conversationContext,
+                                                  List<AiKnowledgeBaseDO> knowledgeBases,
+                                                  AiKnowledgeBaseDO primaryKnowledgeBase,
+                                                  Long tenantId, Long departmentId, Long userId,
+                                                  String currentUserNickname, boolean admin, long startNanos,
+                                                  String effectiveQuestion, boolean conversationContextApplied,
+                                                  RetrievalPlan retrievalPlan, boolean webSearchRequested,
+                                                  boolean webSearchEnabled, boolean personalSensitive) {
+        FastGptCallOutcome fastGptOutcome = callFastGptForHybrid(request, conversation, conversationContext,
+                tenantId, departmentId, userId, effectiveQuestion, conversationContextApplied, personalSensitive);
+
+        List<KnowledgeHit> hits = Collections.emptyList();
+        PromptBuildResult prompt;
+        String localSearchError = null;
+        try {
+            hits = searchKnowledge(effectiveQuestion, request, knowledgeBases, tenantId, departmentId);
+            if (personalSensitive && !admin) {
+                hits = filterPersonalSensitiveHitsForCurrentUser(hits, currentUserNickname);
+            }
+            if (webSearchEnabled && !personalSensitive) {
+                hits = appendWebSearchHits(effectiveQuestion, hits, tenantId, request.getKnowledgeBaseId());
+            } else if (webSearchRequested && personalSensitive) {
+                log.info("RAG web search skipped for personal sensitive question, tenantId={}, departmentId={}, knowledgeBaseId={}, conversationId={}",
+                        tenantId, departmentId, request.getKnowledgeBaseId(), conversation.getId());
+            }
+            hits = expandHitsByRetrievalPlan(retrievalPlan, hits, tenantId);
+            prompt = promptBuilder.build(effectiveQuestion, hits, currentUserNickname, retrievalPlan);
+        } catch (RuntimeException ex) {
+            localSearchError = ex.getClass().getSimpleName();
+            log.warn("RAG hybrid local search failed, tenantId={}, departmentId={}, knowledgeBaseId={}, conversationId={}, errorType={}, error={}",
+                    tenantId, departmentId, request.getKnowledgeBaseId(), conversation.getId(),
+                    ex.getClass().getSimpleName(), ex.getMessage());
+            prompt = PromptBuildResult.builder()
+                    .status(PromptBuildResult.STATUS_NO_CONTEXT)
+                    .knowledgeHits(Collections.emptyList())
+                    .estimatedContextTokens(0)
+                    .debugInfo("Hybrid local search failed: " + localSearchError)
+                    .build();
+        }
+        int hitCount = hits == null ? 0 : hits.size();
+        List<RagChatCitation> fastGptCitations = getFastGptCitations(fastGptOutcome);
+        boolean fastGptHasAnswer = hasUsefulFastGptAnswer(fastGptOutcome);
+        if (prompt.isNoContext()) {
+            if (fastGptHasAnswer || !fastGptCitations.isEmpty()) {
+                return saveFastGptOnlyHybridAnswer(request, conversation, userMessage, knowledgeBases, tenantId,
+                        departmentId, userId, startNanos, effectiveQuestion, conversationContextApplied,
+                        retrievalPlan, webSearchRequested, webSearchEnabled, personalSensitive, hitCount, prompt,
+                        fastGptOutcome, localSearchError);
+            }
+            String debugInfo = buildHybridFastGptDebugInfo(request, knowledgeBases, retrievalPlan, conversation,
+                    tenantId, departmentId, userId, effectiveQuestion, conversationContextApplied, webSearchRequested,
+                    webSearchEnabled, personalSensitive, hitCount, prompt, null, 0L, 0, true,
+                    elapsedMillis(startNanos), fastGptOutcome, "fallback", localSearchError);
+            RagChatResponse response = saveFallbackAnswer(conversation, userMessage, tenantId, departmentId, userId,
+                    appendDebugInfo(debugInfo, prompt.getDebugInfo()));
+            log.info("RAG hybrid no effective context, tenantId={}, departmentId={}, knowledgeBaseId={}, conversationId={}, localHitCount={}, fastGptCitationCount={}, elapsedMs={}",
+                    tenantId, departmentId, request.getKnowledgeBaseId(), conversation.getId(), hitCount,
+                    fastGptCitations.size(), elapsedMillis(startNanos));
+            return response;
+        }
+
+        String fastGptAnswer = resolveFastGptAnswer(fastGptOutcome);
+        long modelStartNanos = System.nanoTime();
+        AiChatModelResponse modelResponse = aiChatModelService.chat(AiChatModelRequest.builder()
+                .model(primaryKnowledgeBase.getChatModel())
+                .systemPrompt(buildHybridSystemPrompt())
+                .userPrompt(buildHybridUserPrompt(effectiveQuestion, prompt, fastGptAnswer, fastGptCitations,
+                        fastGptOutcome))
+                .metadata(Map.of("ragEngine", "fastgpt+local", "finalAnswerSource", "local-model-hybrid"))
+                .build());
+        long modelLatencyMs = elapsedMillis(modelStartNanos);
+        String answer = modelResponse.getContent() == null || modelResponse.getContent().isBlank()
+                ? FALLBACK_ANSWER : modelResponse.getContent();
+        AiChatMessageDO assistantMessage = saveMessage(tenantId, departmentId, conversation.getId(), userId,
+                ChatMessageRoleEnum.ASSISTANT.getCode(), answer, modelResponse, modelLatencyMs);
+        List<RagChatCitation> citations = new ArrayList<>();
+        citations.addAll(saveCitations(tenantId, departmentId, assistantMessage.getId(), request.getKnowledgeBaseId(),
+                prompt.getKnowledgeHits(), 0));
+        Long fastGptCitationFallbackKnowledgeBaseId = resolveFastGptCitationKnowledgeBaseId(request.getKnowledgeBaseId(),
+                knowledgeBases);
+        citations.addAll(saveExternalCitations(tenantId, departmentId, assistantMessage.getId(),
+                fastGptCitationFallbackKnowledgeBaseId, fastGptCitations, citations.size()));
+        updateConversationLastMessageTime(conversation.getId(), tenantId, departmentId);
+
+        log.info("RAG hybrid chat success, tenantId={}, departmentId={}, knowledgeBaseId={}, conversationId={}, localHitCount={}, fastGptCitationCount={}, citationCount={}, elapsedMs={}",
+                tenantId, departmentId, request.getKnowledgeBaseId(), conversation.getId(), hitCount,
+                fastGptCitations.size(), citations.size(), elapsedMillis(startNanos));
+        String debugInfo = buildHybridFastGptDebugInfo(request, knowledgeBases, retrievalPlan, conversation, tenantId,
+                departmentId, userId, effectiveQuestion, conversationContextApplied, webSearchRequested,
+                webSearchEnabled, personalSensitive, hitCount, prompt, modelResponse, modelLatencyMs, citations.size(),
+                false, elapsedMillis(startNanos), fastGptOutcome, "local-model-hybrid", localSearchError);
+        return RagChatResponse.builder()
+                .conversationId(conversation.getId())
+                .userMessageId(userMessage.getId())
+                .assistantMessageId(assistantMessage.getId())
+                .answer(answer)
+                .noContext(false)
+                .debugInfo(appendDebugInfo(debugInfo, prompt.getDebugInfo()))
+                .citations(citations)
+                .build();
+    }
+
+    private FastGptCallOutcome callFastGptForHybrid(RagChatRequest request, AiChatConversationDO conversation,
+                                                    List<AiChatMessageDO> conversationContext,
+                                                    Long tenantId, Long departmentId, Long userId,
+                                                    String effectiveQuestion, boolean conversationContextApplied,
+                                                    boolean personalSensitive) {
+        if (personalSensitive) {
+            return new FastGptCallOutcome(null, null, 0L, true,
+                    "skipped for personal sensitive question");
+        }
+        long modelStartNanos = System.nanoTime();
+        try {
+            FastGptRagResult fastGptResult = fastGptRagClient.chat(FastGptRagRequest.builder()
+                    .tenantId(tenantId)
+                    .departmentId(departmentId)
+                    .knowledgeBaseId(request.getKnowledgeBaseId())
+                    .conversationId(conversation.getId())
+                    .userId(userId)
+                    .question(effectiveQuestion)
+                    .messages(buildFastGptMessages(conversationContext, effectiveQuestion, conversationContextApplied))
+                    .build());
+            return new FastGptCallOutcome(fastGptResult, fastGptResult.getModelResponse(),
+                    elapsedMillis(modelStartNanos), false, null);
+        } catch (ServiceException ex) {
+            log.warn("RAG hybrid FastGPT call failed, tenantId={}, departmentId={}, knowledgeBaseId={}, conversationId={}, code={}, error={}",
+                    tenantId, departmentId, request.getKnowledgeBaseId(), conversation.getId(), ex.getCode(),
+                    ex.getMessage());
+            return new FastGptCallOutcome(null, null, elapsedMillis(modelStartNanos), false,
+                    ex.getMessage());
+        } catch (RuntimeException ex) {
+            log.warn("RAG hybrid FastGPT call exception, tenantId={}, departmentId={}, knowledgeBaseId={}, conversationId={}, errorType={}, error={}",
+                    tenantId, departmentId, request.getKnowledgeBaseId(), conversation.getId(),
+                    ex.getClass().getSimpleName(), ex.getMessage());
+            return new FastGptCallOutcome(null, null, elapsedMillis(modelStartNanos), false,
+                    ex.getClass().getSimpleName());
+        }
+    }
+
+    private RagChatResponse saveFastGptOnlyHybridAnswer(RagChatRequest request, AiChatConversationDO conversation,
+                                                        AiChatMessageDO userMessage,
+                                                        List<AiKnowledgeBaseDO> knowledgeBases, Long tenantId,
+                                                        Long departmentId, Long userId, long startNanos,
+                                                        String effectiveQuestion,
+                                                        boolean conversationContextApplied,
+                                                        RetrievalPlan retrievalPlan, boolean webSearchRequested,
+                                                        boolean webSearchEnabled, boolean personalSensitive,
+                                                        int hitCount, PromptBuildResult prompt,
+                                                        FastGptCallOutcome fastGptOutcome,
+                                                        String localSearchError) {
+        AiChatModelResponse modelResponse = fastGptOutcome.modelResponse();
+        String answer = resolveFastGptAnswer(fastGptOutcome);
+        if (!hasText(answer)) {
+            answer = FALLBACK_ANSWER;
+        }
+        AiChatMessageDO assistantMessage = saveMessage(tenantId, departmentId, conversation.getId(), userId,
+                ChatMessageRoleEnum.ASSISTANT.getCode(), answer, modelResponse, fastGptOutcome.latencyMs());
+        Long citationFallbackKnowledgeBaseId = resolveFastGptCitationKnowledgeBaseId(request.getKnowledgeBaseId(),
+                knowledgeBases);
+        List<RagChatCitation> citations = saveExternalCitations(tenantId, departmentId, assistantMessage.getId(),
+                citationFallbackKnowledgeBaseId, getFastGptCitations(fastGptOutcome), 0);
+        updateConversationLastMessageTime(conversation.getId(), tenantId, departmentId);
+        String debugInfo = buildHybridFastGptDebugInfo(request, knowledgeBases, retrievalPlan, conversation, tenantId,
+                departmentId, userId, effectiveQuestion, conversationContextApplied, webSearchRequested,
+                webSearchEnabled, personalSensitive, hitCount, prompt, modelResponse, fastGptOutcome.latencyMs(),
+                citations.size(), FALLBACK_ANSWER.equals(answer) && citations.isEmpty(), elapsedMillis(startNanos),
+                fastGptOutcome, "fastgpt-only", localSearchError);
+        log.info("RAG hybrid answered by FastGPT only, tenantId={}, departmentId={}, knowledgeBaseId={}, conversationId={}, citationCount={}, elapsedMs={}",
+                tenantId, departmentId, request.getKnowledgeBaseId(), conversation.getId(), citations.size(),
+                elapsedMillis(startNanos));
+        return RagChatResponse.builder()
+                .conversationId(conversation.getId())
+                .userMessageId(userMessage.getId())
+                .assistantMessageId(assistantMessage.getId())
+                .answer(answer)
+                .noContext(FALLBACK_ANSWER.equals(answer) && citations.isEmpty())
+                .debugInfo(appendDebugInfo(debugInfo, prompt.getDebugInfo()))
+                .citations(citations)
+                .build();
+    }
+
+    private String buildHybridSystemPrompt() {
+        return """
+                你是企业内部知识库助手。
+                你会同时收到两类资料：
+                1. 本地知识库片段：已经过租户、部门和知识库权限过滤，回答企业内部、个人敏感、业务数据问题时优先使用。
+                2. FastGPT 引擎结果：作为外部 RAG 引擎的补充结果。
+                回答规则：
+                - 优先基于本地知识库片段回答；FastGPT 结果只能补充，不得覆盖本地证据。
+                - 如果资料不足，回答“根据当前知识库资料无法确认”。
+                - 不要编造不存在的制度、数据、流程或结论。
+                - 先直接回答结论，再给出依据；如果有来源，请列出来源文档。
+                """;
+    }
+
+    private String buildHybridUserPrompt(String effectiveQuestion, PromptBuildResult prompt, String fastGptAnswer,
+                                         List<RagChatCitation> fastGptCitations,
+                                         FastGptCallOutcome fastGptOutcome) {
+        return """
+                用户问题：
+                %s
+
+                FastGPT 引擎结果：
+                %s
+
+                FastGPT 引用摘要：
+                %s
+
+                本地知识库 Prompt：
+                %s
+
+                编排提示：
+                - 本地知识库命中时，必须优先采用本地知识库证据。
+                - FastGPT 调用失败或未返回内容时，忽略 FastGPT 结果。
+                - 如果本地知识库与 FastGPT 结果冲突，以本地知识库为准。
+                - 当前 FastGPT 状态：%s。
+                """.formatted(effectiveQuestion, hasText(fastGptAnswer) ? fastGptAnswer : "无",
+                formatExternalCitationSummary(fastGptCitations),
+                prompt == null || prompt.getUserPrompt() == null ? "" : prompt.getUserPrompt(),
+                fastGptOutcomeStatus(fastGptOutcome));
+    }
+
+    private String formatExternalCitationSummary(List<RagChatCitation> citations) {
+        if (citations == null || citations.isEmpty()) {
+            return "无";
+        }
+        StringBuilder builder = new StringBuilder();
+        int limit = Math.min(citations.size(), 10);
+        for (int i = 0; i < limit; i++) {
+            RagChatCitation citation = citations.get(i);
+            builder.append(i + 1).append(". knowledgeBase=")
+                    .append(hasText(citation.getKnowledgeBaseName()) ? citation.getKnowledgeBaseName() : "FastGPT")
+                    .append(", title=").append(citation.getDocumentTitle())
+                    .append(", score=").append(citation.getScore())
+                    .append(", quote=")
+                    .append(truncateForContext(citation.getQuoteText(), 500))
+                    .append('\n');
+        }
+        if (citations.size() > limit) {
+            builder.append("其余 ").append(citations.size() - limit).append(" 条 FastGPT 引用未展开。");
+        }
+        return builder.toString();
+    }
+
+    private String buildHybridFastGptDebugInfo(RagChatRequest request, List<AiKnowledgeBaseDO> knowledgeBases,
+                                               RetrievalPlan retrievalPlan, AiChatConversationDO conversation,
+                                               Long tenantId, Long departmentId, Long userId,
+                                               String effectiveQuestion, boolean conversationContextApplied,
+                                               boolean webSearchRequested, boolean webSearchEnabled,
+                                               boolean personalSensitive, int hitCount, PromptBuildResult prompt,
+                                               AiChatModelResponse modelResponse, long modelLatencyMs,
+                                               int citationCount, boolean noContext, long elapsedMs,
+                                               FastGptCallOutcome fastGptOutcome, String finalAnswerSource,
+                                               String localSearchError) {
+        StringBuilder debug = new StringBuilder();
+        debug.append("## Hybrid RAG execution trace\n");
+        debug.append("- ragEngine=fastgpt+local\n");
+        debug.append("- finalAnswerSource=").append(finalAnswerSource)
+                .append(", localHitCount=").append(hitCount)
+                .append(", persistedCitationCount=").append(citationCount)
+                .append(", noContext=").append(noContext)
+                .append(", totalElapsedMs=").append(elapsedMs).append('\n');
+        debug.append("- fastGptStatus=").append(fastGptOutcomeStatus(fastGptOutcome))
+                .append(", fastGptLatencyMs=").append(fastGptOutcome == null ? 0L : fastGptOutcome.latencyMs())
+                .append(", fastGptCitationCount=").append(getFastGptCitations(fastGptOutcome).size())
+                .append('\n');
+        if (hasText(localSearchError)) {
+            debug.append("- localSearchError=").append(localSearchError).append('\n');
+        }
+        String localDebugInfo = buildLocalPlatformDebugInfo(request, knowledgeBases, retrievalPlan, conversation,
+                tenantId, departmentId, userId, effectiveQuestion, conversationContextApplied, webSearchRequested,
+                webSearchEnabled, personalSensitive, hitCount, prompt, modelResponse, modelLatencyMs, citationCount,
+                noContext, elapsedMs);
+        String fastGptDebugInfo = fastGptOutcome == null || fastGptOutcome.result() == null
+                ? "" : fastGptOutcome.result().getDebugInfo();
+        return appendDebugInfo(debug.toString(), appendDebugInfo(localDebugInfo, fastGptDebugInfo));
+    }
+
+    private String resolveFastGptAnswer(FastGptCallOutcome fastGptOutcome) {
+        if (fastGptOutcome == null || fastGptOutcome.modelResponse() == null) {
+            return null;
+        }
+        String content = fastGptOutcome.modelResponse().getContent();
+        return hasText(content) ? content : null;
+    }
+
+    private boolean hasUsefulFastGptAnswer(FastGptCallOutcome fastGptOutcome) {
+        String answer = resolveFastGptAnswer(fastGptOutcome);
+        return hasText(answer) && !FALLBACK_ANSWER.equals(answer);
+    }
+
+    private List<RagChatCitation> getFastGptCitations(FastGptCallOutcome fastGptOutcome) {
+        if (fastGptOutcome == null || fastGptOutcome.result() == null
+                || fastGptOutcome.result().getCitations() == null) {
+            return Collections.emptyList();
+        }
+        return fastGptOutcome.result().getCitations();
+    }
+
+    private String fastGptOutcomeStatus(FastGptCallOutcome fastGptOutcome) {
+        if (fastGptOutcome == null) {
+            return "not-called";
+        }
+        if (fastGptOutcome.skipped()) {
+            return "skipped:" + fastGptOutcome.errorMessage();
+        }
+        if (hasText(fastGptOutcome.errorMessage())) {
+            return "failed:" + fastGptOutcome.errorMessage();
+        }
+        return fastGptOutcome.result() == null ? "empty" : "success";
     }
 
     private List<AiChatModelMessage> buildFastGptMessages(List<AiChatMessageDO> conversationContext,
@@ -1383,6 +1699,14 @@ public class RagServiceImpl implements RagService {
     private List<RagChatCitation> saveExternalCitations(Long tenantId, Long departmentId, Long assistantMessageId,
                                                         Long fallbackKnowledgeBaseId,
                                                         List<RagChatCitation> sourceCitations) {
+        return saveExternalCitations(tenantId, departmentId, assistantMessageId, fallbackKnowledgeBaseId,
+                sourceCitations, 0);
+    }
+
+    private List<RagChatCitation> saveExternalCitations(Long tenantId, Long departmentId, Long assistantMessageId,
+                                                        Long fallbackKnowledgeBaseId,
+                                                        List<RagChatCitation> sourceCitations,
+                                                        int sortOrderOffset) {
         if (sourceCitations == null || sourceCitations.isEmpty()) {
             return Collections.emptyList();
         }
@@ -1404,7 +1728,7 @@ public class RagServiceImpl implements RagService {
                     .chunkId(sourceCitation.getChunkId())
                     .documentTitle(sourceCitation.getDocumentTitle())
                     .score(toBigDecimal(sourceCitation.getScore()))
-                    .sortOrder(citations.size() + 1)
+                    .sortOrder(sortOrderOffset + citations.size() + 1)
                     .contentSnapshot(truncate(sourceCitation.getQuoteText(), QUOTE_TEXT_MAX_LENGTH))
                     .quoteText(truncate(sourceCitation.getQuoteText(), QUOTE_TEXT_MAX_LENGTH))
                     .build();
@@ -1425,6 +1749,12 @@ public class RagServiceImpl implements RagService {
 
     private List<RagChatCitation> saveCitations(Long tenantId, Long departmentId, Long assistantMessageId,
                                                 Long knowledgeBaseId, List<KnowledgeHit> hits) {
+        return saveCitations(tenantId, departmentId, assistantMessageId, knowledgeBaseId, hits, 0);
+    }
+
+    private List<RagChatCitation> saveCitations(Long tenantId, Long departmentId, Long assistantMessageId,
+                                                Long knowledgeBaseId, List<KnowledgeHit> hits,
+                                                int sortOrderOffset) {
         if (hits == null || hits.isEmpty()) {
             return Collections.emptyList();
         }
@@ -1441,7 +1771,7 @@ public class RagServiceImpl implements RagService {
                     .chunkId(hit.getChunkId())
                     .documentTitle(hit.getDocumentTitle())
                     .score(toBigDecimal(hit.getScore()))
-                    .sortOrder(i + 1)
+                    .sortOrder(sortOrderOffset + i + 1)
                     .contentSnapshot(truncate(hit.getContent(), QUOTE_TEXT_MAX_LENGTH))
                     .quoteText(truncate(hit.getContent(), QUOTE_TEXT_MAX_LENGTH))
                     .build();
@@ -1974,6 +2304,10 @@ public class RagServiceImpl implements RagService {
         return value.substring(0, maxLength);
     }
 
+    private boolean hasText(String value) {
+        return value != null && !value.trim().isEmpty();
+    }
+
     private BigDecimal toBigDecimal(Double value) {
         return value == null ? null : BigDecimal.valueOf(value).setScale(6, RoundingMode.HALF_UP);
     }
@@ -2028,6 +2362,10 @@ public class RagServiceImpl implements RagService {
 
     private record ClothingSizeCountResult(Map<String, Integer> sizeCounts, int totalCount, int documentCount,
                                            List<KnowledgeHit> citationHits) {
+    }
+
+    private record FastGptCallOutcome(FastGptRagResult result, AiChatModelResponse modelResponse, long latencyMs,
+                                      boolean skipped, String errorMessage) {
     }
 
 }

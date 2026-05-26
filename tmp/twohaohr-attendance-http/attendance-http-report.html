@@ -1,0 +1,158 @@
+﻿<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<title>2号人事部考勤接口调用截图报告</title>
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 28px; background: #f5f7fb; color: #172033; font-family: "Microsoft YaHei", "Segoe UI", Arial, sans-serif; }
+  h1 { margin: 0 0 8px; font-size: 24px; }
+  .sub { color: #677189; margin-bottom: 20px; font-size: 13px; }
+  .note { padding: 10px 12px; border: 1px solid #f0c36d; background: #fff7df; border-radius: 6px; margin-bottom: 18px; font-size: 13px; }
+  .grid { display: grid; grid-template-columns: 1fr; gap: 16px; }
+  .card { background: white; border: 1px solid #d9e1ef; border-radius: 8px; padding: 16px; box-shadow: 0 2px 8px rgba(15, 35, 80, 0.06); }
+  .card-title { display: flex; align-items: baseline; justify-content: space-between; gap: 14px; margin-bottom: 8px; }
+  .card-title span { font-weight: 700; font-size: 18px; }
+  .card-title em { color: #5b6680; font-style: normal; font-size: 13px; }
+  .meta { font-size: 13px; color: #33415c; margin-bottom: 10px; }
+  .block { margin-top: 10px; }
+  .label { font-size: 12px; color: #2563eb; font-weight: 700; margin-bottom: 4px; }
+  pre { margin: 0; padding: 12px; background: #0f172a; color: #dce7ff; border-radius: 6px; white-space: pre-wrap; word-break: break-word; line-height: 1.45; font-size: 12px; font-family: Consolas, "Microsoft YaHei", monospace; }
+</style>
+</head>
+<body>
+  <h1>2号人事部考勤接口调用与响应</h1>
+  <div class="sub">生成时间：2026-05-26 14:16:58；Token、密钥已脱敏。</div>
+  <div class="note">说明：以下请求按当前后端代码的调用方式生成，URL query 和 Header 都携带 access_token，但截图中统一替换为 ***。</div>
+  <div class="grid">
+    <section class="card">
+  <div class="card-title"><span>打卡记录</span><em>attendance_card_record</em></div>
+  <div class="meta"><b>HTTP:</b> 200 &nbsp; <b>耗时:</b> 89ms &nbsp; <b>errcode:</b> -1</div>
+  <div class="block"><div class="label">Request</div><pre>POST https://openapi.2haohr.com/api/attendance/card_record/?access_token=***
+Headers:
+{
+    &quot;Accept&quot;:  &quot;application/json&quot;,
+    &quot;Content-Type&quot;:  &quot;application/json&quot;,
+    &quot;access_token&quot;:  &quot;***&quot;
+}
+
+Body:
+{
+    &quot;start_dt&quot;:  &quot;2026-04-26&quot;,
+    &quot;end_dt&quot;:  &quot;2026-05-26&quot;,
+    &quot;add_dt_min&quot;:  &quot;2026-04-26&quot;,
+    &quot;add_dt_max&quot;:  &quot;2026-05-26&quot;,
+    &quot;p&quot;:  1,
+    &quot;limit&quot;:  100
+}</pre></div>
+  <div class="block"><div class="label">Response</div><pre>{&quot;data&quot;:null,&quot;errcode&quot;:-1,&quot;errmsg&quot;:&quot;emp_ids 和 emp_oa_codes 不能同时为空！&quot;}</pre></div>
+</section>
+<section class="card">
+  <div class="card-title"><span>打卡结果</span><em>attendance_card_result</em></div>
+  <div class="meta"><b>HTTP:</b> 200 &nbsp; <b>耗时:</b> 81ms &nbsp; <b>errcode:</b> -1</div>
+  <div class="block"><div class="label">Request</div><pre>POST https://openapi.2haohr.com/api/attendance/card_result/?access_token=***
+Headers:
+{
+    &quot;Accept&quot;:  &quot;application/json&quot;,
+    &quot;Content-Type&quot;:  &quot;application/json&quot;,
+    &quot;access_token&quot;:  &quot;***&quot;
+}
+
+Body:
+{
+    &quot;start_dt&quot;:  &quot;2026-04-26&quot;,
+    &quot;end_dt&quot;:  &quot;2026-05-26&quot;,
+    &quot;add_dt_min&quot;:  &quot;2026-04-26&quot;,
+    &quot;add_dt_max&quot;:  &quot;2026-05-26&quot;,
+    &quot;p&quot;:  1,
+    &quot;limit&quot;:  100
+}</pre></div>
+  <div class="block"><div class="label">Response</div><pre>{&quot;data&quot;:null,&quot;errcode&quot;:-1,&quot;errmsg&quot;:&quot;emp_ids 和 emp_oa_codes 不能同时为空！&quot;}</pre></div>
+</section>
+<section class="card">
+  <div class="card-title"><span>请假记录</span><em>attendance_leave_record</em></div>
+  <div class="meta"><b>HTTP:</b> 200 &nbsp; <b>耗时:</b> 168ms &nbsp; <b>errcode:</b> -1</div>
+  <div class="block"><div class="label">Request</div><pre>POST https://openapi.2haohr.com/api/attendance/leave_record/?access_token=***
+Headers:
+{
+    &quot;Accept&quot;:  &quot;application/json&quot;,
+    &quot;Content-Type&quot;:  &quot;application/json&quot;,
+    &quot;access_token&quot;:  &quot;***&quot;
+}
+
+Body:
+{
+    &quot;start_dt&quot;:  &quot;2026-04-26&quot;,
+    &quot;end_dt&quot;:  &quot;2026-05-26&quot;,
+    &quot;add_dt_min&quot;:  &quot;2026-04-26&quot;,
+    &quot;add_dt_max&quot;:  &quot;2026-05-26&quot;,
+    &quot;p&quot;:  1,
+    &quot;limit&quot;:  100
+}</pre></div>
+  <div class="block"><div class="label">Response</div><pre>{&quot;data&quot;:null,&quot;errcode&quot;:-1,&quot;errmsg&quot;:&quot;emp_ids 和 emp_oa_codes 不能同时为空！&quot;}</pre></div>
+</section>
+<section class="card">
+  <div class="card-title"><span>加班记录</span><em>attendance_overtime_record</em></div>
+  <div class="meta"><b>HTTP:</b> 200 &nbsp; <b>耗时:</b> 79ms &nbsp; <b>errcode:</b> -1</div>
+  <div class="block"><div class="label">Request</div><pre>POST https://openapi.2haohr.com/api/attendance/ot_record/?access_token=***
+Headers:
+{
+    &quot;Accept&quot;:  &quot;application/json&quot;,
+    &quot;Content-Type&quot;:  &quot;application/json&quot;,
+    &quot;access_token&quot;:  &quot;***&quot;
+}
+
+Body:
+{
+    &quot;start_dt&quot;:  &quot;2026-04-26&quot;,
+    &quot;end_dt&quot;:  &quot;2026-05-26&quot;,
+    &quot;add_dt_min&quot;:  &quot;2026-04-26&quot;,
+    &quot;add_dt_max&quot;:  &quot;2026-05-26&quot;,
+    &quot;p&quot;:  1,
+    &quot;limit&quot;:  100
+}</pre></div>
+  <div class="block"><div class="label">Response</div><pre>{&quot;data&quot;:null,&quot;errcode&quot;:-1,&quot;errmsg&quot;:&quot;emp_ids 和 emp_oa_codes 不能同时为空！&quot;}</pre></div>
+</section>
+<section class="card">
+  <div class="card-title"><span>外勤记录</span><em>attendance_outing_record</em></div>
+  <div class="meta"><b>HTTP:</b> 200 &nbsp; <b>耗时:</b> 74ms &nbsp; <b>errcode:</b> -1</div>
+  <div class="block"><div class="label">Request</div><pre>POST https://openapi.2haohr.com/api/attendance/outing_record/?access_token=***
+Headers:
+{
+    &quot;Accept&quot;:  &quot;application/json&quot;,
+    &quot;Content-Type&quot;:  &quot;application/json&quot;,
+    &quot;access_token&quot;:  &quot;***&quot;
+}
+
+Body:
+{
+    &quot;start_dt&quot;:  &quot;2026-04-26&quot;,
+    &quot;end_dt&quot;:  &quot;2026-05-26&quot;,
+    &quot;add_dt_min&quot;:  &quot;2026-04-26&quot;,
+    &quot;add_dt_max&quot;:  &quot;2026-05-26&quot;,
+    &quot;p&quot;:  1,
+    &quot;limit&quot;:  100
+}</pre></div>
+  <div class="block"><div class="label">Response</div><pre>{&quot;data&quot;:null,&quot;errcode&quot;:-1,&quot;errmsg&quot;:&quot;emp_ids 和 emp_oa_codes 不能同时为空！&quot;}</pre></div>
+</section>
+<section class="card">
+  <div class="card-title"><span>班次列表</span><em>attendance_shifts</em></div>
+  <div class="meta"><b>HTTP:</b> 200 &nbsp; <b>耗时:</b> 72ms &nbsp; <b>errcode:</b> -1</div>
+  <div class="block"><div class="label">Request</div><pre>POST https://openapi.2haohr.com/api/attendance/shifts/list/?access_token=***
+Headers:
+{
+    &quot;Accept&quot;:  &quot;application/json&quot;,
+    &quot;Content-Type&quot;:  &quot;application/json&quot;,
+    &quot;access_token&quot;:  &quot;***&quot;
+}
+
+Body:
+{
+    &quot;p&quot;:  1,
+    &quot;limit&quot;:  100
+}</pre></div>
+  <div class="block"><div class="label">Response</div><pre>{&quot;data&quot;:null,&quot;errcode&quot;:-1,&quot;errmsg&quot;:&quot;限制最大条数不能超过50！&quot;}</pre></div>
+</section>
+  </div>
+</body>
+</html>

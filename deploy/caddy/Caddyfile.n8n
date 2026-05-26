@@ -1,0 +1,21 @@
+{
+	# Public 80/443 should be NAT-forwarded to this VM's 8080/8443.
+	# This avoids taking local port 80 from the frontend dev server.
+	http_port 8080
+	https_port 8443
+	admin off
+}
+
+n8n.leman-tech.com {
+	reverse_proxy 127.0.0.1:5678
+}
+
+twohaohr.leman-tech.com {
+	handle /open-api/ai/twohaohr/callback* {
+		reverse_proxy 127.0.0.1:48080
+	}
+
+	handle {
+		respond "Not Found" 404
+	}
+}

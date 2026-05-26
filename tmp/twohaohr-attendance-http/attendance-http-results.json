@@ -1,0 +1,130 @@
+﻿[
+    {
+        "name":  "打卡记录",
+        "object":  "attendance_card_record",
+        "method":  "POST",
+        "url":  "https://openapi.2haohr.com/api/attendance/card_record/?access_token=***",
+        "headers":  {
+                        "Accept":  "application/json",
+                        "Content-Type":  "application/json",
+                        "access_token":  "***"
+                    },
+        "body":  {
+                     "start_dt":  "2026-04-26",
+                     "end_dt":  "2026-05-26",
+                     "add_dt_min":  "2026-04-26",
+                     "add_dt_max":  "2026-05-26",
+                     "p":  1,
+                     "limit":  100
+                 },
+        "httpStatus":  200,
+        "elapsedMs":  89,
+        "response":  "{\"data\":null,\"errcode\":-1,\"errmsg\":\"emp_ids 和 emp_oa_codes 不能同时为空！\"}"
+    },
+    {
+        "name":  "打卡结果",
+        "object":  "attendance_card_result",
+        "method":  "POST",
+        "url":  "https://openapi.2haohr.com/api/attendance/card_result/?access_token=***",
+        "headers":  {
+                        "Accept":  "application/json",
+                        "Content-Type":  "application/json",
+                        "access_token":  "***"
+                    },
+        "body":  {
+                     "start_dt":  "2026-04-26",
+                     "end_dt":  "2026-05-26",
+                     "add_dt_min":  "2026-04-26",
+                     "add_dt_max":  "2026-05-26",
+                     "p":  1,
+                     "limit":  100
+                 },
+        "httpStatus":  200,
+        "elapsedMs":  81,
+        "response":  "{\"data\":null,\"errcode\":-1,\"errmsg\":\"emp_ids 和 emp_oa_codes 不能同时为空！\"}"
+    },
+    {
+        "name":  "请假记录",
+        "object":  "attendance_leave_record",
+        "method":  "POST",
+        "url":  "https://openapi.2haohr.com/api/attendance/leave_record/?access_token=***",
+        "headers":  {
+                        "Accept":  "application/json",
+                        "Content-Type":  "application/json",
+                        "access_token":  "***"
+                    },
+        "body":  {
+                     "start_dt":  "2026-04-26",
+                     "end_dt":  "2026-05-26",
+                     "add_dt_min":  "2026-04-26",
+                     "add_dt_max":  "2026-05-26",
+                     "p":  1,
+                     "limit":  100
+                 },
+        "httpStatus":  200,
+        "elapsedMs":  168,
+        "response":  "{\"data\":null,\"errcode\":-1,\"errmsg\":\"emp_ids 和 emp_oa_codes 不能同时为空！\"}"
+    },
+    {
+        "name":  "加班记录",
+        "object":  "attendance_overtime_record",
+        "method":  "POST",
+        "url":  "https://openapi.2haohr.com/api/attendance/ot_record/?access_token=***",
+        "headers":  {
+                        "Accept":  "application/json",
+                        "Content-Type":  "application/json",
+                        "access_token":  "***"
+                    },
+        "body":  {
+                     "start_dt":  "2026-04-26",
+                     "end_dt":  "2026-05-26",
+                     "add_dt_min":  "2026-04-26",
+                     "add_dt_max":  "2026-05-26",
+                     "p":  1,
+                     "limit":  100
+                 },
+        "httpStatus":  200,
+        "elapsedMs":  79,
+        "response":  "{\"data\":null,\"errcode\":-1,\"errmsg\":\"emp_ids 和 emp_oa_codes 不能同时为空！\"}"
+    },
+    {
+        "name":  "外勤记录",
+        "object":  "attendance_outing_record",
+        "method":  "POST",
+        "url":  "https://openapi.2haohr.com/api/attendance/outing_record/?access_token=***",
+        "headers":  {
+                        "Accept":  "application/json",
+                        "Content-Type":  "application/json",
+                        "access_token":  "***"
+                    },
+        "body":  {
+                     "start_dt":  "2026-04-26",
+                     "end_dt":  "2026-05-26",
+                     "add_dt_min":  "2026-04-26",
+                     "add_dt_max":  "2026-05-26",
+                     "p":  1,
+                     "limit":  100
+                 },
+        "httpStatus":  200,
+        "elapsedMs":  74,
+        "response":  "{\"data\":null,\"errcode\":-1,\"errmsg\":\"emp_ids 和 emp_oa_codes 不能同时为空！\"}"
+    },
+    {
+        "name":  "班次列表",
+        "object":  "attendance_shifts",
+        "method":  "POST",
+        "url":  "https://openapi.2haohr.com/api/attendance/shifts/list/?access_token=***",
+        "headers":  {
+                        "Accept":  "application/json",
+                        "Content-Type":  "application/json",
+                        "access_token":  "***"
+                    },
+        "body":  {
+                     "p":  1,
+                     "limit":  100
+                 },
+        "httpStatus":  200,
+        "elapsedMs":  72,
+        "response":  "{\"data\":null,\"errcode\":-1,\"errmsg\":\"限制最大条数不能超过50！\"}"
+    }
+]

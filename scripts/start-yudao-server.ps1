@@ -39,6 +39,19 @@ $requiredEnvNames = @(
 )
 
 $optionalEnvNames = @(
+    "SERVER_JAVA_OPTS",
+    "AI_RAG_ENGINE",
+    "FASTGPT_BASE_URL",
+    "FASTGPT_API_KEY",
+    "FASTGPT_APP_ID",
+    "FASTGPT_MODEL",
+    "FASTGPT_CONNECT_TIMEOUT_SECONDS",
+    "FASTGPT_READ_TIMEOUT_SECONDS",
+    "TWO_HAO_HR_ACCESS_TOKEN",
+    "TWO_HAO_HR_CORP_ID",
+    "TWO_HAO_HR_APP_ID",
+    "TWO_HAO_HR_APP_SECRET",
+    "TWO_HAO_HR_CALLBACK_TOKEN",
     "AI_DOCUMENT_OCR_ENABLED",
     "AI_DOCUMENT_OCR_PROVIDER",
     "AI_DOCUMENT_OCR_TESSERACT_EXECUTABLE",
@@ -91,9 +104,14 @@ New-Item -ItemType Directory -Force -Path $logDir | Out-Null
 $timestamp = Get-Date -Format "yyyyMMdd-HHmmss"
 $stdout = Join-Path $logDir "yudao-server-$timestamp.out.log"
 $stderr = Join-Path $logDir "yudao-server-$timestamp.err.log"
+$javaOpts = if ($env:SERVER_JAVA_OPTS) {
+    $env:SERVER_JAVA_OPTS -split "\s+" | Where-Object { $_ }
+} else {
+    @("-Xms1g", "-Xmx8g")
+}
 
 $process = Start-Process -FilePath $java `
-    -ArgumentList @("-jar", "`"$jarPath`"") `
+    -ArgumentList @($javaOpts + @("-jar", "`"$jarPath`"")) `
     -WorkingDirectory $repoRoot `
     -RedirectStandardOutput $stdout `
     -RedirectStandardError $stderr `
@@ -103,4 +121,6 @@ $process = Start-Process -FilePath $java `
 Write-Host "Backend started, PID=$($process.Id)"
 Write-Host "AI_MODEL_PROVIDER=$env:AI_MODEL_PROVIDER"
 Write-Host "AI_VECTOR_STORE_TYPE=$env:AI_VECTOR_STORE_TYPE"
+Write-Host "AI_RAG_ENGINE=$env:AI_RAG_ENGINE"
+Write-Host "Java opts: $($javaOpts -join ' ')"
 Write-Host "Log: $stdout"

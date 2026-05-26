@@ -6,10 +6,13 @@ import cn.iocoder.yudao.module.ai.controller.admin.datasource.vo.AiDataSourceCre
 import cn.iocoder.yudao.module.ai.controller.admin.datasource.vo.AiDataSourceIngestReqVO;
 import cn.iocoder.yudao.module.ai.controller.admin.datasource.vo.AiDataSourceIngestRespVO;
 import cn.iocoder.yudao.module.ai.controller.admin.datasource.vo.AiDataSourcePageReqVO;
+import cn.iocoder.yudao.module.ai.controller.admin.datasource.vo.AiDataSourceRawRecordPageReqVO;
+import cn.iocoder.yudao.module.ai.controller.admin.datasource.vo.AiDataSourceRawRecordRespVO;
 import cn.iocoder.yudao.module.ai.controller.admin.datasource.vo.AiDataSourceRespVO;
 import cn.iocoder.yudao.module.ai.controller.admin.datasource.vo.AiDataSourceUpdateReqVO;
 import cn.iocoder.yudao.module.ai.convert.AiDataSourceConvert;
 import cn.iocoder.yudao.module.ai.dal.dataobject.AiDataSourceDO;
+import cn.iocoder.yudao.module.ai.service.datasource.AiDataSourceRawRecordService;
 import cn.iocoder.yudao.module.ai.service.datasource.AiDataSourceService;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotNull;
@@ -37,6 +40,7 @@ import org.springframework.web.bind.annotation.RestController;
 public class AiDataSourceController {
 
     private final AiDataSourceService dataSourceService;
+    private final AiDataSourceRawRecordService rawRecordService;
 
     @GetMapping("/page")
     @PreAuthorize("@ss.hasPermission('ai:datasource:query')")
@@ -51,6 +55,13 @@ public class AiDataSourceController {
     public CommonResult<AiDataSourceRespVO> getDataSource(@RequestParam("id") @NotNull(message = "数据源编号不能为空") Long id) {
         // 详情返回响应 VO，不直接暴露 DO。
         return CommonResult.success(AiDataSourceConvert.INSTANCE.convert(dataSourceService.getDataSource(id)));
+    }
+
+    @GetMapping("/raw-record/page")
+    @PreAuthorize("@ss.hasPermission('ai:datasource:query')")
+    public CommonResult<PageResult<AiDataSourceRawRecordRespVO>> getRawRecordPage(
+            @Valid AiDataSourceRawRecordPageReqVO pageReqVO) {
+        return CommonResult.success(rawRecordService.getRawRecordPage(pageReqVO));
     }
 
     @PostMapping("/create")

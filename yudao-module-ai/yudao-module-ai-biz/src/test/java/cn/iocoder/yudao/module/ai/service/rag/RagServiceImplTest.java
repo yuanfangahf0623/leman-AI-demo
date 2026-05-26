@@ -182,7 +182,7 @@ class RagServiceImplTest {
     }
 
     @Test
-    void chatShouldDelegateToFastGptWhenEngineEnabled() {
+    void chatShouldUseFastGptOnlyWhenEngineEnabledAndLocalHasNoContext() {
         aiProperties.getRag().setEngine("fastgpt");
         when(ragEngineConfigService.isFastGptEngine()).thenReturn(true);
         mockConversationAndMessageIds();
@@ -213,8 +213,8 @@ class RagServiceImplTest {
         assertEquals(1, response.getCitations().size());
         assertEquals(10L, response.getCitations().get(0).getKnowledgeBaseId());
         assertTrue(response.getDebugInfo().contains("RAG 平台层执行轨迹"));
-        assertTrue(response.getDebugInfo().contains("ragEngine=fastgpt"));
-        assertTrue(response.getDebugInfo().contains("检索和生成委托给 FastGPT"));
+        assertTrue(response.getDebugInfo().contains("ragEngine=fastgpt+local"));
+        assertTrue(response.getDebugInfo().contains("finalAnswerSource=fastgpt-only"));
         ArgumentCaptor<FastGptRagRequest> requestCaptor = ArgumentCaptor.forClass(FastGptRagRequest.class);
         verify(fastGptRagClient).chat(requestCaptor.capture());
         FastGptRagRequest fastGptRequest = requestCaptor.getValue();
@@ -226,7 +226,71 @@ class RagServiceImplTest {
         assertEquals("What does FastGPT answer?", fastGptRequest.getQuestion());
         assertEquals(ChatMessageRoleEnum.USER.getCode(), fastGptRequest.getMessages().get(0).getRole());
         assertEquals("What does FastGPT answer?", fastGptRequest.getMessages().get(0).getContent());
-        verifyNoInteractions(aiEmbeddingService, knowledgeVectorStore, aiChatModelService);
+        verify(aiEmbeddingService).embed("What does FastGPT answer?");
+        verify(knowledgeVectorStore).search(any(KnowledgeSearchRequest.class));
+        verify(aiChatModelService, never()).chat(any());
+    }
+
+    @Test
+    void chatShouldMergeFastGptAndLocalKnowledgeWhenEngineEnabled() {
+        aiProperties.getRag().setEngine("fastgpt");
+        when(ragEngineConfigService.isFastGptEngine()).thenReturn(true);
+        mockConversationAndMessageIds();
+        mockCitationId();
+        when(knowledgeBaseMapper.selectByIdAndTenantId(10L, 1L)).thenReturn(buildKnowledge("*"));
+        when(fastGptRagClient.chat(any(FastGptRagRequest.class))).thenReturn(FastGptRagResult.builder()
+                .modelResponse(AiChatModelResponse.builder()
+                        .model("fastgpt")
+                        .content("FastGPT general answer")
+                        .build())
+                .citations(List.of(RagChatCitation.builder()
+                        .knowledgeBaseName("FastGPT")
+                        .documentTitle("FastGPT source")
+                        .quoteText("FastGPT quote")
+                        .score(0.80D)
+                        .build()))
+                .build());
+        when(aiEmbeddingService.embed("What is attendance?")).thenReturn(List.of(1.0D, 0.0D));
+        when(knowledgeVectorStore.search(any(KnowledgeSearchRequest.class))).thenReturn(List.of(KnowledgeHit.builder()
+                .tenantId(1L)
+                .knowledgeBaseId(10L)
+                .documentId(210L)
+                .chunkId(310L)
+                .chunkNo(1)
+                .documentTitle("2haohr attendance")
+                .content("Local HR attendance rule")
+                .score(0.92D)
+                .metadata(Map.of("title", "2haohr attendance"))
+                .build()));
+        when(aiChatModelService.chat(any(AiChatModelRequest.class))).thenReturn(AiChatModelResponse.builder()
+                .model("unit-test-chat-model")
+                .content("Hybrid answer")
+                .totalTokens(12)
+                .build());
+
+        RagChatResponse response = ragService.chat(RagChatRequest.builder()
+                .knowledgeBaseId(10L)
+                .question("What is attendance?")
+                .build());
+
+        assertEquals("Hybrid answer", response.getAnswer());
+        assertFalse(response.getNoContext());
+        assertEquals(2, response.getCitations().size());
+        assertEquals("2haohr attendance", response.getCitations().get(0).getDocumentTitle());
+        assertEquals("FastGPT source", response.getCitations().get(1).getDocumentTitle());
+        assertTrue(response.getDebugInfo().contains("ragEngine=fastgpt+local"));
+        assertTrue(response.getDebugInfo().contains("finalAnswerSource=local-model-hybrid"));
+
+        ArgumentCaptor<AiChatModelRequest> chatCaptor = ArgumentCaptor.forClass(AiChatModelRequest.class);
+        verify(aiChatModelService).chat(chatCaptor.capture());
+        assertTrue(chatCaptor.getValue().getUserPrompt().contains("FastGPT general answer"));
+        assertTrue(chatCaptor.getValue().getUserPrompt().contains("Local HR attendance rule"));
+
+        ArgumentCaptor<KnowledgeSearchRequest> searchCaptor = ArgumentCaptor.forClass(KnowledgeSearchRequest.class);
+        verify(knowledgeVectorStore).search(searchCaptor.capture());
+        assertEquals(1L, searchCaptor.getValue().getTenantId());
+        assertEquals(20L, searchCaptor.getValue().getDepartmentId());
+        assertEquals(10L, searchCaptor.getValue().getKnowledgeBaseId());
     }
 
     @Test

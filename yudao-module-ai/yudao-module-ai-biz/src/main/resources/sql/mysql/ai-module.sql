@@ -67,6 +67,68 @@ CREATE TABLE IF NOT EXISTS `ai_data_source` (
   KEY `idx_ai_ds_tenant_type` (`tenant_id`, `type`) USING BTREE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='数据源表，用于存储知识库的数据来源信息（如文件、数据库、API 等）';
 
+CREATE TABLE IF NOT EXISTS `ai_data_source_raw_record` (
+  `id` bigint NOT NULL AUTO_INCREMENT COMMENT '编号',
+  `tenant_id` bigint NOT NULL DEFAULT 0 COMMENT '租户编号',
+  `knowledge_base_id` bigint NOT NULL COMMENT '知识库编号',
+  `data_source_id` bigint NOT NULL COMMENT '数据源编号',
+  `sync_job_id` bigint DEFAULT NULL COMMENT '同步任务编号',
+  `provider` varchar(64) COLLATE utf8mb4_unicode_ci NOT NULL COMMENT '数据提供方',
+  `module_name` varchar(64) COLLATE utf8mb4_unicode_ci NOT NULL COMMENT '业务模块',
+  `object_type` varchar(128) COLLATE utf8mb4_unicode_ci NOT NULL COMMENT '对象类型',
+  `external_id` varchar(255) COLLATE utf8mb4_unicode_ci NOT NULL COMMENT '外部数据编号',
+  `source_uri` varchar(1024) COLLATE utf8mb4_unicode_ci DEFAULT NULL COMMENT '来源地址',
+  `payload_json` longtext COLLATE utf8mb4_unicode_ci NOT NULL COMMENT '接口原始返回 JSON，数据库保存真实数据',
+  `payload_hash` varchar(64) COLLATE utf8mb4_unicode_ci NOT NULL COMMENT '接口返回内容哈希',
+  `record_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '记录时间',
+  `status` tinyint NOT NULL DEFAULT 0 COMMENT '状态',
+  `creator` varchar(64) COLLATE utf8mb4_unicode_ci DEFAULT '' COMMENT '创建者',
+  `create_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+  `updater` varchar(64) COLLATE utf8mb4_unicode_ci DEFAULT '' COMMENT '更新者',
+  `update_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+  `deleted` bit(1) NOT NULL DEFAULT b'0' COMMENT '是否删除',
+  PRIMARY KEY (`id`) USING BTREE,
+  UNIQUE KEY `uk_ai_raw_record_unique` (`tenant_id`, `data_source_id`, `provider`, `object_type`, `external_id`, `deleted`) USING BTREE,
+  KEY `idx_ai_raw_record_kb_tenant` (`knowledge_base_id`, `tenant_id`) USING BTREE,
+  KEY `idx_ai_raw_record_sync_job` (`sync_job_id`) USING BTREE,
+  KEY `idx_ai_raw_record_module` (`tenant_id`, `data_source_id`, `module_name`, `object_type`) USING BTREE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='数据源原始记录表，用于保存第三方接口返回的真实数据，前端查询时必须脱敏';
+
+CREATE TABLE IF NOT EXISTS `ai_twohaohr_attendance_record` (
+  `id` bigint NOT NULL AUTO_INCREMENT COMMENT '编号',
+  `tenant_id` bigint NOT NULL DEFAULT 0 COMMENT '租户编号',
+  `knowledge_base_id` bigint NOT NULL COMMENT '知识库编号',
+  `data_source_id` bigint NOT NULL COMMENT '数据源编号',
+  `sync_job_id` bigint DEFAULT NULL COMMENT '同步任务编号',
+  `provider` varchar(32) COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'two-hao-hr' COMMENT '数据提供方',
+  `record_type` varchar(64) COLLATE utf8mb4_unicode_ci NOT NULL COMMENT '考勤记录类型',
+  `external_id` varchar(255) COLLATE utf8mb4_unicode_ci NOT NULL COMMENT '外部记录编号',
+  `employee_id` varchar(64) COLLATE utf8mb4_unicode_ci DEFAULT NULL COMMENT '员工编号',
+  `employee_oa_code` varchar(64) COLLATE utf8mb4_unicode_ci DEFAULT NULL COMMENT '员工 OA 编码',
+  `employee_name` varchar(128) COLLATE utf8mb4_unicode_ci DEFAULT NULL COMMENT '员工姓名',
+  `department_id` varchar(64) COLLATE utf8mb4_unicode_ci DEFAULT NULL COMMENT '部门编号',
+  `department_name` varchar(128) COLLATE utf8mb4_unicode_ci DEFAULT NULL COMMENT '部门名称',
+  `attendance_date` date DEFAULT NULL COMMENT '考勤日期',
+  `start_time` datetime DEFAULT NULL COMMENT '开始时间',
+  `end_time` datetime DEFAULT NULL COMMENT '结束时间',
+  `record_status` varchar(64) COLLATE utf8mb4_unicode_ci DEFAULT NULL COMMENT '记录状态',
+  `payload_json` longtext COLLATE utf8mb4_unicode_ci NOT NULL COMMENT '接口原始 JSON，数据库保存真实数据',
+  `payload_hash` varchar(128) COLLATE utf8mb4_unicode_ci NOT NULL COMMENT '内容哈希',
+  `record_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '记录时间',
+  `status` tinyint NOT NULL DEFAULT 0 COMMENT '状态',
+  `creator` varchar(64) COLLATE utf8mb4_unicode_ci DEFAULT '' COMMENT '创建者',
+  `create_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+  `updater` varchar(64) COLLATE utf8mb4_unicode_ci DEFAULT '' COMMENT '更新者',
+  `update_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+  `deleted` bit(1) NOT NULL DEFAULT b'0' COMMENT '是否删除',
+  PRIMARY KEY (`id`) USING BTREE,
+  UNIQUE KEY `uk_ai_twohaohr_attendance_unique` (`tenant_id`, `data_source_id`, `record_type`, `external_id`, `deleted`) USING BTREE,
+  KEY `idx_ai_twohaohr_attendance_employee` (`tenant_id`, `employee_id`, `attendance_date`, `deleted`) USING BTREE,
+  KEY `idx_ai_twohaohr_attendance_oa` (`tenant_id`, `employee_oa_code`, `attendance_date`, `deleted`) USING BTREE,
+  KEY `idx_ai_twohaohr_attendance_kb` (`tenant_id`, `knowledge_base_id`, `record_type`, `deleted`) USING BTREE,
+  KEY `idx_ai_twohaohr_attendance_sync_job` (`sync_job_id`, `record_type`) USING BTREE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='2号人事部考勤明细表，用于单独保存考勤打卡、请假、加班、外勤、班次等明细数据';
+
 CREATE TABLE IF NOT EXISTS `ai_document` (
   `id` bigint NOT NULL AUTO_INCREMENT COMMENT '编号',
   `tenant_id` bigint NOT NULL DEFAULT 0 COMMENT '租户编号',
