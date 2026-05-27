@@ -71,6 +71,9 @@ ai:
     default-chunk-overlap: ${AI_DOCUMENT_DEFAULT_CHUNK_OVERLAP:100}
     max-file-size-mb: ${AI_DOCUMENT_MAX_FILE_SIZE_MB:50}
     embedding-batch-size: ${AI_DOCUMENT_EMBEDDING_BATCH_SIZE:32}
+    embedding-batch-max-retries: ${AI_DOCUMENT_EMBEDDING_BATCH_MAX_RETRIES:2}
+    embedding-retry-backoff-millis: ${AI_DOCUMENT_EMBEDDING_RETRY_BACKOFF_MILLIS:1000}
+    embedding-max-consecutive-failures: ${AI_DOCUMENT_EMBEDDING_MAX_CONSECUTIVE_FAILURES:3}
     storage-base-path: ${AI_DOCUMENT_STORAGE_BASE_PATH:.data/ai-documents}
     ocr:
       enabled: ${AI_DOCUMENT_OCR_ENABLED:false}

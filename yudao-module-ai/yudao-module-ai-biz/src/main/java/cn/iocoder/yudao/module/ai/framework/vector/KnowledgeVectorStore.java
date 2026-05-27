@@ -17,4 +17,6 @@ public interface KnowledgeVectorStore {
 
     void deleteByKnowledgeBaseId(Long knowledgeBaseId);
 
+    void deleteByVectorIds(List<String> vectorIds);
+
 }

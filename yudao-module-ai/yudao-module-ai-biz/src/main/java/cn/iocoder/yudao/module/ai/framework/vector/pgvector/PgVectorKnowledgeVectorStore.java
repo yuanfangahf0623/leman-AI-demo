@@ -153,6 +153,25 @@ public class PgVectorKnowledgeVectorStore implements KnowledgeVectorStore {
         }
     }
 
+    @Override
+    public void deleteByVectorIds(List<String> vectorIds) {
+        List<String> normalizedVectorIds = vectorIds == null ? Collections.emptyList() : vectorIds.stream()
+                .filter(vectorId -> vectorId != null && !vectorId.isBlank())
+                .toList();
+        if (normalizedVectorIds.isEmpty()) {
+            return;
+        }
+        String placeholders = String.join(",", Collections.nCopies(normalizedVectorIds.size(), "?"));
+        try {
+            jdbcTemplate.update("DELETE FROM " + tableName + " WHERE vector_id IN (" + placeholders + ")",
+                    normalizedVectorIds.toArray());
+        } catch (DataAccessException ex) {
+            log.warn("PgVector delete by vector ids failed, vectorCount={}, errorType={}, error={}",
+                    normalizedVectorIds.size(), ex.getClass().getSimpleName(), ex.getMessage());
+            throw new ServiceException(VECTOR_STORE_OPERATION_FAILED, "Delete embedding vectors failed");
+        }
+    }
+
     private KnowledgeVector normalizeVector(KnowledgeVector vector) {
         validateVector(vector);
         String vectorId = vector.getVectorId();

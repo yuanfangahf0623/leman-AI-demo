@@ -51,9 +51,11 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
 
+import static cn.iocoder.yudao.module.ai.enums.AiEmbeddingErrorCodeConstants.EMBEDDING_REQUEST_FAILED;
 import static cn.iocoder.yudao.module.ai.enums.AiDocumentErrorCodeConstants.DOCUMENT_EMBED_CHUNK_EMPTY;
 import static cn.iocoder.yudao.module.ai.enums.AiDocumentErrorCodeConstants.DOCUMENT_EMBED_FAILED;
 import static cn.iocoder.yudao.module.ai.enums.AiDocumentErrorCodeConstants.DOCUMENT_FILE_CONTENT_INVALID;
@@ -67,6 +69,7 @@ import static cn.iocoder.yudao.module.ai.enums.AiDocumentErrorCodeConstants.DOCU
 import static cn.iocoder.yudao.module.ai.enums.AiDocumentErrorCodeConstants.DOCUMENT_PARSE_FAILED;
 import static cn.iocoder.yudao.module.ai.enums.AiDocumentErrorCodeConstants.DOCUMENT_PARSE_NOT_SUCCESS;
 import static cn.iocoder.yudao.module.ai.enums.AiKnowledgeErrorCodeConstants.KNOWLEDGE_DIRECTORY_NOT_EXISTS;
+import static cn.iocoder.yudao.module.ai.enums.AiVectorStoreErrorCodeConstants.VECTOR_STORE_OPERATION_FAILED;
 
 /**
  * AI 文档 Service 实现。
@@ -297,6 +300,10 @@ public class AiDocumentServiceImpl implements AiDocumentService {
                 DocumentEmbeddingStatusEnum.RUNNING.getCode(), null);
         String embeddingModel = resolveEmbeddingModel(knowledgeBase);
         int batchSize = resolveEmbeddingBatchSize();
+        if (aiProperties.getDocument().getEmbeddingBatchMaxRetries() != null) {
+            embedDocumentResumable(document, chunks, embeddingModel, batchSize, startNanos);
+            return;
+        }
         List<ChunkVectorResult> chunkVectorResults = new ArrayList<>(chunks.size());
 
         try {
@@ -361,6 +368,196 @@ public class AiDocumentServiceImpl implements AiDocumentService {
         if (!DocumentParseStatusEnum.SUCCESS.getCode().equals(document.getParseStatus())) {
             throw new ServiceException(DOCUMENT_PARSE_NOT_SUCCESS, "文档尚未解析成功");
         }
+    }
+
+    private void embedDocumentResumable(AiDocumentDO document, List<AiDocumentChunkDO> chunks,
+                                        String embeddingModel, int batchSize, long startNanos) {
+        int maxRetries = resolveEmbeddingBatchMaxRetries();
+        long retryBackoffMillis = resolveEmbeddingRetryBackoffMillis();
+        int maxConsecutiveFailures = resolveEmbeddingMaxConsecutiveFailures();
+        List<AiDocumentChunkDO> pendingChunks = getChunksRequiringEmbedding(chunks, embeddingModel);
+        int skippedCount = chunks.size() - pendingChunks.size();
+        if (pendingChunks.isEmpty()) {
+            documentMapper.updateEmbeddingStatusByIdAndTenantId(document.getId(), document.getTenantId(),
+                    DocumentEmbeddingStatusEnum.SUCCESS.getCode(), null);
+            log.info("Document embedding already complete, documentId={}, tenantId={}, knowledgeBaseId={}, chunkCount={}, elapsedMs={}",
+                    document.getId(), document.getTenantId(), document.getKnowledgeBaseId(), chunks.size(),
+                    elapsedMillis(startNanos));
+            return;
+        }
+
+        int embeddedCount = 0;
+        int failedCount = 0;
+        int consecutiveFailures = 0;
+        String lastErrorMessage = null;
+        for (int from = 0; from < pendingChunks.size(); from += batchSize) {
+            List<AiDocumentChunkDO> batchChunks = pendingChunks.subList(from,
+                    Math.min(from + batchSize, pendingChunks.size()));
+            EmbeddingBatchResult batchResult = embedBatchWithRetry(document, batchChunks, embeddingModel,
+                    maxRetries, retryBackoffMillis);
+            if (batchResult.success()) {
+                embeddedCount += batchResult.chunkCount();
+                consecutiveFailures = 0;
+                continue;
+            }
+
+            failedCount += batchChunks.size();
+            consecutiveFailures++;
+            lastErrorMessage = batchResult.errorMessage();
+            if (consecutiveFailures >= maxConsecutiveFailures) {
+                log.warn("Stop document embedding because consecutive batch failures reached limit, documentId={}, tenantId={}, knowledgeBaseId={}, consecutiveFailures={}, maxConsecutiveFailures={}",
+                        document.getId(), document.getTenantId(), document.getKnowledgeBaseId(),
+                        consecutiveFailures, maxConsecutiveFailures);
+                break;
+            }
+        }
+
+        int remainingCount = pendingChunks.size() - embeddedCount - failedCount;
+        if (failedCount > 0 || remainingCount > 0) {
+            String errorMessage = buildEmbeddingPartialFailureMessage(failedCount, remainingCount, lastErrorMessage);
+            documentMapper.updateEmbeddingStatusByIdAndTenantId(document.getId(), document.getTenantId(),
+                    DocumentEmbeddingStatusEnum.FAILED.getCode(), errorMessage);
+            log.warn("Document embedding partially failed, documentId={}, tenantId={}, knowledgeBaseId={}, totalChunks={}, skippedChunks={}, embeddedChunks={}, failedChunks={}, remainingChunks={}, batchSize={}, elapsedMs={}, reason={}",
+                    document.getId(), document.getTenantId(), document.getKnowledgeBaseId(), chunks.size(),
+                    skippedCount, embeddedCount, failedCount, remainingCount, batchSize, elapsedMillis(startNanos),
+                    errorMessage);
+            throw new ServiceException(DOCUMENT_EMBED_FAILED, errorMessage);
+        }
+
+        documentMapper.updateEmbeddingStatusByIdAndTenantId(document.getId(), document.getTenantId(),
+                DocumentEmbeddingStatusEnum.SUCCESS.getCode(), null);
+        log.info("Document embedding success, documentId={}, tenantId={}, knowledgeBaseId={}, totalChunks={}, skippedChunks={}, embeddedChunks={}, batchSize={}, elapsedMs={}",
+                document.getId(), document.getTenantId(), document.getKnowledgeBaseId(), chunks.size(),
+                skippedCount, embeddedCount, batchSize, elapsedMillis(startNanos));
+    }
+
+    private EmbeddingBatchResult embedBatchWithRetry(AiDocumentDO document, List<AiDocumentChunkDO> batchChunks,
+                                                    String embeddingModel, int maxRetries,
+                                                    long retryBackoffMillis) {
+        List<Long> chunkIds = batchChunks.stream().map(AiDocumentChunkDO::getId).toList();
+        List<String> vectorIds = batchChunks.stream().map(chunk -> buildVectorId(document, chunk)).toList();
+        Exception lastException = null;
+        int maxAttempts = maxRetries + 1;
+        for (int attempt = 1; attempt <= maxAttempts; attempt++) {
+            documentChunkMapper.updateStatusByIdsAndTenantId(chunkIds, document.getTenantId(),
+                    ChunkStatusEnum.RUNNING.getCode());
+            try {
+                processEmbeddingBatch(document, batchChunks, embeddingModel, vectorIds);
+                return EmbeddingBatchResult.success(batchChunks.size());
+            } catch (Exception ex) {
+                lastException = ex;
+                cleanupBatchVectors(document, vectorIds);
+                if (!isRetryableEmbeddingBatchException(ex) || attempt >= maxAttempts) {
+                    break;
+                }
+                log.warn("Document embedding batch failed, retrying, documentId={}, tenantId={}, knowledgeBaseId={}, firstChunkId={}, batchSize={}, attempt={}, maxAttempts={}, reason={}",
+                        document.getId(), document.getTenantId(), document.getKnowledgeBaseId(),
+                        batchChunks.get(0).getId(), batchChunks.size(), attempt, maxAttempts,
+                        toSafeErrorMessage(ex));
+                sleepBeforeEmbeddingRetry(document, retryBackoffMillis);
+            }
+        }
+
+        String errorMessage = toSafeErrorMessage(lastException);
+        documentChunkMapper.updateEmbeddingFailedByIdsAndTenantId(chunkIds, document.getTenantId(),
+                ChunkStatusEnum.ERROR.getCode());
+        log.warn("Document embedding batch failed, documentId={}, tenantId={}, knowledgeBaseId={}, firstChunkId={}, batchSize={}, maxAttempts={}, reason={}",
+                document.getId(), document.getTenantId(), document.getKnowledgeBaseId(), batchChunks.get(0).getId(),
+                batchChunks.size(), maxAttempts, errorMessage);
+        return EmbeddingBatchResult.failure(errorMessage);
+    }
+
+    private void processEmbeddingBatch(AiDocumentDO document, List<AiDocumentChunkDO> batchChunks,
+                                       String embeddingModel, List<String> vectorIds) {
+        List<String> texts = batchChunks.stream().map(AiDocumentChunkDO::getContent).toList();
+        List<List<Double>> embeddings = aiEmbeddingService.embedBatch(texts);
+        validateEmbeddingResult(batchChunks, embeddings);
+
+        List<KnowledgeVector> vectors = new ArrayList<>(batchChunks.size());
+        for (int i = 0; i < batchChunks.size(); i++) {
+            AiDocumentChunkDO chunk = batchChunks.get(i);
+            vectors.add(buildKnowledgeVector(document, chunk, vectorIds.get(i), embeddingModel, embeddings.get(i)));
+        }
+        knowledgeVectorStore.upsert(vectors);
+        for (int i = 0; i < batchChunks.size(); i++) {
+            documentChunkMapper.updateEmbeddingSuccessByIdAndTenantId(batchChunks.get(i).getId(),
+                    document.getTenantId(), vectorIds.get(i), embeddingModel, ChunkStatusEnum.SUCCESS.getCode());
+        }
+    }
+
+    private List<AiDocumentChunkDO> getChunksRequiringEmbedding(List<AiDocumentChunkDO> chunks, String embeddingModel) {
+        return chunks.stream()
+                .filter(chunk -> !isChunkEmbeddingSuccess(chunk, embeddingModel))
+                .toList();
+    }
+
+    private boolean isChunkEmbeddingSuccess(AiDocumentChunkDO chunk, String embeddingModel) {
+        if (!ChunkStatusEnum.SUCCESS.getCode().equals(chunk.getStatus())
+                || chunk.getVectorId() == null || chunk.getVectorId().isBlank()) {
+            return false;
+        }
+        if (embeddingModel == null || embeddingModel.isBlank()) {
+            return true;
+        }
+        return Objects.equals(embeddingModel, chunk.getEmbeddingModel() == null ? null : chunk.getEmbeddingModel().trim());
+    }
+
+    private boolean isRetryableEmbeddingBatchException(Exception ex) {
+        if (!(ex instanceof ServiceException serviceException)) {
+            return true;
+        }
+        Integer code = serviceException.getCode();
+        return EMBEDDING_REQUEST_FAILED.equals(code) || VECTOR_STORE_OPERATION_FAILED.equals(code);
+    }
+
+    private void cleanupBatchVectors(AiDocumentDO document, List<String> vectorIds) {
+        try {
+            knowledgeVectorStore.deleteByVectorIds(vectorIds);
+        } catch (Exception cleanupEx) {
+            log.warn("Clean failed embedding batch vectors failed, documentId={}, tenantId={}, knowledgeBaseId={}, vectorCount={}, reason={}",
+                    document.getId(), document.getTenantId(), document.getKnowledgeBaseId(), vectorIds.size(),
+                    toSafeErrorMessage(cleanupEx));
+        }
+    }
+
+    private void sleepBeforeEmbeddingRetry(AiDocumentDO document, long retryBackoffMillis) {
+        if (retryBackoffMillis <= 0) {
+            return;
+        }
+        try {
+            Thread.sleep(retryBackoffMillis);
+        } catch (InterruptedException ex) {
+            Thread.currentThread().interrupt();
+            log.warn("Document embedding retry interrupted, documentId={}, tenantId={}, knowledgeBaseId={}",
+                    document.getId(), document.getTenantId(), document.getKnowledgeBaseId());
+            throw new ServiceException(DOCUMENT_EMBED_FAILED, "Document embedding retry interrupted");
+        }
+    }
+
+    private String buildEmbeddingPartialFailureMessage(int failedCount, int remainingCount, String lastErrorMessage) {
+        if (remainingCount == 0 && lastErrorMessage != null && !lastErrorMessage.isBlank()) {
+            return DocumentParseUtils.abbreviate(lastErrorMessage, ERROR_MESSAGE_MAX_LENGTH);
+        }
+        String reason = lastErrorMessage == null || lastErrorMessage.isBlank()
+                ? "unknown"
+                : DocumentParseUtils.abbreviate(lastErrorMessage, 200);
+        return "Document embedding partially failed, failedChunks=" + failedCount
+                + ", remainingChunks=" + remainingCount + ", reason=" + reason;
+    }
+
+    private int resolveEmbeddingBatchMaxRetries() {
+        Integer maxRetries = aiProperties.getDocument().getEmbeddingBatchMaxRetries();
+        return maxRetries == null || maxRetries < 0 ? 0 : maxRetries;
+    }
+
+    private long resolveEmbeddingRetryBackoffMillis() {
+        Long backoffMillis = aiProperties.getDocument().getEmbeddingRetryBackoffMillis();
+        return backoffMillis == null || backoffMillis < 0 ? 0L : backoffMillis;
+    }
+
+    private int resolveEmbeddingMaxConsecutiveFailures() {
+        Integer maxConsecutiveFailures = aiProperties.getDocument().getEmbeddingMaxConsecutiveFailures();
+        return maxConsecutiveFailures == null || maxConsecutiveFailures <= 0 ? 1 : maxConsecutiveFailures;
     }
 
     private void autoParseAndEmbedAfterUpload(Long documentId, Long tenantId, Long knowledgeBaseId) {
@@ -776,6 +973,18 @@ public class AiDocumentServiceImpl implements AiDocumentService {
     }
 
     private record ChunkVectorResult(Long chunkId, String vectorId) {
+    }
+
+    private record EmbeddingBatchResult(boolean success, int chunkCount, String errorMessage) {
+
+        private static EmbeddingBatchResult success(int chunkCount) {
+            return new EmbeddingBatchResult(true, chunkCount, null);
+        }
+
+        private static EmbeddingBatchResult failure(String errorMessage) {
+            return new EmbeddingBatchResult(false, 0, errorMessage);
+        }
+
     }
 
 }

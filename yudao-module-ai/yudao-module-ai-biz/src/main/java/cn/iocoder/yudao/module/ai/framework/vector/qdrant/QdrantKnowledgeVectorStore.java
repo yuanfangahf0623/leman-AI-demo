@@ -38,6 +38,11 @@ public class QdrantKnowledgeVectorStore implements KnowledgeVectorStore {
         throwNotImplemented();
     }
 
+    @Override
+    public void deleteByVectorIds(List<String> vectorIds) {
+        throwNotImplemented();
+    }
+
     private void throwNotImplemented() {
         throw new ServiceException(VECTOR_STORE_NOT_IMPLEMENTED, "Qdrant 向量库暂未实现");
     }

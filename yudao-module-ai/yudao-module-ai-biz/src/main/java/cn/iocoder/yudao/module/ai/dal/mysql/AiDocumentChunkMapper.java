@@ -41,6 +41,28 @@ public interface AiDocumentChunkMapper extends BaseMapper<AiDocumentChunkDO> {
                 .eq(AiDocumentChunkDO::getTenantId, tenantId));
     }
 
+    default int updateStatusByIdsAndTenantId(List<Long> ids, Long tenantId, Integer status) {
+        if (ids == null || ids.isEmpty()) {
+            return 0;
+        }
+        return update(null, Wrappers.lambdaUpdate(AiDocumentChunkDO.class)
+                .set(AiDocumentChunkDO::getStatus, status)
+                .in(AiDocumentChunkDO::getId, ids)
+                .eq(AiDocumentChunkDO::getTenantId, tenantId));
+    }
+
+    default int updateEmbeddingFailedByIdsAndTenantId(List<Long> ids, Long tenantId, Integer status) {
+        if (ids == null || ids.isEmpty()) {
+            return 0;
+        }
+        return update(null, Wrappers.lambdaUpdate(AiDocumentChunkDO.class)
+                .set(AiDocumentChunkDO::getVectorId, null)
+                .set(AiDocumentChunkDO::getEmbeddingModel, null)
+                .set(AiDocumentChunkDO::getStatus, status)
+                .in(AiDocumentChunkDO::getId, ids)
+                .eq(AiDocumentChunkDO::getTenantId, tenantId));
+    }
+
     default int updateEmbeddingFailedByDocumentIdAndTenantId(Long documentId, Long knowledgeBaseId, Long tenantId,
                                                              Integer status) {
         return update(null, Wrappers.lambdaUpdate(AiDocumentChunkDO.class)

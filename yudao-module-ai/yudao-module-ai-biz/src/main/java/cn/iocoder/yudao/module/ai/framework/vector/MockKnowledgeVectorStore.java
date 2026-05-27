@@ -63,6 +63,16 @@ public class MockKnowledgeVectorStore implements KnowledgeVectorStore {
         vectors.entrySet().removeIf(entry -> Objects.equals(entry.getValue().getKnowledgeBaseId(), knowledgeBaseId));
     }
 
+    @Override
+    public void deleteByVectorIds(List<String> vectorIds) {
+        if (vectorIds == null || vectorIds.isEmpty()) {
+            return;
+        }
+        vectorIds.stream()
+                .filter(vectorId -> vectorId != null && !vectorId.isBlank())
+                .forEach(vectors::remove);
+    }
+
     public int size() {
         return vectors.size();
     }

@@ -640,6 +640,21 @@ public class AiProperties {
         private Integer embeddingBatchSize = 32;
 
         /**
+         * Max retry count after an embedding batch fails.
+         */
+        private Integer embeddingBatchMaxRetries = 2;
+
+        /**
+         * Backoff between embedding batch retries.
+         */
+        private Long embeddingRetryBackoffMillis = 1000L;
+
+        /**
+         * Stop current run after too many consecutive failed batches.
+         */
+        private Integer embeddingMaxConsecutiveFailures = 3;
+
+        /**
          * 文档上传本地存储目录。生产环境应切换为对象存储实现，例如 MinIO。
          */
         private String storageBasePath = ".data/ai-documents";
@@ -679,6 +694,30 @@ public class AiProperties {
 
         public void setEmbeddingBatchSize(Integer embeddingBatchSize) {
             this.embeddingBatchSize = embeddingBatchSize;
+        }
+
+        public Integer getEmbeddingBatchMaxRetries() {
+            return embeddingBatchMaxRetries;
+        }
+
+        public void setEmbeddingBatchMaxRetries(Integer embeddingBatchMaxRetries) {
+            this.embeddingBatchMaxRetries = embeddingBatchMaxRetries;
+        }
+
+        public Long getEmbeddingRetryBackoffMillis() {
+            return embeddingRetryBackoffMillis;
+        }
+
+        public void setEmbeddingRetryBackoffMillis(Long embeddingRetryBackoffMillis) {
+            this.embeddingRetryBackoffMillis = embeddingRetryBackoffMillis;
+        }
+
+        public Integer getEmbeddingMaxConsecutiveFailures() {
+            return embeddingMaxConsecutiveFailures;
+        }
+
+        public void setEmbeddingMaxConsecutiveFailures(Integer embeddingMaxConsecutiveFailures) {
+            this.embeddingMaxConsecutiveFailures = embeddingMaxConsecutiveFailures;
         }
 
         public String getStorageBasePath() {

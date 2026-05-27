@@ -30,12 +30,14 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.util.List;
 
+import static cn.iocoder.yudao.module.ai.enums.AiEmbeddingErrorCodeConstants.EMBEDDING_REQUEST_FAILED;
 import static cn.iocoder.yudao.module.ai.enums.AiDocumentErrorCodeConstants.DOCUMENT_EMBED_FAILED;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -69,6 +71,7 @@ class AiDocumentServiceImplTest {
         AiTenantContextHolder.setTenantId(1L);
         aiProperties = new AiProperties();
         aiProperties.getDocument().setEmbeddingBatchSize(2);
+        aiProperties.getDocument().setEmbeddingRetryBackoffMillis(0L);
         aiProperties.getModel().setEmbeddingModel("test-embedding-model");
         aiProperties.getVectorStore().getPgvector().setDimensions(2);
         documentService = new AiDocumentServiceImpl(documentMapper, documentChunkMapper, knowledgeDirectoryMapper,
@@ -126,8 +129,9 @@ class AiDocumentServiceImplTest {
         ServiceException exception = assertThrows(ServiceException.class, () -> documentService.embedDocument(100L));
 
         assertEquals(DOCUMENT_EMBED_FAILED, exception.getCode());
-        verify(knowledgeVectorStore).deleteByDocumentId(100L);
-        verify(documentChunkMapper).updateEmbeddingFailedByDocumentIdAndTenantId(100L, 10L, 1L,
+        verify(knowledgeVectorStore).deleteByVectorIds(List.of("1:10:100:1000"));
+        verify(knowledgeVectorStore, never()).deleteByDocumentId(100L);
+        verify(documentChunkMapper).updateEmbeddingFailedByIdsAndTenantId(List.of(1000L), 1L,
                 ChunkStatusEnum.ERROR.getCode());
         verify(documentMapper).updateEmbeddingStatusByIdAndTenantId(100L, 1L,
                 DocumentEmbeddingStatusEnum.FAILED.getCode(), "向量写入失败");
@@ -148,10 +152,63 @@ class AiDocumentServiceImplTest {
 
         assertEquals(DOCUMENT_EMBED_FAILED, exception.getCode());
         verify(knowledgeVectorStore, never()).upsert(anyList());
-        verify(knowledgeVectorStore).deleteByDocumentId(100L);
+        verify(knowledgeVectorStore).deleteByVectorIds(List.of("1:10:100:1000"));
+        verify(knowledgeVectorStore, never()).deleteByDocumentId(100L);
         verify(documentMapper).updateEmbeddingStatusByIdAndTenantId(100L, 1L,
                 DocumentEmbeddingStatusEnum.FAILED.getCode(),
                 "Embedding vector dimensions do not match pgvector configuration");
+    }
+
+    @Test
+    void embedDocumentShouldSkipSuccessChunksAndResumePendingChunks() {
+        AiDocumentDO document = buildDocument();
+        AiKnowledgeBaseDO knowledgeBase = buildKnowledgeBase();
+        List<AiDocumentChunkDO> chunks = List.of(
+                buildSuccessChunk(1000L, 1, "first chunk"),
+                buildChunk(1001L, 2, "second chunk"));
+        when(documentMapper.selectByIdAndTenantId(100L, 1L)).thenReturn(document);
+        when(knowledgeService.getKnowledge(10L)).thenReturn(knowledgeBase);
+        when(documentChunkMapper.selectListByDocumentIdAndTenantId(100L, 10L, 1L)).thenReturn(chunks);
+        when(aiEmbeddingService.embedBatch(List.of("second chunk"))).thenReturn(List.of(List.of(0.0D, 1.0D)));
+
+        documentService.embedDocument(100L);
+
+        ArgumentCaptor<List<KnowledgeVector>> vectorCaptor = ArgumentCaptor.forClass(List.class);
+        verify(knowledgeVectorStore).upsert(vectorCaptor.capture());
+        assertEquals(1, vectorCaptor.getValue().size());
+        assertEquals("1:10:100:1001", vectorCaptor.getValue().get(0).getVectorId());
+        verify(aiEmbeddingService, never()).embedBatch(List.of("first chunk"));
+        verify(documentChunkMapper, never()).updateEmbeddingSuccessByIdAndTenantId(1000L, 1L,
+                "1:10:100:1000", "kb-embedding-model", ChunkStatusEnum.SUCCESS.getCode());
+        verify(documentChunkMapper).updateEmbeddingSuccessByIdAndTenantId(1001L, 1L,
+                "1:10:100:1001", "kb-embedding-model", ChunkStatusEnum.SUCCESS.getCode());
+        verify(documentMapper).updateEmbeddingStatusByIdAndTenantId(100L, 1L,
+                DocumentEmbeddingStatusEnum.SUCCESS.getCode(), null);
+    }
+
+    @Test
+    void embedDocumentShouldRetryFailedBatchAndThenMarkSuccess() {
+        AiDocumentDO document = buildDocument();
+        AiKnowledgeBaseDO knowledgeBase = buildKnowledgeBase();
+        List<AiDocumentChunkDO> chunks = List.of(buildChunk(1000L, 1, "first chunk"));
+        aiProperties.getDocument().setEmbeddingBatchMaxRetries(1);
+        when(documentMapper.selectByIdAndTenantId(100L, 1L)).thenReturn(document);
+        when(knowledgeService.getKnowledge(10L)).thenReturn(knowledgeBase);
+        when(documentChunkMapper.selectListByDocumentIdAndTenantId(100L, 10L, 1L)).thenReturn(chunks);
+        when(aiEmbeddingService.embedBatch(List.of("first chunk")))
+                .thenThrow(new ServiceException(EMBEDDING_REQUEST_FAILED, "timeout"))
+                .thenReturn(List.of(List.of(1.0D, 0.0D)));
+
+        documentService.embedDocument(100L);
+
+        verify(aiEmbeddingService, times(2)).embedBatch(List.of("first chunk"));
+        verify(knowledgeVectorStore).deleteByVectorIds(List.of("1:10:100:1000"));
+        verify(documentChunkMapper, times(2)).updateStatusByIdsAndTenantId(List.of(1000L), 1L,
+                ChunkStatusEnum.RUNNING.getCode());
+        verify(documentChunkMapper).updateEmbeddingSuccessByIdAndTenantId(1000L, 1L,
+                "1:10:100:1000", "kb-embedding-model", ChunkStatusEnum.SUCCESS.getCode());
+        verify(documentMapper).updateEmbeddingStatusByIdAndTenantId(100L, 1L,
+                DocumentEmbeddingStatusEnum.SUCCESS.getCode(), null);
     }
 
     @Test
@@ -198,6 +255,14 @@ class AiDocumentServiceImplTest {
         chunk.setTokenCount(3);
         chunk.setStatus(ChunkStatusEnum.PENDING.getCode());
         chunk.setMetadataJson("{\"chunkNo\":" + chunkIndex + "}");
+        return chunk;
+    }
+
+    private AiDocumentChunkDO buildSuccessChunk(Long id, Integer chunkIndex, String content) {
+        AiDocumentChunkDO chunk = buildChunk(id, chunkIndex, content);
+        chunk.setStatus(ChunkStatusEnum.SUCCESS.getCode());
+        chunk.setVectorId("1:10:100:" + id);
+        chunk.setEmbeddingModel("kb-embedding-model");
         return chunk;
     }
 
