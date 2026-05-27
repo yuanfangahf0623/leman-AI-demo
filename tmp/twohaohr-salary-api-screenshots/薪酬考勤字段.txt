@@ -1,0 +1,18 @@
+接口：薪酬考勤字段
+
+HTTP 调用
+GET https://openapi.2haohr.com/api/smart_salary/attendance_stat/attendance_fields/?access_token=***
+Accept: application/json
+access_token: ***
+Content-Type: application/json
+
+请求体
+<empty>
+
+HTTP 响应
+Status: 200
+{
+    "data":  null,
+    "errcode":  21002,
+    "errmsg":  "参数错误： 考勤类型错误（1日考勤 2月考勤）"
+}

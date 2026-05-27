@@ -23,6 +23,7 @@ import cn.iocoder.yudao.module.ai.framework.tenant.AiTenantContextHolder;
 import cn.iocoder.yudao.module.ai.service.datasource.AiDataSourceRawRecordService;
 import cn.iocoder.yudao.module.ai.service.datasource.AiDataSourceService;
 import cn.iocoder.yudao.module.ai.service.datasource.twohaohr.TwoHaoHrAttendanceRecordService;
+import cn.iocoder.yudao.module.ai.service.datasource.twohaohr.TwoHaoHrDataSourceConfig;
 import cn.iocoder.yudao.module.ai.service.datasource.twohaohr.TwoHaoHrOpenApiClient;
 import cn.iocoder.yudao.module.ai.service.document.AiDocumentService;
 import cn.iocoder.yudao.module.ai.service.knowledge.AiKnowledgeService;
@@ -50,6 +51,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.doThrow;
@@ -294,10 +296,156 @@ class KnowledgeSyncServiceImplTest {
     }
 
     @Test
+    void executeSyncJobShouldFetchEmployeesByAllDepartmentsWhenDepartmentIdMissing() throws Exception {
+        String configJson = objectMapper.writeValueAsString(Map.of(
+                "provider", "two-hao-hr",
+                "syncObjects", List.of("employees"),
+                "maxPages", 1
+        ));
+        mockJobAndDataSource(configJson, "API");
+        JsonNode departments = objectMapper.readTree("""
+                [{"id":"d1","name":"HQ","children":[{"id":"d2","name":"IT"}]}]
+                """);
+        JsonNode employee1 = objectMapper.readTree("{\"id\":\"e1\",\"name\":\"Alice\"}");
+        JsonNode duplicateEmployee = objectMapper.readTree("{\"id\":\"e1\",\"name\":\"Alice Duplicate\"}");
+        JsonNode employee2 = objectMapper.readTree("{\"id\":\"e2\",\"name\":\"Bob\"}");
+        when(twoHaoHrOpenApiClient.fetchDepartments(any())).thenReturn(departments);
+        when(twoHaoHrOpenApiClient.fetchEmployees(any()))
+                .thenReturn(List.of(employee1, duplicateEmployee))
+                .thenReturn(List.of(employee2));
+        when(documentService.createDocumentFromDataSource(any(AiDataSourceDO.class), any(AiDataSourceIngestReqVO.class)))
+                .thenReturn(AiDataSourceIngestRespVO.builder().documentId(801L).action("CREATE").build());
+
+        knowledgeSyncService.executeSyncJob(3001L);
+
+        ArgumentCaptor<TwoHaoHrDataSourceConfig> configCaptor = ArgumentCaptor.forClass(TwoHaoHrDataSourceConfig.class);
+        verify(twoHaoHrOpenApiClient, times(2)).fetchEmployees(configCaptor.capture());
+        List<TwoHaoHrDataSourceConfig> scopedConfigs = configCaptor.getAllValues();
+        assertEquals("d1", scopedConfigs.get(0).getDepartmentId());
+        assertEquals("d2", scopedConfigs.get(1).getDepartmentId());
+        assertEquals(false, scopedConfigs.get(0).getFetchChild());
+        assertEquals(false, scopedConfigs.get(1).getFetchChild());
+
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<List<JsonNode>> recordsCaptor = ArgumentCaptor.forClass(List.class);
+        verify(rawRecordService).saveRecords(any(AiSyncJobDO.class), any(AiDataSourceDO.class),
+                eq("two-hao-hr"), eq("hr"), eq("employees"), eq("twohaohr://employees"), recordsCaptor.capture());
+        assertEquals(2, recordsCaptor.getValue().size());
+        verify(syncJobMapper).updateResultByIdAndTenantId(eq(3001L), eq(1L), eq(1), eq(1), eq(0),
+                eq(SyncJobStatusEnum.SUCCESS.getCode()), any(), eq(null));
+    }
+
+    @Test
+    void executeSyncJobShouldFetchEmployeeDetailsByAllDepartmentsWhenDepartmentIdMissing() throws Exception {
+        String configJson = objectMapper.writeValueAsString(Map.of(
+                "provider", "two-hao-hr",
+                "syncObjects", List.of("employee_details"),
+                "maxPages", 1
+        ));
+        mockJobAndDataSource(configJson, "API");
+        JsonNode departments = objectMapper.readTree("""
+                [{"id":"d1","name":"HQ","children":[{"id":"d2","name":"IT"}]}]
+                """);
+        JsonNode employee1 = objectMapper.readTree("{\"id\":\"e1\",\"name\":\"Alice\"}");
+        JsonNode employee2 = objectMapper.readTree("{\"id\":\"e2\",\"name\":\"Bob\"}");
+        when(twoHaoHrOpenApiClient.fetchDepartments(any())).thenReturn(departments);
+        when(twoHaoHrOpenApiClient.fetchEmployees(any()))
+                .thenReturn(List.of(employee1))
+                .thenReturn(List.of(employee2));
+        when(twoHaoHrOpenApiClient.fetchRawDataByGet(any(), anyString(), any()))
+                .thenReturn(objectMapper.readTree("[{\"id\":\"r1\"}]"));
+        when(documentService.createDocumentFromDataSource(any(AiDataSourceDO.class), any(AiDataSourceIngestReqVO.class)))
+                .thenReturn(AiDataSourceIngestRespVO.builder().documentId(901L).action("CREATE").build());
+
+        knowledgeSyncService.executeSyncJob(3001L);
+
+        ArgumentCaptor<TwoHaoHrDataSourceConfig> configCaptor = ArgumentCaptor.forClass(TwoHaoHrDataSourceConfig.class);
+        verify(twoHaoHrOpenApiClient, times(2)).fetchEmployees(configCaptor.capture());
+        assertEquals("d1", configCaptor.getAllValues().get(0).getDepartmentId());
+        assertEquals("d2", configCaptor.getAllValues().get(1).getDepartmentId());
+        verify(twoHaoHrOpenApiClient, never()).fetchEmployees(argThat(TwoHaoHrDataSourceConfig::getFetchChild));
+        verify(syncRecordMapper, times(15)).insert(any(AiSyncRecordDO.class));
+        verify(syncJobMapper).updateResultByIdAndTenantId(eq(3001L), eq(1L), eq(15), eq(15), eq(0),
+                eq(SyncJobStatusEnum.SUCCESS.getCode()), any(), eq(null));
+    }
+
+    @Test
+    void executeSyncJobShouldLimitTwoHaoHrSalaryPlanPageSizeTo50() throws Exception {
+        String configJson = objectMapper.writeValueAsString(Map.of(
+                "provider", "two-hao-hr",
+                "syncObjects", List.of("smart_salary_plan_list"),
+                "pageSize", 100,
+                "maxPages", 1
+        ));
+        mockJobAndDataSource(configJson, "API");
+        JsonNode plan = objectMapper.readTree("{\"id\":\"p1\",\"name\":\"薪酬方案\"}");
+        when(twoHaoHrOpenApiClient.fetchPagedObjectsByPost(any(),
+                eq("/api/smart_salary/biz_sub/plan_list/"), any())).thenReturn(List.of(plan));
+        when(rawRecordService.toMaskedJson(any())).thenReturn("{\"id\":\"p1\"}");
+        when(documentService.createDocumentFromDataSource(any(AiDataSourceDO.class), any(AiDataSourceIngestReqVO.class)))
+                .thenReturn(AiDataSourceIngestRespVO.builder().documentId(701L).action("CREATE").build());
+
+        knowledgeSyncService.executeSyncJob(3001L);
+
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<Map<String, Object>> payloadCaptor = ArgumentCaptor.forClass(Map.class);
+        verify(twoHaoHrOpenApiClient).fetchPagedObjectsByPost(any(),
+                eq("/api/smart_salary/biz_sub/plan_list/"), payloadCaptor.capture());
+        assertEquals(50, payloadCaptor.getValue().get("limit"));
+        verify(rawRecordService).saveRecords(any(AiSyncJobDO.class), any(AiDataSourceDO.class),
+                eq("two-hao-hr"), eq("smart_salary"), eq("smart_salary_plan_list"),
+                eq("twohaohr://smart_salary_plan_list"), any());
+        verify(syncJobMapper).updateResultByIdAndTenantId(eq(3001L), eq(1L), eq(1), eq(1), eq(0),
+                eq(SyncJobStatusEnum.SUCCESS.getCode()), any(), eq(null));
+    }
+
+    @Test
+    void executeSyncJobShouldFetchTwoHaoHrSalaryItemsByPlanId() throws Exception {
+        String configJson = objectMapper.writeValueAsString(Map.of(
+                "provider", "two-hao-hr",
+                "syncObjects", List.of("smart_salary_item_list"),
+                "maxPages", 1
+        ));
+        mockJobAndDataSource(configJson, "API");
+        JsonNode plan1 = objectMapper.readTree("{\"id\":\"p1\",\"sub_name\":\"Plan A\",\"sub_type\":2}");
+        JsonNode plan2 = objectMapper.readTree("{\"id\":\"p2\",\"sub_name\":\"Plan B\",\"sub_type\":3}");
+        when(twoHaoHrOpenApiClient.fetchPagedObjectsByPost(any(),
+                eq("/api/smart_salary/biz_sub/plan_list/"), any())).thenReturn(List.of(plan1, plan2));
+        when(twoHaoHrOpenApiClient.fetchRawDataByGet(any(), eq("/api/smart_salary/biz_sub/item_list/"), any()))
+                .thenReturn(objectMapper.readTree("{\"data\":[{\"id\":\"i1\",\"item_name\":\"bonus\"}],\"errcode\":0}"))
+                .thenReturn(objectMapper.readTree("{\"data\":[{\"id\":\"i2\",\"item_name\":\"base\"}],\"errcode\":0}"));
+        when(rawRecordService.toMaskedJson(any())).thenAnswer(invocation -> invocation.getArgument(0).toString());
+        when(documentService.createDocumentFromDataSource(any(AiDataSourceDO.class), any(AiDataSourceIngestReqVO.class)))
+                .thenReturn(AiDataSourceIngestRespVO.builder().documentId(702L).action("CREATE").build());
+
+        knowledgeSyncService.executeSyncJob(3001L);
+
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<Map<String, String>> queryCaptor = ArgumentCaptor.forClass(Map.class);
+        verify(twoHaoHrOpenApiClient, times(2)).fetchRawDataByGet(any(),
+                eq("/api/smart_salary/biz_sub/item_list/"), queryCaptor.capture());
+        assertEquals("p1", queryCaptor.getAllValues().get(0).get("sub_plan_id"));
+        assertEquals("p2", queryCaptor.getAllValues().get(1).get("sub_plan_id"));
+
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<List<JsonNode>> recordsCaptor = ArgumentCaptor.forClass(List.class);
+        verify(rawRecordService).saveRecords(any(AiSyncJobDO.class), any(AiDataSourceDO.class),
+                eq("two-hao-hr"), eq("smart_salary"), eq("smart_salary_item_list"),
+                eq("twohaohr://smart_salary_item_list"), recordsCaptor.capture());
+        assertEquals(2, recordsCaptor.getValue().size());
+        assertEquals("p1", recordsCaptor.getValue().get(0).path("sub_plan_id").asText());
+        assertEquals("Plan A", recordsCaptor.getValue().get(0).path("sub_plan_name").asText());
+        assertEquals(2, recordsCaptor.getValue().get(0).path("sub_plan_type").asInt());
+        verify(syncJobMapper).updateResultByIdAndTenantId(eq(3001L), eq(1L), eq(1), eq(1), eq(0),
+                eq(SyncJobStatusEnum.SUCCESS.getCode()), any(), eq(null));
+    }
+
+    @Test
     void executeSyncJobShouldSyncTwoHaoHrAttendanceByEmployeeBatches() throws Exception {
         String configJson = objectMapper.writeValueAsString(Map.of(
                 "provider", "two-hao-hr",
                 "syncObjects", List.of("attendance_overtime_record"),
+                "departmentId", "d1",
                 "attendanceStartDate", "2026-05-01",
                 "attendanceEndDate", "2026-05-25",
                 "maxPages", 1
@@ -333,6 +481,52 @@ class KnowledgeSyncServiceImplTest {
                 eq("twohaohr://attendance_overtime_record"), any());
         verify(attendanceRecordService).saveRecords(any(AiSyncJobDO.class), any(AiDataSourceDO.class),
                 eq("attendance_overtime_record"), any());
+        verify(syncJobMapper).updateResultByIdAndTenantId(eq(3001L), eq(1L), eq(1), eq(1), eq(0),
+                eq(SyncJobStatusEnum.SUCCESS.getCode()), any(), eq(null));
+    }
+
+    @Test
+    void executeSyncJobShouldSyncAttendanceByAllDepartmentsWhenDepartmentIdMissing() throws Exception {
+        String configJson = objectMapper.writeValueAsString(Map.of(
+                "provider", "two-hao-hr",
+                "syncObjects", List.of("attendance_leave_record"),
+                "attendanceStartDate", "2026-05-01",
+                "attendanceEndDate", "2026-05-25",
+                "maxPages", 1
+        ));
+        mockJobAndDataSource(configJson, "API");
+        JsonNode departments = objectMapper.readTree("""
+                [{"id":"d1","name":"HQ","children":[{"id":"d2","name":"IT"}]}]
+                """);
+        JsonNode employee1 = objectMapper.readTree("{\"id\":\"e1\",\"name\":\"Alice\"}");
+        JsonNode employee2 = objectMapper.readTree("{\"id\":\"e2\",\"name\":\"Bob\"}");
+        JsonNode leave = objectMapper.readTree("{\"id\":\"l1\",\"emp_id\":\"e1\"}");
+        when(twoHaoHrOpenApiClient.fetchDepartments(any())).thenReturn(departments);
+        when(twoHaoHrOpenApiClient.fetchEmployees(any()))
+                .thenReturn(List.of(employee1))
+                .thenReturn(List.of(employee2));
+        when(twoHaoHrOpenApiClient.fetchPagedObjectsByPost(any(), eq("/api/attendance/leave_record/"), any()))
+                .thenReturn(List.of(leave));
+        when(rawRecordService.toMaskedJson(any())).thenReturn("{\"id\":\"l1\"}");
+        when(documentService.createDocumentFromDataSource(any(AiDataSourceDO.class), any(AiDataSourceIngestReqVO.class)))
+                .thenReturn(AiDataSourceIngestRespVO.builder().documentId(802L).action("CREATE").build());
+
+        knowledgeSyncService.executeSyncJob(3001L);
+
+        ArgumentCaptor<TwoHaoHrDataSourceConfig> configCaptor = ArgumentCaptor.forClass(TwoHaoHrDataSourceConfig.class);
+        verify(twoHaoHrOpenApiClient, times(2)).fetchEmployees(configCaptor.capture());
+        assertEquals("d1", configCaptor.getAllValues().get(0).getDepartmentId());
+        assertEquals("d2", configCaptor.getAllValues().get(1).getDepartmentId());
+
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<Map<String, Object>> payloadCaptor = ArgumentCaptor.forClass(Map.class);
+        verify(twoHaoHrOpenApiClient).fetchPagedObjectsByPost(any(),
+                eq("/api/attendance/leave_record/"), payloadCaptor.capture());
+        assertEquals(List.of("e1", "e2"), payloadCaptor.getValue().get("emp_ids"));
+        assertEquals("2026-05-01", payloadCaptor.getValue().get("start_dt"));
+        assertEquals("2026-05-25", payloadCaptor.getValue().get("end_dt"));
+        verify(attendanceRecordService).saveRecords(any(AiSyncJobDO.class), any(AiDataSourceDO.class),
+                eq("attendance_leave_record"), any());
         verify(syncJobMapper).updateResultByIdAndTenantId(eq(3001L), eq(1L), eq(1), eq(1), eq(0),
                 eq(SyncJobStatusEnum.SUCCESS.getCode()), any(), eq(null));
     }

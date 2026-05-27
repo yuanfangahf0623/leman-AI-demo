@@ -1,0 +1,2026 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    
+    
+    <link rel="canonical" href="https://openapi.2haohr.com/doc/openapi/smart_salary/">
+    <link rel="shortcut icon" href="../../img/favicon.ico">
+
+    
+    <title>智能薪酬 - 2号人事部开放平台</title>
+    
+
+    <link rel="stylesheet" href="../../css/all.css">
+    <link rel="stylesheet" href="../../css/v4-shims.css">
+    <link rel="stylesheet" href="../../css/hack.min.css">
+    <link href='../../css/inter.css' rel='stylesheet' type='text/css'>
+    <link href="../../css/bootstrap-custom.min.css" rel="stylesheet">
+    <link href="../../css/base.min.css" rel="stylesheet">
+    <link href="../../css/cinder.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="../../css/github.min.css">
+
+    <!-- HTML5 shim and Respond.js IE8 support of HTML5 elements and media queries -->
+    <!--[if lt IE 9]>
+            <script src="../../js/html5shiv.min.js"></script>
+            <script src="../../js/respond.min.js"></script>
+        <![endif]-->
+
+     
+</head>
+
+<body>
+
+    <div class="navbar navbar-default navbar-fixed-top" role="navigation">
+    <div class="container">
+
+        <!-- Collapsed navigation -->
+        <div class="navbar-header">
+            <!-- Expander button -->
+            <button type="button" class="navbar-toggle" data-toggle="collapse" data-target=".navbar-collapse">
+                <span class="sr-only">Toggle navigation</span>
+                <span class="icon-bar"></span>
+                <span class="icon-bar"></span>
+                <span class="icon-bar"></span>
+            </button>
+            
+
+            <!-- Main title -->
+
+            
+              <a class="navbar-brand" href="../..">2号人事部开放平台</a>
+            
+        </div>
+
+        <!-- Expanded navigation -->
+        <div class="navbar-collapse collapse">
+                <!-- Main navigation -->
+                <ul class="nav navbar-nav">
+                
+                
+                    <li >
+                        <a href="../..">首页</a>
+                    </li>
+                
+                
+                
+                    <li >
+                        <a href="../../faq/">常见问题</a>
+                    </li>
+                
+                
+                
+                    <li >
+                        <a href="../../request/">申请接入</a>
+                    </li>
+                
+                
+                
+                    <li >
+                        <a href="../../update/">更新日志</a>
+                    </li>
+                
+                
+                
+                    <li class="dropdown active">
+                        <a href="#" class="dropdown-toggle" data-toggle="dropdown">API列表 <b class="caret"></b></a>
+                        <ul class="dropdown-menu">
+                        
+                            
+<li >
+    <a href="../start/">开始开发</a>
+</li>
+
+                        
+                            
+<li >
+    <a href="../base/">基础接口</a>
+</li>
+
+                        
+                            
+<li >
+    <a href="../departments/">组织信息</a>
+</li>
+
+                        
+                            
+<li >
+    <a href="../job_positons/">岗位信息</a>
+</li>
+
+                        
+                            
+<li >
+    <a href="../job_levels/">岗位职级查询</a>
+</li>
+
+                        
+                            
+<li >
+    <a href="../work_places/">工作地点查询</a>
+</li>
+
+                        
+                            
+<li >
+    <a href="../employees/">员工查询</a>
+</li>
+
+                        
+                            
+<li >
+    <a href="../employee_info/">员工信息</a>
+</li>
+
+                        
+                            
+<li >
+    <a href="../employee_transfer/">人事异动</a>
+</li>
+
+                        
+                            
+<li >
+    <a href="../security/">社保查询</a>
+</li>
+
+                        
+                            
+<li >
+    <a href="../attendance/">考勤假期</a>
+</li>
+
+                        
+                            
+<li class="active">
+    <a href="./">智能薪酬</a>
+</li>
+
+                        
+                            
+<li >
+    <a href="../approvals/">审批对接</a>
+</li>
+
+                        
+                            
+<li >
+    <a href="../payslip/">电子工资条</a>
+</li>
+
+                        
+                            
+<li >
+    <a href="../entry_form/">入职信息采集登记表</a>
+</li>
+
+                        
+                            
+<li >
+    <a href="../econtract/">电子合同</a>
+</li>
+
+                        
+                            
+<li >
+    <a href="../recruitment/">招聘</a>
+</li>
+
+                        
+                            
+<li >
+    <a href="../performance/">绩效</a>
+</li>
+
+                        
+                            
+<li >
+    <a href="../training/">培训</a>
+</li>
+
+                        
+                            
+<li >
+    <a href="../meeting_room_booking/">会议室预定</a>
+</li>
+
+                        
+                            
+<li >
+    <a href="../settings/">设置信息</a>
+</li>
+
+                        
+                            
+<li >
+    <a href="../oauth_login/">单点登录协议</a>
+</li>
+
+                        
+                            
+<li >
+    <a href="../home/">回调通知模式</a>
+</li>
+
+                        
+                            
+<li >
+    <a href="../error_code/">错误代码</a>
+</li>
+
+                        
+                        </ul>
+                    </li>
+                
+                
+                
+                    <li class="dropdown">
+                        <a href="#" class="dropdown-toggle" data-toggle="dropdown">示例代码 <b class="caret"></b></a>
+                        <ul class="dropdown-menu">
+                        
+                            
+<li >
+    <a href="../../examples/cs_decry/">C#</a>
+</li>
+
+                        
+                            
+<li >
+    <a href="../../examples/java_decry/">Java</a>
+</li>
+
+                        
+                            
+<li >
+    <a href="../../examples/php_decry/">PHP</a>
+</li>
+
+                        
+                            
+<li >
+    <a href="../../examples/python_decry/">Python</a>
+</li>
+
+                        
+                        </ul>
+                    </li>
+                
+                
+                
+                    <li >
+                        <a href="../../about/">关于我们</a>
+                    </li>
+                
+                
+                </ul>
+
+            <ul class="nav navbar-nav navbar-right">
+                    <li >
+                        <a rel="prev" href="../attendance/">
+                            <i class="fas fa-arrow-left"></i> Previous
+                        </a>
+                    </li>
+                    <li >
+                        <a rel="next" href="../approvals/">
+                            Next <i class="fas fa-arrow-right"></i>
+                        </a>
+                    </li>
+            </ul>
+        </div>
+    </div>
+</div>
+
+    <div class="container">
+        
+        
+        <div class="col-md-3"><div class="bs-sidebar hidden-print affix well" role="complementary">
+    <ul class="nav bs-sidenav">
+        <li class="first-level active"><a href="#_1">智能薪酬</a></li>
+            <li class="second-level"><a href="#_2">月薪台账</a></li>
+                
+                <li class="third-level"><a href="#_3">获取薪酬计算明细列表</a></li>
+                <li class="third-level"><a href="#_4">获取月薪汇总列表</a></li>
+            <li class="second-level"><a href="#_5">业务提报</a></li>
+                
+                <li class="third-level"><a href="#_6">获取提报方案列表</a></li>
+                <li class="third-level"><a href="#_7">获取提报项目列表</a></li>
+                <li class="third-level"><a href="#_8">导入提报数据</a></li>
+            <li class="second-level"><a href="#_9">员工考勤</a></li>
+                
+                <li class="third-level"><a href="#_10">获取日/月考勤字段列表</a></li>
+                <li class="third-level"><a href="#_11">导入每日考勤数据</a></li>
+                <li class="third-level"><a href="#_12">导入月度考勤数据</a></li>
+    </ul>
+</div></div>
+        <div class="col-md-9" role="main">
+
+<h2 id="_1">智能薪酬<a class="headerlink" href="#_1" title="Permanent link">&para;</a></h2>
+<h3 id="_2">月薪台账<a class="headerlink" href="#_2" title="Permanent link">&para;</a></h3>
+<h4 id="_3">获取薪酬计算明细列表<a class="headerlink" href="#_3" title="Permanent link">&para;</a></h4>
+<hr />
+<p><strong>使用场景：</strong> 获取薪酬计算明细列表</p>
+<p><strong>请求方式：</strong> POST（HTTPS）</p>
+<p><strong>请求地址：</strong> <code>https://openapi.2haohr.com/api/smart_salary/accounting/month_detail_list/?access_token=ACCESS_TOKEN</code></p>
+<p><strong>请求结构体示例：</strong></p>
+<pre><code class="language-json">{
+  &quot;year&quot;: 2024,
+  &quot;month&quot;: 6,
+  &quot;emp_ids&quot;: [
+    &quot;员工ID&quot;
+  ],
+  &quot;p&quot;: 1,
+  &quot;limit&quot;: 10
+}
+</code></pre>
+<p><strong>请求参数说明：</strong></p>
+<table>
+<thead>
+<tr>
+<th>参数</th>
+<th>类型</th>
+<th>是否必须</th>
+<th>说明</th>
+<th>参数说明</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>access_token</td>
+<td>String</td>
+<td>是</td>
+<td>调用接口凭证</td>
+<td></td>
+</tr>
+<tr>
+<td>year</td>
+<td>Number</td>
+<td>是</td>
+<td>年份</td>
+<td></td>
+</tr>
+<tr>
+<td>month</td>
+<td>Number</td>
+<td>是</td>
+<td>月份</td>
+<td></td>
+</tr>
+<tr>
+<td>emp_ids</td>
+<td>List[String]</td>
+<td>否</td>
+<td>员工ID列表</td>
+<td></td>
+</tr>
+<tr>
+<td>p</td>
+<td>Number</td>
+<td>否</td>
+<td>当前页数</td>
+<td>默认：1</td>
+</tr>
+<tr>
+<td>limit</td>
+<td>Number</td>
+<td>否</td>
+<td>每页条数</td>
+<td>默认：10，最大：200</td>
+</tr>
+</tbody>
+</table>
+<p><strong>返回结果示例</strong>：</p>
+<pre><code class="language-json">{
+  &quot;data&quot;: {
+    &quot;totalpage&quot;: 1,
+    &quot;total_count&quot;: 1,
+    &quot;p&quot;: 1,
+    &quot;objects&quot;: [
+      {
+        &quot;emp_id&quot;: &quot;员工ID&quot;,
+        &quot;item_data_list&quot;: [
+          {
+            &quot;one_code&quot;: &quot;薪酬项目编码&quot;,
+            &quot;value_from&quot;: 3,
+            &quot;value_type&quot;: 3,
+            &quot;value_data&quot;: 0,
+            &quot;title&quot;: &quot;基本工资&quot;
+          }
+        ]
+      }
+    ],
+    &quot;limit&quot;: 10,
+    &quot;offset&quot;: 0
+  },
+  &quot;errcode&quot;: 0,
+  &quot;errmsg&quot;: &quot;&quot;
+}
+</code></pre>
+<p><strong>返回参数说明</strong>：</p>
+<table>
+<thead>
+<tr>
+<th>参数</th>
+<th>类型</th>
+<th>说明</th>
+<th>参数说明</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>errcode</td>
+<td>Number</td>
+<td>返回码</td>
+<td></td>
+</tr>
+<tr>
+<td>errmsg</td>
+<td>String</td>
+<td>对错误返回码的文本描述内容</td>
+<td></td>
+</tr>
+<tr>
+<td>totalpage</td>
+<td>Number</td>
+<td>总页数</td>
+<td></td>
+</tr>
+<tr>
+<td>total_count</td>
+<td>Number</td>
+<td>总条数</td>
+<td></td>
+</tr>
+<tr>
+<td>p</td>
+<td>Number</td>
+<td>当前页码</td>
+<td></td>
+</tr>
+<tr>
+<td>limit</td>
+<td>Number</td>
+<td>每页条数</td>
+<td></td>
+</tr>
+<tr>
+<td>offset</td>
+<td>Number</td>
+<td>偏移量</td>
+<td></td>
+</tr>
+<tr>
+<td>objects</td>
+<td>List</td>
+<td>数据列表</td>
+<td></td>
+</tr>
+<tr>
+<td>└emp_id</td>
+<td>String</td>
+<td>员工ID</td>
+<td></td>
+</tr>
+<tr>
+<td>└item_data_list</td>
+<td>List</td>
+<td>员工薪酬明细结果列表</td>
+<td></td>
+</tr>
+<tr>
+<td>└└one_code</td>
+<td>String</td>
+<td>薪酬项目编码</td>
+<td></td>
+</tr>
+<tr>
+<td>└└title</td>
+<td>String</td>
+<td>薪酬项目名称</td>
+<td></td>
+</tr>
+<tr>
+<td>└└value_from</td>
+<td>Number</td>
+<td>数据来源</td>
+<td>1：系统字段、2：自定义公式、3：手动导入、4：在线编辑</td>
+</tr>
+<tr>
+<td>└└value_type</td>
+<td>Number</td>
+<td>数据类型</td>
+<td>2：文本、3：数值、4：日期</td>
+</tr>
+<tr>
+<td>└└value_data</td>
+<td>Interface</td>
+<td>薪酬结果</td>
+<td>结果可能是纯文本、数值、日期文本</td>
+</tr>
+</tbody>
+</table>
+<p><strong>错误说明</strong>：</p>
+<table>
+<thead>
+<tr>
+<th>错误码</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>21001</td>
+<td>未开通智能薪酬</td>
+</tr>
+<tr>
+<td>21002</td>
+<td>年份不合法</td>
+</tr>
+<tr>
+<td>21002</td>
+<td>月份不合法</td>
+</tr>
+<tr>
+<td>21002</td>
+<td>limit不能超过200</td>
+</tr>
+<tr>
+<td>21002</td>
+<td>员工ID错误</td>
+</tr>
+</tbody>
+</table>
+<h4 id="_4">获取月薪汇总列表<a class="headerlink" href="#_4" title="Permanent link">&para;</a></h4>
+<hr />
+<p><strong>使用场景：</strong> 获取月薪汇总列表</p>
+<p><strong>请求方式：</strong> POST（HTTPS）</p>
+<p><strong>请求地址：</strong> <code>https://openapi.2haohr.com/api/smart_salary/accounting/month_total_list/?access_token=ACCESS_TOKEN</code></p>
+<p><strong>接口说明：</strong></p>
+<ul>
+<li>
+<p>调用前，请先配置月薪汇总设置</p>
+</li>
+<li>
+<p>接口根据月薪汇总设置，将薪酬计算明细列表按员工维度进行汇总，并返回汇总结果列表</p>
+</li>
+</ul>
+<p><strong>请求结构体示例：</strong></p>
+<pre><code class="language-json">{
+  &quot;year&quot;: 2024,
+  &quot;month&quot;: 6,
+  &quot;emp_ids&quot;: [
+    &quot;员工ID&quot;
+  ],
+  &quot;p&quot;: 1,
+  &quot;limit&quot;: 10
+}
+</code></pre>
+<p><strong>请求参数说明：</strong></p>
+<table>
+<thead>
+<tr>
+<th>参数</th>
+<th>类型</th>
+<th>是否必须</th>
+<th>说明</th>
+<th>参数说明</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>access_token</td>
+<td>String</td>
+<td>是</td>
+<td>调用接口凭证</td>
+<td></td>
+</tr>
+<tr>
+<td>year</td>
+<td>Number</td>
+<td>是</td>
+<td>年份</td>
+<td></td>
+</tr>
+<tr>
+<td>month</td>
+<td>Number</td>
+<td>是</td>
+<td>月份</td>
+<td></td>
+</tr>
+<tr>
+<td>emp_ids</td>
+<td>List[String]</td>
+<td>否</td>
+<td>员工ID列表</td>
+<td></td>
+</tr>
+<tr>
+<td>p</td>
+<td>Number</td>
+<td>否</td>
+<td>当前页数</td>
+<td>默认：1</td>
+</tr>
+<tr>
+<td>limit</td>
+<td>Number</td>
+<td>否</td>
+<td>每页条数</td>
+<td>默认：10，最大：200</td>
+</tr>
+</tbody>
+</table>
+<p><strong>返回结果示例</strong>：</p>
+<pre><code class="language-json">{
+  &quot;data&quot;: {
+    &quot;totalpage&quot;: 1,
+    &quot;total_count&quot;: 1,
+    &quot;p&quot;: 1,
+    &quot;objects&quot;: [
+      {
+        &quot;emp_id&quot;: &quot;员工ID&quot;,
+        &quot;item_data_list&quot;: [
+          {
+            &quot;one_code&quot;: &quot;薪酬项目编码&quot;,
+            &quot;value_from&quot;: 2,
+            &quot;value_type&quot;: 3,
+            &quot;value_data&quot;: 0,
+            &quot;title&quot;: &quot;应发工资&quot;
+          }
+        ]
+      }
+    ],
+    &quot;limit&quot;: 200,
+    &quot;offset&quot;: 0
+  },
+  &quot;errcode&quot;: 0,
+  &quot;errmsg&quot;: &quot;&quot;
+}
+</code></pre>
+<p><strong>返回参数说明</strong>：</p>
+<table>
+<thead>
+<tr>
+<th>参数</th>
+<th>类型</th>
+<th>说明</th>
+<th>参数说明</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>errcode</td>
+<td>Number</td>
+<td>返回码</td>
+<td></td>
+</tr>
+<tr>
+<td>errmsg</td>
+<td>String</td>
+<td>对错误返回码的文本描述内容</td>
+<td></td>
+</tr>
+<tr>
+<td>totalpage</td>
+<td>Number</td>
+<td>总页数</td>
+<td></td>
+</tr>
+<tr>
+<td>total_count</td>
+<td>Number</td>
+<td>总条数</td>
+<td></td>
+</tr>
+<tr>
+<td>p</td>
+<td>Number</td>
+<td>当前页码</td>
+<td></td>
+</tr>
+<tr>
+<td>limit</td>
+<td>Number</td>
+<td>每页条数</td>
+<td></td>
+</tr>
+<tr>
+<td>offset</td>
+<td>Number</td>
+<td>偏移量</td>
+<td></td>
+</tr>
+<tr>
+<td>objects</td>
+<td>List</td>
+<td>数据列表</td>
+<td></td>
+</tr>
+<tr>
+<td>└emp_id</td>
+<td>String</td>
+<td>员工ID</td>
+<td></td>
+</tr>
+<tr>
+<td>└item_data_list</td>
+<td>List</td>
+<td>员工薪酬明细结果列表</td>
+<td></td>
+</tr>
+<tr>
+<td>└└one_code</td>
+<td>String</td>
+<td>薪酬项目编码</td>
+<td></td>
+</tr>
+<tr>
+<td>└└title</td>
+<td>String</td>
+<td>薪酬项目名称</td>
+<td></td>
+</tr>
+<tr>
+<td>└└value_from</td>
+<td>Number</td>
+<td>数据来源</td>
+<td>1：系统字段、2：自定义公式、3：手动导入、4：在线编辑</td>
+</tr>
+<tr>
+<td>└└value_type</td>
+<td>Number</td>
+<td>数据类型</td>
+<td>2：文本、3：数值、4：日期</td>
+</tr>
+<tr>
+<td>└└value_data</td>
+<td>Interface</td>
+<td>薪酬结果</td>
+<td>结果可能是纯文本、数值、日期文本</td>
+</tr>
+</tbody>
+</table>
+<p><strong>错误说明</strong>：</p>
+<table>
+<thead>
+<tr>
+<th>错误码</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>21001</td>
+<td>未开通智能薪酬</td>
+</tr>
+<tr>
+<td>21002</td>
+<td>年份不合法</td>
+</tr>
+<tr>
+<td>21002</td>
+<td>月份不合法</td>
+</tr>
+<tr>
+<td>21002</td>
+<td>limit不能超过200</td>
+</tr>
+<tr>
+<td>21002</td>
+<td>员工ID错误</td>
+</tr>
+<tr>
+<td>21003</td>
+<td>汇总结果展示已关闭，无法获取汇总结果列表</td>
+</tr>
+</tbody>
+</table>
+<h3 id="_5">业务提报<a class="headerlink" href="#_5" title="Permanent link">&para;</a></h3>
+<h4 id="_6">获取提报方案列表<a class="headerlink" href="#_6" title="Permanent link">&para;</a></h4>
+<p><strong>使用场景：</strong> 获取业务提报方案列表</p>
+<p><strong>请求方式：</strong> POST（HTTPS）</p>
+<p><strong>请求地址：</strong> <code>https://openapi.2haohr.com/api/smart_salary/biz_sub/plan_list/?access_token=ACCESS_TOKEN</code></p>
+<p><strong>请求结构体示例：</strong></p>
+<pre><code class="language-json">{
+  &quot;sub_type_list&quot;: [
+    1
+  ],
+  &quot;keyword&quot;: &quot;方案名称&quot;,
+  &quot;is_used&quot;: true,
+  &quot;p&quot;: 1,
+  &quot;limit&quot;: 10
+}
+</code></pre>
+<p><strong>请求参数说明：</strong></p>
+<table>
+<thead>
+<tr>
+<th>参数</th>
+<th>类型</th>
+<th>是否必须</th>
+<th>说明</th>
+<th>参数说明</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>access_token</td>
+<td>String</td>
+<td>是</td>
+<td>调用接口凭证</td>
+<td></td>
+</tr>
+<tr>
+<td>sub_type_list</td>
+<td>List[Number]</td>
+<td>否</td>
+<td>提报类型</td>
+<td>1：汇总数据提报、2：明细数据提报、3：基础数据提报</td>
+</tr>
+<tr>
+<td>keyword</td>
+<td>String</td>
+<td>否</td>
+<td>方案名称</td>
+<td>按名称进行模糊匹配</td>
+</tr>
+<tr>
+<td>is_used</td>
+<td>Boolean</td>
+<td>否</td>
+<td>方案状态</td>
+<td>不传：全部、true：启用、false：停用</td>
+</tr>
+<tr>
+<td>p</td>
+<td>Number</td>
+<td>否</td>
+<td>当前页数</td>
+<td>默认：1</td>
+</tr>
+<tr>
+<td>limit</td>
+<td>Number</td>
+<td>否</td>
+<td>每页条数</td>
+<td>默认：10，最大：50</td>
+</tr>
+</tbody>
+</table>
+<p><strong>返回结果示例</strong>：</p>
+<pre><code class="language-json">{
+  &quot;data&quot;: {
+    &quot;totalpage&quot;: 1,
+    &quot;total_count&quot;: 1,
+    &quot;p&quot;: 1,
+    &quot;objects&quot;: [
+      {
+        &quot;is_used&quot;: true,
+        &quot;desc&quot;: &quot;方案描述&quot;,
+        &quot;sub_name&quot;: &quot;方案名称&quot;,
+        &quot;id&quot;: &quot;方案ID&quot;,
+        &quot;sub_type&quot;: 1
+      }
+    ],
+    &quot;limit&quot;: 10,
+    &quot;offset&quot;: 0
+  },
+  &quot;errcode&quot;: 0,
+  &quot;errmsg&quot;: &quot;&quot;
+}
+</code></pre>
+<p><strong>返回参数说明</strong>：</p>
+<table>
+<thead>
+<tr>
+<th>参数</th>
+<th>类型</th>
+<th>说明</th>
+<th>参数说明</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>errcode</td>
+<td>Number</td>
+<td>返回码</td>
+<td></td>
+</tr>
+<tr>
+<td>errmsg</td>
+<td>String</td>
+<td>对错误返回码的文本描述内容</td>
+<td></td>
+</tr>
+<tr>
+<td>totalpage</td>
+<td>Number</td>
+<td>总页数</td>
+<td></td>
+</tr>
+<tr>
+<td>total_count</td>
+<td>Number</td>
+<td>总条数</td>
+<td></td>
+</tr>
+<tr>
+<td>p</td>
+<td>Number</td>
+<td>当前页码</td>
+<td></td>
+</tr>
+<tr>
+<td>limit</td>
+<td>Number</td>
+<td>每页条数</td>
+<td></td>
+</tr>
+<tr>
+<td>offset</td>
+<td>Number</td>
+<td>偏移量</td>
+<td></td>
+</tr>
+<tr>
+<td>objects</td>
+<td>List</td>
+<td>数据列表</td>
+<td></td>
+</tr>
+<tr>
+<td>└id</td>
+<td>String</td>
+<td>方案ID</td>
+<td></td>
+</tr>
+<tr>
+<td>└sub_name</td>
+<td>String</td>
+<td>方案名称</td>
+<td></td>
+</tr>
+<tr>
+<td>└desc</td>
+<td>String</td>
+<td>方案描述</td>
+<td></td>
+</tr>
+<tr>
+<td>└sub_type</td>
+<td>Number</td>
+<td>提报类型</td>
+<td>1：汇总数据提报、2：明细数据提报、3：基础数据提报</td>
+</tr>
+<tr>
+<td>└is_used</td>
+<td>Boolean</td>
+<td>方案状态</td>
+<td>true：启用、false：停用</td>
+</tr>
+</tbody>
+</table>
+<p><strong>错误说明</strong>：</p>
+<table>
+<thead>
+<tr>
+<th>错误码</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>21001</td>
+<td>未开通智能薪酬</td>
+</tr>
+<tr>
+<td>21002</td>
+<td>提报方案类型错误（1汇总 2明细 3基础）</td>
+</tr>
+<tr>
+<td>21002</td>
+<td>limit不能超过50</td>
+</tr>
+</tbody>
+</table>
+<h4 id="_7">获取提报项目列表<a class="headerlink" href="#_7" title="Permanent link">&para;</a></h4>
+<p><strong>使用场景：</strong> 获取业务提报项目列表</p>
+<p><strong>请求方式：</strong> GET（HTTPS）</p>
+<p><strong>请求地址：</strong> <code>https://openapi.2haohr.com/api/smart_salary/biz_sub/item_list/?access_token=ACCESS_TOKEN</code></p>
+<p><strong>请求结构体示例：</strong></p>
+<p><code>https://openapi.2haohr.com/api/smart_salary/biz_sub/item_list/?access_token=ACCESS_TOKEN&amp;sub_plan_id=xxx</code></p>
+<p><strong>请求参数说明：</strong></p>
+<table>
+<thead>
+<tr>
+<th>参数</th>
+<th>类型</th>
+<th>是否必须</th>
+<th>说明</th>
+<th>参数说明</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>access_token</td>
+<td>String</td>
+<td>是</td>
+<td>调用接口凭证</td>
+<td></td>
+</tr>
+<tr>
+<td>sub_plan_id</td>
+<td>String</td>
+<td>是</td>
+<td>方案ID</td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<p><strong>返回结果示例</strong>：</p>
+<pre><code class="language-json">{
+  &quot;data&quot;: [
+    {
+      &quot;reserve_decimal_digit&quot;: 0,
+      &quot;data_type&quot;: 2,
+      &quot;source_type&quot;: 1,
+      &quot;item_name&quot;: &quot;333&quot;,
+      &quot;date_type&quot;: 0,
+      &quot;round_off&quot;: 0,
+      &quot;sum_formula_name&quot;: &quot;#人事信息.部门#&quot;,
+      &quot;item_type&quot;: 2,
+      &quot;formula_desc&quot;: &quot;&quot;,
+      &quot;is_require&quot;: false,
+      &quot;sum_formula&quot;: &quot;#SYS8948009#&quot;,
+      &quot;field_key&quot;: &quot;sub_665fcf7b358b85c3aee97714&quot;,
+      &quot;id&quot;: &quot;665fcf7b358b85c3aee97714&quot;,
+      &quot;is_simple_formula&quot;: true
+    }
+  ],
+  &quot;errcode&quot;: 0,
+  &quot;errmsg&quot;: &quot;&quot;
+}
+</code></pre>
+<p><strong>返回参数说明</strong>：</p>
+<table>
+<thead>
+<tr>
+<th>参数</th>
+<th>类型</th>
+<th>说明</th>
+<th>参数说明</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>errcode</td>
+<td>Number</td>
+<td>返回码</td>
+<td></td>
+</tr>
+<tr>
+<td>errmsg</td>
+<td>String</td>
+<td>对错误返回码的文本描述内容</td>
+<td></td>
+</tr>
+<tr>
+<td>data</td>
+<td>List</td>
+<td>数据列表</td>
+<td></td>
+</tr>
+<tr>
+<td>└id</td>
+<td>String</td>
+<td>项目ID</td>
+<td></td>
+</tr>
+<tr>
+<td>└field_key</td>
+<td>String</td>
+<td>项目编码</td>
+<td></td>
+</tr>
+<tr>
+<td>└item_name</td>
+<td>String</td>
+<td>项目名称</td>
+<td></td>
+</tr>
+<tr>
+<td>└item_type</td>
+<td>Number</td>
+<td>项目类型</td>
+<td>1：汇总方案-汇总提报项目、2：明细方案-明细提报项目、3：明细方案-汇总提报项目、4：基础方案-基础提报项目</td>
+</tr>
+<tr>
+<td>└is_require</td>
+<td>Boolean</td>
+<td>是否必填</td>
+<td>true：必填、false：不必填</td>
+</tr>
+<tr>
+<td>└data_type</td>
+<td>Number</td>
+<td>数据类型</td>
+<td>2：文本、3：数值、4：日期</td>
+</tr>
+<tr>
+<td>└date_type</td>
+<td>Number</td>
+<td>日期格式</td>
+<td>1：YYYY-MM、2：YYYY-MM-DD、3：YYYY-MM-DD HH:MM</td>
+</tr>
+<tr>
+<td>└source_type</td>
+<td>Number</td>
+<td>取值方式</td>
+<td>1：系统字段、2：自定义公式、3：手动导入</td>
+</tr>
+<tr>
+<td>└round_off</td>
+<td>Number</td>
+<td>舍入规则</td>
+<td>1：四舍五入、2：向上舍入、3：向下舍入</td>
+</tr>
+<tr>
+<td>└reserve_decimal_digit</td>
+<td>Number</td>
+<td>舍入小数位</td>
+<td>支持0~9位</td>
+</tr>
+<tr>
+<td>└sum_formula</td>
+<td>String</td>
+<td>汇总公式</td>
+<td>自定义公式的公式值（未翻译）</td>
+</tr>
+<tr>
+<td>└sum_formula_name</td>
+<td>String</td>
+<td>汇总公式（翻译）</td>
+<td>自定义公式的公式值（字段编码已翻译成名称）</td>
+</tr>
+<tr>
+<td>└formula_desc</td>
+<td>String</td>
+<td>公式说明</td>
+<td></td>
+</tr>
+<tr>
+<td>└is_simple_formula</td>
+<td>Boolean</td>
+<td>函数模式</td>
+<td>true：简单模式、false：复杂模式</td>
+</tr>
+</tbody>
+</table>
+<p><strong>错误说明</strong>：</p>
+<table>
+<thead>
+<tr>
+<th>错误码</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>21001</td>
+<td>未开通智能薪酬</td>
+</tr>
+<tr>
+<td>21002</td>
+<td>提报方案ID不能为空</td>
+</tr>
+<tr>
+<td>21004</td>
+<td>提报方案不存在</td>
+</tr>
+</tbody>
+</table>
+<h4 id="_8">导入提报数据<a class="headerlink" href="#_8" title="Permanent link">&para;</a></h4>
+<p><strong>使用场景：</strong> 导入业务提报数据</p>
+<p><strong>请求方式：</strong> POST（HTTPS）</p>
+<p><strong>请求地址：</strong> <code>https://openapi.2haohr.com/api/smart_salary/biz_sub/import_data/?access_token=ACCESS_TOKEN</code></p>
+<p><strong>接口说明：</strong></p>
+<ul>
+<li>
+<p>导入基础业务提报方案数据，emp_id可以为空</p>
+</li>
+<li>
+<p>导入明细业务提报方案数据，cus_data可以为空</p>
+</li>
+<li>
+<p>导入汇总业务提报方案数据，emp_id不能重复</p>
+</li>
+</ul>
+<p><strong>请求结构体示例：</strong></p>
+<pre><code class="language-json">{
+  &quot;sub_plan_id&quot;: &quot;提报方案ID&quot;,
+  &quot;sub_date&quot;: &quot;2025-05&quot;,
+  &quot;data_list&quot;: [
+    {
+      &quot;emp_id&quot;: &quot;员工ID&quot;,
+      &quot;cus_data&quot;: {
+        &quot;field_key&quot;: &quot;xxx&quot;
+      }
+    }
+  ]
+}
+</code></pre>
+<p><strong>请求参数说明：</strong></p>
+<table>
+<thead>
+<tr>
+<th>参数</th>
+<th>类型</th>
+<th>是否必须</th>
+<th>说明</th>
+<th>参数说明</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>access_token</td>
+<td>String</td>
+<td>是</td>
+<td>调用接口凭证</td>
+<td></td>
+</tr>
+<tr>
+<td>sub_plan_id</td>
+<td>String</td>
+<td>是</td>
+<td>提报方案ID</td>
+<td></td>
+</tr>
+<tr>
+<td>sub_date</td>
+<td>String</td>
+<td>是</td>
+<td>提报月份</td>
+<td>提交格式：YYYY-MM</td>
+</tr>
+<tr>
+<td>data_list</td>
+<td>List</td>
+<td>是</td>
+<td>数据列表</td>
+<td>每次最多提报100条</td>
+</tr>
+<tr>
+<td>└emp_id</td>
+<td>String</td>
+<td>否</td>
+<td>员工ID</td>
+<td></td>
+</tr>
+<tr>
+<td>└cus_data</td>
+<td>Object</td>
+<td>否</td>
+<td>提报数据</td>
+<td>{key：val} key为提报项目field_key，val为提报数据</td>
+</tr>
+</tbody>
+</table>
+<p><strong>返回结果示例</strong>：</p>
+<pre><code class="language-json">{
+  &quot;data&quot;: [],
+  &quot;errcode&quot;: 0,
+  &quot;errmsg&quot;: &quot;&quot;
+}
+</code></pre>
+<p><strong>返回参数说明</strong>：</p>
+<table>
+<thead>
+<tr>
+<th>参数</th>
+<th>类型</th>
+<th>说明</th>
+<th>参数说明</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>errcode</td>
+<td>Number</td>
+<td>返回码</td>
+<td></td>
+</tr>
+<tr>
+<td>errmsg</td>
+<td>String</td>
+<td>对错误返回码的文本描述内容</td>
+<td></td>
+</tr>
+<tr>
+<td>data</td>
+<td>List</td>
+<td>错误描述列表</td>
+<td>{index: errmsg} index为提交数据列表的索引，errmsg为错误数据的描述</td>
+</tr>
+</tbody>
+</table>
+<p><strong>错误说明</strong>：</p>
+<table>
+<thead>
+<tr>
+<th>错误码</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>21001</td>
+<td>未开通智能薪酬</td>
+</tr>
+<tr>
+<td>21002</td>
+<td>提报方案ID不能为空</td>
+</tr>
+<tr>
+<td>21002</td>
+<td>员工ID不能为空</td>
+</tr>
+<tr>
+<td>21002</td>
+<td>员工ID错误</td>
+</tr>
+<tr>
+<td>21002</td>
+<td>提报月份不能为空</td>
+</tr>
+<tr>
+<td>21002</td>
+<td>提报月份格式错误 请严格使用YYYY-MM格式</td>
+</tr>
+<tr>
+<td>21002</td>
+<td>提报数据不能为空</td>
+</tr>
+<tr>
+<td>21002</td>
+<td>提报数据一次最多100条</td>
+</tr>
+<tr>
+<td>21004</td>
+<td>提报方案不存在</td>
+</tr>
+<tr>
+<td>21005</td>
+<td>提报方案已停用</td>
+</tr>
+<tr>
+<td>21006</td>
+<td>汇总提报方案不允许重复提报同一员工</td>
+</tr>
+<tr>
+<td>21007</td>
+<td>当前月份数据已锁定</td>
+</tr>
+<tr>
+<td>21008</td>
+<td>员工信息不存在</td>
+</tr>
+<tr>
+<td>21008</td>
+<td>员工已删除</td>
+</tr>
+<tr>
+<td>21008</td>
+<td>存在审批中的提报数据</td>
+</tr>
+<tr>
+<td>21008</td>
+<td>提报项目key不存在</td>
+</tr>
+<tr>
+<td>21008</td>
+<td>不能提报已删除提报项目</td>
+</tr>
+<tr>
+<td>21008</td>
+<td>不能导入明细方案的汇总提报项目</td>
+</tr>
+<tr>
+<td>21008</td>
+<td>不能导入非导入来源的提报项目</td>
+</tr>
+<tr>
+<td>21008</td>
+<td>必填提报项目不能为空</td>
+</tr>
+<tr>
+<td>21008</td>
+<td>提报的值和提报项目的数据类型不匹配</td>
+</tr>
+</tbody>
+</table>
+<h3 id="_9">员工考勤<a class="headerlink" href="#_9" title="Permanent link">&para;</a></h3>
+<h4 id="_10">获取日/月考勤字段列表<a class="headerlink" href="#_10" title="Permanent link">&para;</a></h4>
+<p><strong>使用场景：</strong> 获取智能薪酬-日/月考勤字段列表</p>
+<p><strong>请求方式：</strong> GET（HTTPS）</p>
+<p><strong>请求地址：</strong> <code>https://openapi.2haohr.com/api/smart_salary/attendance_stat/attendance_fields/?access_token=ACCESS_TOKEN</code></p>
+<p><strong>请求结构体示例：</strong></p>
+<p><code>https://openapi.2haohr.com/api/smart_salary/attendance_stat/attendance_fields/?access_token=ACCESS_TOKEN&amp;attend_code=xxx</code></p>
+<p><strong>请求参数说明：</strong></p>
+<table>
+<thead>
+<tr>
+<th>参数</th>
+<th>类型</th>
+<th>是否必须</th>
+<th>说明</th>
+<th>参数说明</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>access_token</td>
+<td>String</td>
+<td>是</td>
+<td>调用接口凭证</td>
+<td></td>
+</tr>
+<tr>
+<td>attend_code</td>
+<td>Number</td>
+<td>是</td>
+<td>考勤类型</td>
+<td>1：日考勤、2：月考勤</td>
+</tr>
+</tbody>
+</table>
+<p><strong>返回结果示例</strong>：</p>
+<pre><code class="language-json">{
+  &quot;data&quot;: [
+    {
+      &quot;field_key&quot;: &quot;字段编码&quot;,
+      &quot;field_name&quot;: &quot;字段名称&quot;,
+      &quot;field_type&quot;: 3,
+      &quot;status&quot;: 1
+    }
+  ],
+  &quot;errcode&quot;: 0,
+  &quot;errmsg&quot;: &quot;&quot;
+}
+</code></pre>
+<p><strong>返回参数说明</strong>：</p>
+<table>
+<thead>
+<tr>
+<th>参数</th>
+<th>类型</th>
+<th>说明</th>
+<th>参数说明</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>errcode</td>
+<td>Number</td>
+<td>返回码</td>
+<td></td>
+</tr>
+<tr>
+<td>errmsg</td>
+<td>String</td>
+<td>对错误返回码的文本描述内容</td>
+<td></td>
+</tr>
+<tr>
+<td>data</td>
+<td>List</td>
+<td>数据列表</td>
+<td></td>
+</tr>
+<tr>
+<td>└field_key</td>
+<td>String</td>
+<td>字段编码</td>
+<td></td>
+</tr>
+<tr>
+<td>└field_name</td>
+<td>String</td>
+<td>字段名称</td>
+<td></td>
+</tr>
+<tr>
+<td>└field_type</td>
+<td>Number</td>
+<td>数据类型</td>
+<td>2：文本、3：数值、4：日期</td>
+</tr>
+<tr>
+<td>└status</td>
+<td>Number</td>
+<td>字段状态</td>
+<td>-1：禁用、1：启用</td>
+</tr>
+</tbody>
+</table>
+<p><strong>错误说明</strong>：</p>
+<table>
+<thead>
+<tr>
+<th>错误码</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>21001</td>
+<td>未开通智能薪酬</td>
+</tr>
+<tr>
+<td>21002</td>
+<td>考勤类型错误（1日考勤 2月考勤）</td>
+</tr>
+</tbody>
+</table>
+<h4 id="_11">导入每日考勤数据<a class="headerlink" href="#_11" title="Permanent link">&para;</a></h4>
+<p><strong>使用场景：</strong> 导入智能薪酬-每日考勤数据</p>
+<p><strong>请求方式：</strong> POST（HTTPS）</p>
+<p><strong>
+请求地址：</strong> <code>https://openapi.2haohr.com/api/smart_salary/attendance_stat/day_attendance/import_data/?access_token=ACCESS_TOKEN</code></p>
+<p><strong>接口说明：</strong></p>
+<ul>
+<li>不能导入相同员工同一天的日考勤数据</li>
+</ul>
+<p><strong>请求结构体示例：</strong></p>
+<pre><code class="language-json">{
+  &quot;data_list&quot;: [
+    {
+      &quot;emp_id&quot;: &quot;员工ID&quot;,
+      &quot;work_date&quot;: &quot;2025-04-01&quot;,
+      &quot;data&quot;: {
+        &quot;field_key&quot;: &quot;xxx&quot;
+      }
+    }
+  ]
+}
+</code></pre>
+<p><strong>请求参数说明：</strong></p>
+<table>
+<thead>
+<tr>
+<th>参数</th>
+<th>类型</th>
+<th>是否必须</th>
+<th>说明</th>
+<th>参数说明</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>access_token</td>
+<td>String</td>
+<td>是</td>
+<td>调用接口凭证</td>
+<td></td>
+</tr>
+<tr>
+<td>data_list</td>
+<td>List</td>
+<td>是</td>
+<td>数据列表</td>
+<td>每次最多导入100条</td>
+</tr>
+<tr>
+<td>└emp_id</td>
+<td>String</td>
+<td>是</td>
+<td>员工ID</td>
+<td></td>
+</tr>
+<tr>
+<td>└work_date</td>
+<td>List</td>
+<td>是</td>
+<td>考勤日期</td>
+<td>提交格式：YYYY-MM-DD</td>
+</tr>
+<tr>
+<td>└data</td>
+<td>List</td>
+<td>是</td>
+<td>考勤数据</td>
+<td>{key：val} key为日考勤字段field_key，val为提报数据</td>
+</tr>
+</tbody>
+</table>
+<p><strong>返回结果示例</strong>：</p>
+<pre><code class="language-json">{
+  &quot;data&quot;: [],
+  &quot;errcode&quot;: 0,
+  &quot;errmsg&quot;: &quot;&quot;
+}
+</code></pre>
+<p><strong>返回参数说明</strong>：</p>
+<table>
+<thead>
+<tr>
+<th>参数</th>
+<th>类型</th>
+<th>说明</th>
+<th>参数说明</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>errcode</td>
+<td>Number</td>
+<td>返回码</td>
+<td></td>
+</tr>
+<tr>
+<td>errmsg</td>
+<td>String</td>
+<td>对错误返回码的文本描述内容</td>
+<td></td>
+</tr>
+<tr>
+<td>data</td>
+<td>List</td>
+<td>错误描述列表</td>
+<td>{index: errmsg} index为提交数据列表的索引，errmsg为错误数据的描述</td>
+</tr>
+</tbody>
+</table>
+<p><strong>错误说明</strong>：</p>
+<table>
+<thead>
+<tr>
+<th>错误码</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>21001</td>
+<td>未开通智能薪酬</td>
+</tr>
+<tr>
+<td>21002</td>
+<td>导入数据不能为空</td>
+</tr>
+<tr>
+<td>21002</td>
+<td>导入数据一次最多100条</td>
+</tr>
+<tr>
+<td>21002</td>
+<td>员工ID不能为空</td>
+</tr>
+<tr>
+<td>21002</td>
+<td>员工ID错误</td>
+</tr>
+<tr>
+<td>21002</td>
+<td>考勤日期不能为空</td>
+</tr>
+<tr>
+<td>21002</td>
+<td>考勤日期格式错误，请严格使用YYYY-MM-DD格式</td>
+</tr>
+<tr>
+<td>21009</td>
+<td>不能导入相同员工同一天的日考勤数据</td>
+</tr>
+<tr>
+<td>21008</td>
+<td>日期为xxx之前的数据已锁定</td>
+</tr>
+<tr>
+<td>21008</td>
+<td>员工信息不存在</td>
+</tr>
+<tr>
+<td>21008</td>
+<td>员工已删除</td>
+</tr>
+<tr>
+<td>21008</td>
+<td>日考勤字段key不存在</td>
+</tr>
+<tr>
+<td>21008</td>
+<td>日考勤字段已停用</td>
+</tr>
+<tr>
+<td>21008</td>
+<td>导入的值和日考勤字段的数据类型不匹配</td>
+</tr>
+</tbody>
+</table>
+<h4 id="_12">导入月度考勤数据<a class="headerlink" href="#_12" title="Permanent link">&para;</a></h4>
+<p><strong>使用场景：</strong> 导入智能薪酬-月度考勤数据</p>
+<p><strong>请求方式：</strong> POST（HTTPS）</p>
+<p><strong>
+请求地址：</strong> <code>https://openapi.2haohr.com/api/smart_salary/attendance_stat/month_attendance/import_data/?access_token=ACCESS_TOKEN</code></p>
+<p><strong>接口说明：</strong></p>
+<ul>
+<li>
+<p>未开启分开计薪：相同emp_id不能重复，系统默认获取考勤月份最后一天的dep_id</p>
+</li>
+<li>
+<p>开启分开计薪：相同emp_id同一dep_id不能重复，跨部门员工未提交dep_id时，默认取异动后的dep_id，非跨部门员工，取考勤月份最后一天的dep_id</p>
+</li>
+</ul>
+<p><strong>请求结构体示例：</strong></p>
+<pre><code class="language-json">{
+  &quot;work_month&quot;: &quot;2025-04&quot;,
+  &quot;data_list&quot;: [
+    {
+      &quot;emp_id&quot;: &quot;员工ID&quot;,
+      &quot;dep_id&quot;: &quot;部门ID&quot;,
+      &quot;data&quot;: {
+        &quot;field_key&quot;: &quot;xxx&quot;
+      }
+    }
+  ]
+}
+</code></pre>
+<p><strong>请求参数说明：</strong></p>
+<table>
+<thead>
+<tr>
+<th>参数</th>
+<th>类型</th>
+<th>是否必须</th>
+<th>说明</th>
+<th>参数说明</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>access_token</td>
+<td>String</td>
+<td>是</td>
+<td>调用接口凭证</td>
+<td></td>
+</tr>
+<tr>
+<td>work_month</td>
+<td>String</td>
+<td>是</td>
+<td>考勤月份</td>
+<td>提交格式：YYYY-MM</td>
+</tr>
+<tr>
+<td>data_list</td>
+<td>List</td>
+<td>是</td>
+<td>数据列表</td>
+<td>每次最多导入100条</td>
+</tr>
+<tr>
+<td>└emp_id</td>
+<td>String</td>
+<td>是</td>
+<td>员工ID</td>
+<td></td>
+</tr>
+<tr>
+<td>└dep_id</td>
+<td>String</td>
+<td>否</td>
+<td>部门ID</td>
+<td></td>
+</tr>
+<tr>
+<td>└data</td>
+<td>List</td>
+<td>是</td>
+<td>考勤数据</td>
+<td>{key：val} key为月考勤字段field_key，val为提报数据</td>
+</tr>
+</tbody>
+</table>
+<p><strong>返回结果示例</strong>：</p>
+<pre><code class="language-json">{
+  &quot;data&quot;: [],
+  &quot;errcode&quot;: 0,
+  &quot;errmsg&quot;: &quot;&quot;
+}
+</code></pre>
+<p><strong>返回参数说明</strong>：</p>
+<table>
+<thead>
+<tr>
+<th>参数</th>
+<th>类型</th>
+<th>说明</th>
+<th>参数说明</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>errcode</td>
+<td>Number</td>
+<td>返回码</td>
+<td></td>
+</tr>
+<tr>
+<td>errmsg</td>
+<td>String</td>
+<td>对错误返回码的文本描述内容</td>
+<td></td>
+</tr>
+<tr>
+<td>data</td>
+<td>List</td>
+<td>错误描述列表</td>
+<td>{index: errmsg} index为提交数据列表的索引，errmsg为错误数据的描述</td>
+</tr>
+</tbody>
+</table>
+<p><strong>错误说明</strong>：</p>
+<table>
+<thead>
+<tr>
+<th>错误码</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>21001</td>
+<td>未开通智能薪酬</td>
+</tr>
+<tr>
+<td>21002</td>
+<td>导入数据不能为空</td>
+</tr>
+<tr>
+<td>21002</td>
+<td>导入数据一次最多100条</td>
+</tr>
+<tr>
+<td>21002</td>
+<td>考勤月份不能为空</td>
+</tr>
+<tr>
+<td>21002</td>
+<td>考勤月份格式错误，请严格使用YYYY-MM格式</td>
+</tr>
+<tr>
+<td>21002</td>
+<td>员工ID不能为空</td>
+</tr>
+<tr>
+<td>21002</td>
+<td>员工ID错误</td>
+</tr>
+<tr>
+<td>21002</td>
+<td>部门ID错误</td>
+</tr>
+<tr>
+<td>21008</td>
+<td>员工信息不存在</td>
+</tr>
+<tr>
+<td>21008</td>
+<td>员工已删除</td>
+</tr>
+<tr>
+<td>21008</td>
+<td>部门匹配失败，非员工当月所属部门</td>
+</tr>
+<tr>
+<td>21008</td>
+<td>月考勤字段key不存在</td>
+</tr>
+<tr>
+<td>21008</td>
+<td>月考勤字段已停用</td>
+</tr>
+<tr>
+<td>21008</td>
+<td>导入的值和月考勤字段的数据类型不匹配</td>
+</tr>
+<tr>
+<td>21010</td>
+<td>不能导入相同员工同一月份的月考勤数据（未开启分开计薪）</td>
+</tr>
+<tr>
+<td>21011</td>
+<td>不能导入相同员工同一月份同一部门的月考勤数据（开启分开计薪）</td>
+</tr>
+<tr>
+<td>21012</td>
+<td>月度考勤已锁定</td>
+</tr>
+</tbody>
+</table></div>
+        
+        
+    </div>
+
+    
+      <footer class="col-md-12 text-center">
+          
+          
+            <hr>
+            <p>
+            <small>Copyright©2016-2025 深圳市点米二号科技有限公司 All Rights Reserved | <a href="https://beian.miit.gov.cn" target="_blank" rel="nofollow" class="link_1uNfr">粤ICP备12040237号</a></small><br>
+            
+            </p>
+          
+
+          
+          
+      </footer>
+    
+    <script src="../../js/jquery.min.js"></script>
+    <script src="../../js/bootstrap-3.0.3.min.js"></script>
+
+    
+    <script src="../../js/highlight.min.js"></script>
+    <script src="../../js/python.min.js"></script>
+    <script>hljs.initHighlightingOnLoad();</script>
+    
+
+    <script>var base_url = "../.."</script>
+    
+    <script src="../../js/base.js"></script>
+    <script src="../../search/main.js"></script>
+
+    <div class="modal" id="mkdocs_search_modal" tabindex="-1" role="dialog" aria-labelledby="searchModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <button type="button" class="close" data-dismiss="modal">
+                    <span aria-hidden="true">&times;</span>
+                    <span class="sr-only">Close</span>
+                </button>
+                <h4 class="modal-title" id="searchModalLabel">Search</h4>
+            </div>
+            <div class="modal-body">
+                <p>
+                    From here you can search these documents. Enter
+                    your search terms below.
+                </p>
+                <form>
+                    <div class="form-group">
+                        <input type="text" class="form-control" placeholder="Search..." id="mkdocs-search-query" title="Type search term here">
+                    </div>
+                </form>
+                <div id="mkdocs-search-results"></div>
+            </div>
+            <div class="modal-footer">
+            </div>
+        </div>
+    </div>
+</div><div class="modal" id="mkdocs_keyboard_modal" tabindex="-1" role="dialog" aria-labelledby="keyboardModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h4 class="modal-title" id="keyboardModalLabel">Keyboard Shortcuts</h4>
+                <button type="button" class="close" data-dismiss="modal"><span aria-hidden="true">&times;</span><span class="sr-only">Close</span></button>
+            </div>
+            <div class="modal-body">
+              <table class="table">
+                <thead>
+                  <tr>
+                    <th style="width: 20%;">Keys</th>
+                    <th>Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td class="help shortcut"><kbd>?</kbd></td>
+                    <td>Open this help</td>
+                  </tr>
+                  <tr>
+                    <td class="next shortcut"><kbd>n</kbd></td>
+                    <td>Next page</td>
+                  </tr>
+                  <tr>
+                    <td class="prev shortcut"><kbd>p</kbd></td>
+                    <td>Previous page</td>
+                  </tr>
+                  <tr>
+                    <td class="search shortcut"><kbd>s</kbd></td>
+                    <td>Search</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <div class="modal-footer">
+            </div>
+        </div>
+    </div>
+</div>
+    </body>
+
+</html>

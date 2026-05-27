@@ -1,0 +1,21 @@
+接口：薪酬方案
+
+HTTP 调用
+POST https://openapi.2haohr.com/api/smart_salary/biz_sub/plan_list/?access_token=***
+Accept: application/json
+access_token: ***
+Content-Type: application/json
+
+请求体
+{
+    "limit":  100,
+    "p":  1
+}
+
+HTTP 响应
+Status: 200
+{
+    "data":  null,
+    "errcode":  21002,
+    "errmsg":  "参数错误： limit不能超过50"
+}

@@ -30,6 +30,7 @@ import cn.iocoder.yudao.module.ai.service.knowledge.AiKnowledgeService;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -78,7 +79,11 @@ public class KnowledgeSyncServiceImpl implements KnowledgeSyncService {
     private static final String DEFAULT_DOCUMENT_VERSION = "v1";
     private static final int ERROR_MESSAGE_MAX_LENGTH = 1024;
     private static final String CALLBACK_TRIGGER_PREFIX = "CALLBACK:";
+    private static final int TWO_HAO_HR_MAX_PAGE_SIZE = 50;
     private static final int TWO_HAO_HR_ATTENDANCE_BATCH_SIZE = 50;
+    private static final String TWO_HAO_HR_SALARY_PLAN_LIST_PATH = "/api/smart_salary/biz_sub/plan_list/";
+    private static final String TWO_HAO_HR_SALARY_ITEM_LIST_PATH = "/api/smart_salary/biz_sub/item_list/";
+    private static final String TWO_HAO_HR_SALARY_ITEM_LIST_TYPE = "smart_salary_item_list";
 
     private final AiSyncJobMapper syncJobMapper;
     private final AiSyncRecordMapper syncRecordMapper;
@@ -213,7 +218,7 @@ public class KnowledgeSyncServiceImpl implements KnowledgeSyncService {
         syncTwoHaoHrObject(syncJob, dataSource, "employees", "2号人事部员工基础信息",
                 buildTwoHaoHrSourceUri("employees", config),
                 () -> {
-                    List<JsonNode> employees = twoHaoHrOpenApiClient.fetchEmployees(config);
+                    List<JsonNode> employees = fetchTwoHaoHrEmployees(config);
                     saveRawRecords(syncJob, dataSource, "hr", "employees",
                             buildTwoHaoHrSourceUri("employees", config), employees);
                     return new ApiDocumentContent(buildTwoHaoHrEmployeesMarkdown(employees, config),
@@ -234,11 +239,7 @@ public class KnowledgeSyncServiceImpl implements KnowledgeSyncService {
                             buildTwoHaoHrSourceUri("attendance-monthly-overview", config), recordsOf(monthlyOverview));
                     List<JsonNode> employeeMonthResults = List.of();
                     if (Boolean.TRUE.equals(config.getAttendanceIncludeEmployeeMonthly())) {
-                        List<String> employeeIds = twoHaoHrOpenApiClient.fetchEmployees(config).stream()
-                                .map(employee -> text(employee, "id"))
-                                .filter(id -> id != null && !id.isBlank())
-                                .distinct()
-                                .toList();
+                        List<String> employeeIds = fetchTwoHaoHrEmployeeIds(config);
                         employeeMonthResults = twoHaoHrOpenApiClient.fetchEmployeeMonthOverview(config, employeeIds);
                         saveRawRecords(syncJob, dataSource, "attendance", "attendance_employee_month_overview",
                                 buildTwoHaoHrSourceUri("attendance-employee-month-overview", config),
@@ -377,11 +378,57 @@ public class KnowledgeSyncServiceImpl implements KnowledgeSyncService {
     }
 
     private List<String> fetchTwoHaoHrEmployeeIds(TwoHaoHrDataSourceConfig config) {
-        return twoHaoHrOpenApiClient.fetchEmployees(config).stream()
+        return fetchTwoHaoHrEmployees(config).stream()
                 .map(employee -> text(employee, "id"))
                 .filter(id -> id != null && !id.isBlank())
                 .distinct()
                 .toList();
+    }
+
+    private List<JsonNode> fetchTwoHaoHrEmployees(TwoHaoHrDataSourceConfig config) {
+        if (hasDepartmentId(config)) {
+            return twoHaoHrOpenApiClient.fetchEmployees(config);
+        }
+        List<String> departmentIds = fetchTwoHaoHrDepartmentIds(config);
+        if (departmentIds.isEmpty()) {
+            return List.of();
+        }
+        Map<String, JsonNode> employeesById = new LinkedHashMap<>();
+        List<JsonNode> employeesWithoutId = new ArrayList<>();
+        for (String departmentId : departmentIds) {
+            TwoHaoHrDataSourceConfig scopedConfig = copyTwoHaoHrConfigForDepartment(config, departmentId, false);
+            for (JsonNode employee : twoHaoHrOpenApiClient.fetchEmployees(scopedConfig)) {
+                String employeeId = text(employee, "id");
+                if (employeeId.isBlank()) {
+                    employeesWithoutId.add(employee);
+                    continue;
+                }
+                employeesById.putIfAbsent(employeeId, employee);
+            }
+        }
+        List<JsonNode> employees = new ArrayList<>(employeesById.values());
+        employees.addAll(employeesWithoutId);
+        return employees;
+    }
+
+    private List<String> fetchTwoHaoHrDepartmentIds(TwoHaoHrDataSourceConfig config) {
+        return flattenRecords(twoHaoHrOpenApiClient.fetchDepartments(config)).stream()
+                .map(department -> text(department, "id"))
+                .filter(id -> id != null && !id.isBlank())
+                .distinct()
+                .toList();
+    }
+
+    private TwoHaoHrDataSourceConfig copyTwoHaoHrConfigForDepartment(TwoHaoHrDataSourceConfig config,
+                                                                     String departmentId, boolean fetchChild) {
+        TwoHaoHrDataSourceConfig scopedConfig = objectMapper.convertValue(config, TwoHaoHrDataSourceConfig.class);
+        scopedConfig.setDepartmentId(departmentId);
+        scopedConfig.setFetchChild(fetchChild);
+        return scopedConfig;
+    }
+
+    private boolean hasDepartmentId(TwoHaoHrDataSourceConfig config) {
+        return config.getDepartmentId() != null && !config.getDepartmentId().isBlank();
     }
 
     private List<TwoHaoHrReadEndpoint> buildTwoHaoHrAttendanceEmployeeScopedEndpoints(TwoHaoHrDataSourceConfig config) {
@@ -485,7 +532,7 @@ public class KnowledgeSyncServiceImpl implements KnowledgeSyncService {
         endpoints.add(postEndpoint("smart_salary", "smart_salary_month_total", "2号人事部智能薪酬月汇总",
                 "/api/smart_salary/accounting/month_total_list/", yearMonthPayload, true));
         endpoints.add(postEndpoint("smart_salary", "smart_salary_plan_list", "2号人事部智能薪酬方案",
-                "/api/smart_salary/biz_sub/plan_list/", Map.of(), true));
+                "/api/smart_salary/biz_sub/plan_list/", Map.of("limit", TWO_HAO_HR_MAX_PAGE_SIZE), true));
         endpoints.add(getEndpoint("smart_salary", "smart_salary_item_list", "2号人事部智能薪酬项目",
                 "/api/smart_salary/biz_sub/item_list/", Map.of(), false));
         endpoints.add(getEndpoint("smart_salary", "smart_salary_attendance_fields", "2号人事部薪酬考勤字段",
@@ -533,11 +580,7 @@ public class KnowledgeSyncServiceImpl implements KnowledgeSyncService {
 
     private void syncTwoHaoHrEmployeeDetailReadEndpoints(AiSyncJobDO syncJob, AiDataSourceDO dataSource,
                                                          TwoHaoHrDataSourceConfig config, SyncStats stats) {
-        List<String> employeeIds = twoHaoHrOpenApiClient.fetchEmployees(config).stream()
-                .map(employee -> text(employee, "id"))
-                .filter(id -> id != null && !id.isBlank())
-                .distinct()
-                .toList();
+        List<String> employeeIds = fetchTwoHaoHrEmployeeIds(config);
         if (employeeIds.isEmpty()) {
             return;
         }
@@ -607,6 +650,9 @@ public class KnowledgeSyncServiceImpl implements KnowledgeSyncService {
 
     private List<JsonNode> fetchTwoHaoHrEndpointRecords(TwoHaoHrDataSourceConfig config,
                                                        TwoHaoHrReadEndpoint endpoint) {
+        if (TWO_HAO_HR_SALARY_ITEM_LIST_TYPE.equals(endpoint.objectType())) {
+            return fetchTwoHaoHrSalaryItemRecords(config);
+        }
         if ("POST".equals(endpoint.method())) {
             if (endpoint.paged()) {
                 return twoHaoHrOpenApiClient.fetchPagedObjectsByPost(config, endpoint.path(), endpoint.payloadParams());
@@ -617,6 +663,48 @@ public class KnowledgeSyncServiceImpl implements KnowledgeSyncService {
             return twoHaoHrOpenApiClient.fetchPagedObjectsByGet(config, endpoint.path(), endpoint.queryParams());
         }
         return recordsOf(twoHaoHrOpenApiClient.fetchRawDataByGet(config, endpoint.path(), endpoint.queryParams()));
+    }
+
+    private List<JsonNode> fetchTwoHaoHrSalaryItemRecords(TwoHaoHrDataSourceConfig config) {
+        List<JsonNode> plans = twoHaoHrOpenApiClient.fetchPagedObjectsByPost(config, TWO_HAO_HR_SALARY_PLAN_LIST_PATH,
+                Map.of("limit", TWO_HAO_HR_MAX_PAGE_SIZE));
+        if (plans.isEmpty()) {
+            return List.of();
+        }
+        List<JsonNode> records = new ArrayList<>();
+        for (JsonNode plan : plans) {
+            String planId = text(plan, "id");
+            if (planId.isBlank()) {
+                log.warn("2hao HR salary plan missing id, skip item sync");
+                continue;
+            }
+            List<JsonNode> items = recordsOfResponseData(twoHaoHrOpenApiClient.fetchRawDataByGet(config,
+                    TWO_HAO_HR_SALARY_ITEM_LIST_PATH, Map.of("sub_plan_id", planId)));
+            for (JsonNode item : items) {
+                records.add(enrichTwoHaoHrSalaryItem(item, plan));
+            }
+        }
+        return records;
+    }
+
+    private JsonNode enrichTwoHaoHrSalaryItem(JsonNode item, JsonNode plan) {
+        if (!item.isObject()) {
+            return item;
+        }
+        ObjectNode enriched = item.deepCopy();
+        String planId = text(plan, "id");
+        if (!planId.isBlank()) {
+            enriched.put("sub_plan_id", planId);
+        }
+        String planName = text(plan, "sub_name");
+        if (!planName.isBlank()) {
+            enriched.put("sub_plan_name", planName);
+        }
+        JsonNode planType = plan.path("sub_type");
+        if (!planType.isMissingNode() && !planType.isNull()) {
+            enriched.set("sub_plan_type", planType);
+        }
+        return enriched;
     }
 
     private String buildTwoHaoHrRawRecordsMarkdown(TwoHaoHrReadEndpoint endpoint, List<JsonNode> records) {
@@ -680,6 +768,17 @@ public class KnowledgeSyncServiceImpl implements KnowledgeSyncService {
             return records;
         }
         return List.of(data);
+    }
+
+    private List<JsonNode> recordsOfResponseData(JsonNode root) {
+        if (root == null || root.isMissingNode() || root.isNull()) {
+            return List.of();
+        }
+        JsonNode data = root.path("data");
+        if (!data.isMissingNode() && !data.isNull()) {
+            return recordsOf(data);
+        }
+        return recordsOf(root);
     }
 
     private TwoHaoHrReadEndpoint getEndpoint(String moduleName, String objectType, String title, String path,
