@@ -6,6 +6,19 @@
 	admin off
 }
 
+# LAN access by IP. Keep it on plain HTTP so browsers do not get redirected
+# to https://192.168.19.36/ without the 8443 port.
+http://192.168.19.36:8080 {
+	reverse_proxy 127.0.0.1:5678
+}
+
+# LAN HTTPS by IP uses an internal certificate. Browsers may show a certificate
+# warning, but the service should be reachable for local troubleshooting.
+https://192.168.19.36:8443 {
+	tls internal
+	reverse_proxy 127.0.0.1:5678
+}
+
 n8n.leman-tech.com {
 	reverse_proxy 127.0.0.1:5678
 }

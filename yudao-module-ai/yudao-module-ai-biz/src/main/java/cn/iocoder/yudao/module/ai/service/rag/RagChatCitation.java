@@ -30,4 +30,10 @@ public class RagChatCitation {
 
     private String quoteText;
 
+    private Long meetingId;
+
+    private String documentType;
+
+    private String projectCode;
+
 }

@@ -334,6 +334,9 @@ public class FastGptRagClient {
                 .documentTitle(documentTitle)
                 .score(doubleValueOrNull(item, "score", "similarity", "similarityScore"))
                 .quoteText(quoteText)
+                .meetingId(longValueOrNull(item, "meetingId", "meeting_id"))
+                .documentType(firstText(item, "documentType", "document_type"))
+                .projectCode(firstText(item, "projectCode", "project_code"))
                 .build();
     }
 
@@ -623,7 +626,7 @@ public class FastGptRagClient {
 
     private Long longValueOrNull(JsonNode node, String... fieldNames) {
         for (String fieldName : fieldNames) {
-            JsonNode value = node.path(fieldName);
+            JsonNode value = nestedValue(node, fieldName);
             if (value.isIntegralNumber()) {
                 return value.asLong();
             }
@@ -636,6 +639,21 @@ public class FastGptRagClient {
             }
         }
         return null;
+    }
+
+    private JsonNode nestedValue(JsonNode node, String fieldName) {
+        JsonNode value = node.path(fieldName);
+        if (!value.isMissingNode() && !value.isNull()) {
+            return value;
+        }
+        String[] parents = {"metadata", "source", "document", "dataset", "collection", "knowledgeBase"};
+        for (String parent : parents) {
+            value = node.path(parent).path(fieldName);
+            if (!value.isMissingNode() && !value.isNull()) {
+                return value;
+            }
+        }
+        return node.path(fieldName);
     }
 
     private Integer intValueOrNull(JsonNode node, String... fieldNames) {

@@ -1623,6 +1623,9 @@ public class RagServiceImpl implements RagService {
                     .documentTitle(cachedCitation.getDocumentTitle())
                     .score(cachedCitation.getScore())
                     .quoteText(citation.getQuoteText())
+                    .meetingId(cachedCitation.getMeetingId())
+                    .documentType(cachedCitation.getDocumentType())
+                    .projectCode(cachedCitation.getProjectCode())
                     .build());
         }
         return citations;
@@ -1742,6 +1745,9 @@ public class RagServiceImpl implements RagService {
                     .documentTitle(sourceCitation.getDocumentTitle())
                     .score(sourceCitation.getScore())
                     .quoteText(citation.getQuoteText())
+                    .meetingId(sourceCitation.getMeetingId())
+                    .documentType(sourceCitation.getDocumentType())
+                    .projectCode(sourceCitation.getProjectCode())
                     .build());
         }
         return citations;

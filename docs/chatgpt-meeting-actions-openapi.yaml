@@ -1,0 +1,417 @@
+openapi: 3.0.3
+info:
+  title: LEMAN ChatGPT Meeting Knowledge Actions
+  version: 1.0.0
+  description: APIs for ChatGPT GPT Actions to search Teams meetings, minutes, transcripts, and meeting knowledge.
+servers:
+  - url: https://your-domain.example.com
+    description: Replace with the Caddy public HTTPS domain.
+security:
+  - bearerAuth: []
+paths:
+  /openapi/chatgpt/meetings/search:
+    get:
+      operationId: searchMeetings
+      summary: Search visible meetings
+      parameters:
+        - $ref: "#/components/parameters/TenantIdHeader"
+        - name: keyword
+          in: query
+          required: false
+          schema:
+            type: string
+            maxLength: 128
+        - name: startDate
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date
+        - name: endDate
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date
+        - name: organizer
+          in: query
+          required: false
+          schema:
+            type: string
+            maxLength: 128
+        - name: projectCode
+          in: query
+          required: false
+          schema:
+            type: string
+            maxLength: 128
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 20
+            default: 10
+      responses:
+        "200":
+          description: Search results wrapped by the standard yudao response.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CommonResultMeetingSearch"
+        "401":
+          description: Invalid ChatGPT Action token.
+        "404":
+          description: ChatGPT Actions are disabled.
+  /openapi/chatgpt/meetings/{meetingId}:
+    get:
+      operationId: getMeeting
+      summary: Get a visible meeting detail
+      parameters:
+        - $ref: "#/components/parameters/TenantIdHeader"
+        - $ref: "#/components/parameters/MeetingIdPath"
+      responses:
+        "200":
+          description: Meeting detail wrapped by the standard yudao response.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CommonResultMeetingDetail"
+        "401":
+          description: Invalid ChatGPT Action token.
+        "404":
+          description: Meeting not found or not accessible.
+  /openapi/chatgpt/meetings/{meetingId}/minutes:
+    get:
+      operationId: getMeetingMinutes
+      summary: Get structured meeting minutes
+      parameters:
+        - $ref: "#/components/parameters/TenantIdHeader"
+        - $ref: "#/components/parameters/MeetingIdPath"
+      responses:
+        "200":
+          description: Structured minutes wrapped by the standard yudao response.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CommonResultMeetingMinutes"
+        "401":
+          description: Invalid ChatGPT Action token.
+        "404":
+          description: Meeting not found or not accessible.
+  /openapi/chatgpt/meetings/{meetingId}/transcript:
+    get:
+      operationId: getMeetingTranscript
+      summary: Get a masked and length-limited cleaned transcript
+      parameters:
+        - $ref: "#/components/parameters/TenantIdHeader"
+        - $ref: "#/components/parameters/MeetingIdPath"
+        - name: maxChars
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 50000
+      responses:
+        "200":
+          description: Cleaned transcript wrapped by the standard yudao response.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CommonResultMeetingTranscript"
+        "401":
+          description: Invalid ChatGPT Action token.
+        "403":
+          description: Transcript access is denied for the meeting sensitivity level.
+        "404":
+          description: Meeting not found or not accessible.
+  /openapi/chatgpt/meetings/rag-search:
+    post:
+      operationId: searchMeetingKnowledge
+      summary: Search meeting knowledge by RAG
+      parameters:
+        - $ref: "#/components/parameters/TenantIdHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MeetingRagSearchRequest"
+      responses:
+        "200":
+          description: RAG answer context wrapped by the standard yudao response.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CommonResultMeetingRagSearch"
+        "401":
+          description: Invalid ChatGPT Action token.
+        "502":
+          description: Meeting knowledge search failed.
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: ChatGPT Action token
+  parameters:
+    TenantIdHeader:
+      name: X-Tenant-Id
+      in: header
+      required: false
+      schema:
+        type: integer
+        format: int64
+      description: Tenant id for tenant filtering. If omitted, the server uses tenant 0 until OAuth mapping is added.
+    MeetingIdPath:
+      name: meetingId
+      in: path
+      required: true
+      schema:
+        type: integer
+        format: int64
+        minimum: 1
+  schemas:
+    CommonResultMeetingSearch:
+      allOf:
+        - $ref: "#/components/schemas/CommonResultBase"
+        - type: object
+          properties:
+            data:
+              $ref: "#/components/schemas/MeetingSearchResponse"
+    CommonResultMeetingDetail:
+      allOf:
+        - $ref: "#/components/schemas/CommonResultBase"
+        - type: object
+          properties:
+            data:
+              $ref: "#/components/schemas/MeetingDetail"
+    CommonResultMeetingMinutes:
+      allOf:
+        - $ref: "#/components/schemas/CommonResultBase"
+        - type: object
+          properties:
+            data:
+              $ref: "#/components/schemas/MeetingMinutes"
+    CommonResultMeetingTranscript:
+      allOf:
+        - $ref: "#/components/schemas/CommonResultBase"
+        - type: object
+          properties:
+            data:
+              $ref: "#/components/schemas/MeetingTranscript"
+    CommonResultMeetingRagSearch:
+      allOf:
+        - $ref: "#/components/schemas/CommonResultBase"
+        - type: object
+          properties:
+            data:
+              $ref: "#/components/schemas/MeetingRagSearchResponse"
+    CommonResultBase:
+      type: object
+      properties:
+        code:
+          type: integer
+          example: 0
+        msg:
+          type: string
+          example: ""
+      required:
+        - code
+    MeetingSearchResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/MeetingSearchItem"
+      required:
+        - items
+    MeetingSearchItem:
+      type: object
+      properties:
+        meetingId:
+          type: integer
+          format: int64
+        subject:
+          type: string
+        startTime:
+          type: string
+          format: date-time
+        endTime:
+          type: string
+          format: date-time
+        organizerName:
+          type: string
+        sourceType:
+          type: string
+          example: TEAMS
+        projectCode:
+          type: string
+        hasTranscript:
+          type: boolean
+        hasMinutes:
+          type: boolean
+        summary:
+          type: string
+    MeetingDetail:
+      type: object
+      properties:
+        meetingId:
+          type: integer
+          format: int64
+        subject:
+          type: string
+        organizerName:
+          type: string
+        startTime:
+          type: string
+          format: date-time
+        endTime:
+          type: string
+          format: date-time
+        sourceType:
+          type: string
+        projectCode:
+          type: string
+        minutesStatus:
+          type: string
+        transcriptStatus:
+          type: string
+        knowledgeBaseId:
+          type: integer
+          format: int64
+    MeetingMinutes:
+      type: object
+      properties:
+        meetingId:
+          type: integer
+          format: int64
+        title:
+          type: string
+        summary:
+          type: string
+        keyPoints:
+          type: array
+          items:
+            type: string
+        decisions:
+          type: array
+          items:
+            $ref: "#/components/schemas/Decision"
+        actionItems:
+          type: array
+          items:
+            $ref: "#/components/schemas/ActionItem"
+        risks:
+          type: array
+          items:
+            $ref: "#/components/schemas/Risk"
+        openQuestions:
+          type: array
+          items:
+            type: string
+    Decision:
+      type: object
+      properties:
+        decision:
+          type: string
+        context:
+          type: string
+        sourceQuote:
+          type: string
+          nullable: true
+    ActionItem:
+      type: object
+      properties:
+        task:
+          type: string
+        owner:
+          type: string
+        deadline:
+          type: string
+        priority:
+          type: string
+        sourceQuote:
+          type: string
+          nullable: true
+    Risk:
+      type: object
+      properties:
+        risk:
+          type: string
+        impact:
+          type: string
+        owner:
+          type: string
+        sourceQuote:
+          type: string
+          nullable: true
+    MeetingTranscript:
+      type: object
+      properties:
+        meetingId:
+          type: integer
+          format: int64
+        content:
+          type: string
+    MeetingRagSearchRequest:
+      type: object
+      properties:
+        query:
+          type: string
+          minLength: 1
+          maxLength: 1000
+        knowledgeBaseId:
+          type: integer
+          format: int64
+        startDate:
+          type: string
+          format: date
+        endDate:
+          type: string
+          format: date
+        projectCode:
+          type: string
+          maxLength: 128
+        topK:
+          type: integer
+          minimum: 1
+          maximum: 10
+          default: 5
+      required:
+        - query
+        - knowledgeBaseId
+    MeetingRagSearchResponse:
+      type: object
+      properties:
+        answerContext:
+          type: array
+          items:
+            $ref: "#/components/schemas/AnswerContext"
+      required:
+        - answerContext
+    AnswerContext:
+      type: object
+      properties:
+        meetingId:
+          type: integer
+          format: int64
+        documentType:
+          type: string
+          enum:
+            - meeting_minutes
+            - meeting_transcript
+            - meeting_knowledge
+        subject:
+          type: string
+        startTime:
+          type: string
+          format: date-time
+        chunk:
+          type: string
+        score:
+          type: number
+          format: double
