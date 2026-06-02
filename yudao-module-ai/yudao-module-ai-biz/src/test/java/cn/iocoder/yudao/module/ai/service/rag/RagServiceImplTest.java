@@ -5,6 +5,7 @@ import cn.iocoder.yudao.module.ai.dal.dataobject.AiChatCitationDO;
 import cn.iocoder.yudao.module.ai.dal.dataobject.AiChatConversationDO;
 import cn.iocoder.yudao.module.ai.dal.dataobject.AiChatMessageDO;
 import cn.iocoder.yudao.module.ai.dal.dataobject.AiChatQuestionCacheDO;
+import cn.iocoder.yudao.module.ai.dal.dataobject.AiDataSourceDO;
 import cn.iocoder.yudao.module.ai.dal.dataobject.AiDocumentChunkDO;
 import cn.iocoder.yudao.module.ai.dal.dataobject.AiKnowledgeBaseDO;
 import cn.iocoder.yudao.module.ai.dal.mysql.AiChatCitationMapper;
@@ -23,6 +24,12 @@ import cn.iocoder.yudao.module.ai.service.chatmodel.AiChatModelRequest;
 import cn.iocoder.yudao.module.ai.service.chatmodel.AiChatModelMessage;
 import cn.iocoder.yudao.module.ai.service.chatmodel.AiChatModelResponse;
 import cn.iocoder.yudao.module.ai.service.chatmodel.AiChatModelService;
+import cn.iocoder.yudao.module.ai.controller.admin.datasource.vo.TwoHaoHrAttendanceStatReqVO;
+import cn.iocoder.yudao.module.ai.controller.admin.datasource.vo.TwoHaoHrAttendanceStatRespVO;
+import cn.iocoder.yudao.module.ai.service.datasource.twohaohr.TwoHaoHrAttendanceStatService;
+import cn.iocoder.yudao.module.ai.service.datasource.twohaohr.TwoHaoHrLeaveEmployeeListService;
+import cn.iocoder.yudao.module.ai.service.datasource.twohaohr.TwoHaoHrLeaveEmployeeListService.LeaveEmployee;
+import cn.iocoder.yudao.module.ai.service.datasource.twohaohr.TwoHaoHrLeaveEmployeeListService.LeaveEmployeeListResult;
 import cn.iocoder.yudao.module.ai.service.embedding.AiEmbeddingService;
 import cn.iocoder.yudao.module.ai.service.rag.config.AiRagEngineConfigService;
 import cn.iocoder.yudao.module.ai.service.rag.fastgpt.FastGptRagClient;
@@ -43,6 +50,8 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.util.List;
 import java.util.Map;
+import java.time.LocalDate;
+import java.time.YearMonth;
 import java.util.concurrent.atomic.AtomicLong;
 
 import static cn.iocoder.yudao.module.ai.enums.AiRagErrorCodeConstants.RAG_KNOWLEDGE_ACCESS_DENIED;
@@ -89,6 +98,10 @@ class RagServiceImplTest {
     private FastGptRagClient fastGptRagClient;
     @Mock
     private AiRagEngineConfigService ragEngineConfigService;
+    @Mock
+    private TwoHaoHrAttendanceStatService twoHaoHrAttendanceStatService;
+    @Mock
+    private TwoHaoHrLeaveEmployeeListService twoHaoHrLeaveEmployeeListService;
 
     private RagServiceImpl ragService;
     private ObjectMapper objectMapper;
@@ -103,8 +116,8 @@ class RagServiceImplTest {
         ragService = new RagServiceImpl(knowledgeBaseMapper, chatConversationMapper, chatMessageMapper,
                 chatCitationMapper, chatQuestionCacheMapper, documentChunkMapper, aiEmbeddingService,
                 knowledgeVectorStore, webSearchService, new PromptBuilder(aiProperties), new RetrievalPlanner(),
-                aiChatModelService, fastGptRagClient, ragEngineConfigService, objectMapper, aiProperties,
-                new PersonalSensitiveDataPolicy(null));
+                aiChatModelService, fastGptRagClient, ragEngineConfigService, twoHaoHrAttendanceStatService,
+                twoHaoHrLeaveEmployeeListService, objectMapper, aiProperties, new PersonalSensitiveDataPolicy(null));
     }
 
     @AfterEach
@@ -338,6 +351,220 @@ class RagServiceImplTest {
         assertEquals("你是管理员。", response.getAnswer());
         assertTrue(response.getCitations().isEmpty());
         verifyNoInteractions(chatQuestionCacheMapper, aiEmbeddingService, knowledgeVectorStore, documentChunkMapper,
+                aiChatModelService);
+    }
+
+    @Test
+    void chatShouldAnswerTwoHaoHrLeaveEmployeeListWithFullNames() {
+        YearMonth lastMonth = YearMonth.from(LocalDate.now()).minusMonths(1);
+        mockConversationAndMessageIds();
+        when(knowledgeBaseMapper.selectByIdAndTenantId(10L, 1L)).thenReturn(buildKnowledge(10L, "2号人事部", "*"));
+        when(twoHaoHrAttendanceStatService.findTwoHaoHrDataSource(eq(1L), eq(List.of(10L))))
+                .thenReturn(AiDataSourceDO.builder().id(7L).tenantId(1L).knowledgeBaseId(10L).build());
+        when(twoHaoHrLeaveEmployeeListService.listEmployees(eq(1L), any(AiDataSourceDO.class),
+                eq(TwoHaoHrLeaveEmployeeListService.LEAVE_EMPLOYEE_LIST), eq(lastMonth.atDay(1)),
+                eq(lastMonth.atEndOfMonth()))).thenReturn(new LeaveEmployeeListResult(
+                TwoHaoHrLeaveEmployeeListService.LEAVE_EMPLOYEE_LIST,
+                lastMonth.atDay(1),
+                lastMonth.atEndOfMonth(),
+                557L,
+                List.of(
+                        new LeaveEmployee("e1", "1001", "张三", lastMonth.atDay(12),
+                                "主动离职", "个人原因", "d1"),
+                        new LeaveEmployee("e2", "1002", "李四", lastMonth.atDay(20),
+                                "主动离职", "家庭原因", "d2")
+                )));
+
+        RagChatResponse response = ragService.chat(RagChatRequest.builder()
+                .knowledgeBaseId(10L)
+                .question("上个月离职人员名单")
+                .build());
+
+        assertFalse(response.getNoContext());
+        assertTrue(response.getAnswer().contains("2号人事部离职员工名单"));
+        assertTrue(response.getAnswer().contains("姓名展示：未脱敏"));
+        assertTrue(response.getAnswer().contains("张三"));
+        assertTrue(response.getAnswer().contains("李四"));
+        assertFalse(response.getAnswer().contains("张*"));
+        assertTrue(response.getDebugInfo().contains("twoHaoHrLeaveEmployeeList=true"));
+        verifyNoInteractions(chatQuestionCacheMapper, aiEmbeddingService, knowledgeVectorStore, webSearchService,
+                aiChatModelService);
+    }
+
+    @Test
+    void chatShouldUseContextForFullUnmaskedLeaveEmployeeListFollowUp() {
+        YearMonth lastMonth = YearMonth.from(LocalDate.now()).minusMonths(1);
+        mockExistingConversationAndMessageIds();
+        when(knowledgeBaseMapper.selectByIdAndTenantId(10L, 1L)).thenReturn(buildKnowledge(10L, "2号人事部", "*"));
+        when(chatMessageMapper.selectListByConversationId(500L, 1L)).thenReturn(List.of(
+                buildMessage(900L, ChatMessageRoleEnum.USER.getCode(), "上个月离职人员名单"),
+                buildMessage(901L, ChatMessageRoleEnum.ASSISTANT.getCode(), "只展示了部分姓名脱敏结果")
+        ));
+        when(twoHaoHrAttendanceStatService.findTwoHaoHrDataSource(eq(1L), eq(List.of(10L))))
+                .thenReturn(AiDataSourceDO.builder().id(7L).tenantId(1L).knowledgeBaseId(10L).build());
+        when(twoHaoHrLeaveEmployeeListService.listEmployees(eq(1L), any(AiDataSourceDO.class),
+                eq(TwoHaoHrLeaveEmployeeListService.LEAVE_EMPLOYEE_LIST), eq(lastMonth.atDay(1)),
+                eq(lastMonth.atEndOfMonth()))).thenReturn(new LeaveEmployeeListResult(
+                TwoHaoHrLeaveEmployeeListService.LEAVE_EMPLOYEE_LIST,
+                lastMonth.atDay(1),
+                lastMonth.atEndOfMonth(),
+                557L,
+                List.of(new LeaveEmployee("e1", "1001", "王五", lastMonth.atDay(21),
+                        "主动离职", "个人原因", "d1"))));
+
+        RagChatResponse response = ragService.chat(RagChatRequest.builder()
+                .knowledgeBaseId(10L)
+                .conversationId(500L)
+                .question("请把姓名不要脱敏，而且把完整名单都展示出来。")
+                .build());
+
+        assertFalse(response.getNoContext());
+        assertTrue(response.getAnswer().contains("王五"));
+        assertFalse(response.getAnswer().contains("王*"));
+        assertTrue(response.getDebugInfo().contains("twoHaoHrLeaveEmployeeList=true"));
+        verifyNoInteractions(chatQuestionCacheMapper, aiEmbeddingService, knowledgeVectorStore, webSearchService,
+                aiChatModelService);
+    }
+
+    @Test
+    void chatShouldAnswerTwoHaoHrAttendanceStatDirectly() {
+        YearMonth lastMonth = YearMonth.from(LocalDate.now()).minusMonths(1);
+        mockConversationAndMessageIds();
+        when(knowledgeBaseMapper.selectByIdAndTenantId(10L, 1L)).thenReturn(buildKnowledge(10L, "2号人事部", "*"));
+        when(twoHaoHrAttendanceStatService.findTwoHaoHrDataSource(eq(1L), eq(List.of(10L))))
+                .thenReturn(AiDataSourceDO.builder().id(7L).tenantId(1L).knowledgeBaseId(10L).build());
+        when(twoHaoHrAttendanceStatService.getDepartmentStat(any())).thenReturn(TwoHaoHrAttendanceStatRespVO.builder()
+                .tenantId(1L)
+                .knowledgeBaseId(10L)
+                .dataSourceId(7L)
+                .departmentName("生产制造部")
+                .departmentMatchType("DEPARTMENT_NAME_CONTAINS")
+                .matchedDepartmentCount(2)
+                .startDate(lastMonth.atDay(1))
+                .endDate(lastMonth.atEndOfMonth())
+                .minAttendanceDate(lastMonth.atDay(1))
+                .maxAttendanceDate(lastMonth.atEndOfMonth())
+                .totalRecords(120L)
+                .employeeCount(18L)
+                .typeStats(List.of(
+                        TwoHaoHrAttendanceStatRespVO.TypeStat.builder()
+                                .recordType("attendance_card_record")
+                                .recordTypeName("打卡记录")
+                                .recordCount(100L)
+                                .employeeCount(18L)
+                                .build(),
+                        TwoHaoHrAttendanceStatRespVO.TypeStat.builder()
+                                .recordType("attendance_leave_record")
+                                .recordTypeName("请假记录")
+                                .recordCount(20L)
+                                .employeeCount(5L)
+                                .build()))
+                .dailyStats(List.of())
+                .statusStats(List.of())
+                .departmentStats(List.of(
+                        TwoHaoHrAttendanceStatRespVO.DepartmentStat.builder()
+                                .departmentName("生产制造部/A组")
+                                .recordCount(70L)
+                                .employeeCount(10L)
+                                .cardRecordCount(60L)
+                                .leaveCount(10L)
+                                .build(),
+                        TwoHaoHrAttendanceStatRespVO.DepartmentStat.builder()
+                                .departmentName("生产制造部/B组")
+                                .recordCount(50L)
+                                .employeeCount(8L)
+                                .cardRecordCount(40L)
+                                .overtimeCount(10L)
+                                .build()))
+                .build());
+
+        RagChatResponse response = ragService.chat(RagChatRequest.builder()
+                .knowledgeBaseId(10L)
+                .question("分别列出生产制造部各部门上月的考勤情况")
+                .build());
+
+        assertFalse(response.getNoContext());
+        assertTrue(response.getAnswer().contains("2号人事部部门考勤统计"));
+        assertTrue(response.getAnswer().contains(lastMonth.atDay(1) + " 至 " + lastMonth.atEndOfMonth()));
+        assertTrue(response.getAnswer().contains("生产制造部"));
+        assertTrue(response.getAnswer().contains("打卡记录"));
+        assertTrue(response.getAnswer().contains("各部门考勤明细如下"));
+        assertTrue(response.getAnswer().contains("生产制造部/A组"));
+        assertTrue(response.getAnswer().contains("生产制造部/B组"));
+        assertTrue(response.getDebugInfo().contains("twoHaoHrAttendanceStat=true"));
+
+        ArgumentCaptor<TwoHaoHrAttendanceStatReqVO> statReqCaptor =
+                ArgumentCaptor.forClass(TwoHaoHrAttendanceStatReqVO.class);
+        verify(twoHaoHrAttendanceStatService).getDepartmentStat(statReqCaptor.capture());
+        assertEquals(7L, statReqCaptor.getValue().getDataSourceId());
+        assertEquals(lastMonth.atDay(1), statReqCaptor.getValue().getStartDate());
+        assertEquals(lastMonth.atEndOfMonth(), statReqCaptor.getValue().getEndDate());
+        verifyNoInteractions(chatQuestionCacheMapper, aiEmbeddingService, knowledgeVectorStore, webSearchService,
+                aiChatModelService);
+    }
+
+    @Test
+    void chatShouldAnswerTwoHaoHrPersonalAttendanceWithoutUsingPreviousDepartmentContext() {
+        AiUserContextHolder.setUserContext(1L, 100L, 20L, "麦方", false);
+        YearMonth lastMonth = YearMonth.from(LocalDate.now()).minusMonths(1);
+        mockExistingConversationAndMessageIds();
+        when(knowledgeBaseMapper.selectByIdAndTenantId(10L, 1L)).thenReturn(buildKnowledge(10L, "2号人事部", "*"));
+        when(chatMessageMapper.selectListByConversationId(500L, 1L)).thenReturn(List.of(
+                buildMessage(900L, ChatMessageRoleEnum.USER.getCode(), "分别列出生产制造部各部门的考勤情况"),
+                buildMessage(901L, ChatMessageRoleEnum.ASSISTANT.getCode(),
+                        "### 2号人事部部门考勤统计\n- 部门匹配：部门名称包含 `生产制造部`")
+        ));
+        when(twoHaoHrAttendanceStatService.findTwoHaoHrDataSource(eq(1L), eq(List.of(10L))))
+                .thenReturn(AiDataSourceDO.builder().id(7L).tenantId(1L).knowledgeBaseId(10L).build());
+        when(twoHaoHrAttendanceStatService.getDepartmentStat(any())).thenReturn(TwoHaoHrAttendanceStatRespVO.builder()
+                .tenantId(1L)
+                .knowledgeBaseId(10L)
+                .dataSourceId(7L)
+                .employeeName("袁方")
+                .employeeMatchType("EMPLOYEE_NAME_CONTAINS")
+                .startDate(lastMonth.atDay(1))
+                .endDate(lastMonth.atEndOfMonth())
+                .minAttendanceDate(lastMonth.atDay(1))
+                .maxAttendanceDate(lastMonth.atEndOfMonth())
+                .totalRecords(9L)
+                .employeeCount(1L)
+                .typeStats(List.of(TwoHaoHrAttendanceStatRespVO.TypeStat.builder()
+                        .recordType("attendance_card_record")
+                        .recordTypeName("打卡记录")
+                        .recordCount(9L)
+                        .employeeCount(1L)
+                        .build()))
+                .dailyStats(List.of())
+                .statusStats(List.of())
+                .departmentStats(List.of(TwoHaoHrAttendanceStatRespVO.DepartmentStat.builder()
+                        .departmentName("行政部")
+                        .recordCount(9L)
+                        .employeeCount(1L)
+                        .cardRecordCount(9L)
+                        .build()))
+                .build());
+
+        RagChatResponse response = ragService.chat(RagChatRequest.builder()
+                .knowledgeBaseId(10L)
+                .conversationId(500L)
+                .question("袁方的考勤情况")
+                .build());
+
+        assertFalse(response.getNoContext());
+        assertTrue(response.getAnswer().contains("2号人事部个人考勤统计"));
+        assertTrue(response.getAnswer().contains("袁方"));
+        assertFalse(response.getAnswer().contains("生产制造部"));
+        assertTrue(response.getDebugInfo().contains("twoHaoHrPersonalAttendanceStat=true"));
+
+        ArgumentCaptor<TwoHaoHrAttendanceStatReqVO> statReqCaptor =
+                ArgumentCaptor.forClass(TwoHaoHrAttendanceStatReqVO.class);
+        verify(twoHaoHrAttendanceStatService).getDepartmentStat(statReqCaptor.capture());
+        assertEquals(7L, statReqCaptor.getValue().getDataSourceId());
+        assertEquals("袁方", statReqCaptor.getValue().getEmployeeName());
+        assertEquals("袁方的考勤情况", statReqCaptor.getValue().getEmployeeKeyword());
+        assertEquals(null, statReqCaptor.getValue().getDepartmentKeyword());
+        assertEquals(null, statReqCaptor.getValue().getDepartmentName());
+        verifyNoInteractions(chatQuestionCacheMapper, aiEmbeddingService, knowledgeVectorStore, webSearchService,
                 aiChatModelService);
     }
 

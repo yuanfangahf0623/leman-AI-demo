@@ -1,10 +1,13 @@
 package cn.iocoder.yudao.module.ai.service.rag;
 
 import cn.iocoder.yudao.framework.common.exception.ServiceException;
+import cn.iocoder.yudao.module.ai.controller.admin.datasource.vo.TwoHaoHrAttendanceStatReqVO;
+import cn.iocoder.yudao.module.ai.controller.admin.datasource.vo.TwoHaoHrAttendanceStatRespVO;
 import cn.iocoder.yudao.module.ai.dal.dataobject.AiChatCitationDO;
 import cn.iocoder.yudao.module.ai.dal.dataobject.AiChatConversationDO;
 import cn.iocoder.yudao.module.ai.dal.dataobject.AiChatMessageDO;
 import cn.iocoder.yudao.module.ai.dal.dataobject.AiChatQuestionCacheDO;
+import cn.iocoder.yudao.module.ai.dal.dataobject.AiDataSourceDO;
 import cn.iocoder.yudao.module.ai.dal.dataobject.AiDocumentChunkDO;
 import cn.iocoder.yudao.module.ai.dal.dataobject.AiKnowledgeBaseDO;
 import cn.iocoder.yudao.module.ai.dal.mysql.AiChatCitationMapper;
@@ -25,6 +28,10 @@ import cn.iocoder.yudao.module.ai.service.chatmodel.AiChatModelRequest;
 import cn.iocoder.yudao.module.ai.service.chatmodel.AiChatModelMessage;
 import cn.iocoder.yudao.module.ai.service.chatmodel.AiChatModelResponse;
 import cn.iocoder.yudao.module.ai.service.chatmodel.AiChatModelService;
+import cn.iocoder.yudao.module.ai.service.datasource.twohaohr.TwoHaoHrAttendanceStatService;
+import cn.iocoder.yudao.module.ai.service.datasource.twohaohr.TwoHaoHrLeaveEmployeeListService;
+import cn.iocoder.yudao.module.ai.service.datasource.twohaohr.TwoHaoHrLeaveEmployeeListService.LeaveEmployee;
+import cn.iocoder.yudao.module.ai.service.datasource.twohaohr.TwoHaoHrLeaveEmployeeListService.LeaveEmployeeListResult;
 import cn.iocoder.yudao.module.ai.service.embedding.AiEmbeddingService;
 import cn.iocoder.yudao.module.ai.service.rag.config.AiRagEngineConfigService;
 import cn.iocoder.yudao.module.ai.service.rag.fastgpt.FastGptRagClient;
@@ -50,7 +57,9 @@ import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.time.Duration;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.YearMonth;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
@@ -109,9 +118,23 @@ public class RagServiceImpl implements RagService {
     };
     private static final Pattern ASCII_WORD_PATTERN = Pattern.compile("[A-Za-z][A-Za-z0-9.+#-]{1,}");
     private static final Pattern TABLE_NAME_PATTERN = Pattern.compile("表：\\s*([^\\s]+)");
+    private static final Pattern YEAR_MONTH_PATTERN = Pattern.compile("(20\\d{2})\\s*年\\s*(\\d{1,2})\\s*月");
+    private static final Pattern MONTH_PATTERN = Pattern.compile("(?<!\\d)(\\d{1,2})\\s*月");
     private static final Pattern CLOTHING_SIZE_PATTERN = Pattern.compile("(?i)(?:^|[^A-Z0-9])([2-9]XL|10XL|XL|XS|S|M|L)(?:[^A-Z0-9]|$)");
+    private static final Pattern PERSONAL_ATTENDANCE_NAME_PATTERN = Pattern.compile(
+            "(?:\\u5e2e\\u6211\\u67e5\\u4e00\\u4e0b|\\u5e2e\\u5fd9\\u67e5\\u4e00\\u4e0b|\\u67e5\\u8be2\\u4e00\\u4e0b|\\u67e5\\u770b\\u4e00\\u4e0b|\\u7edf\\u8ba1\\u4e00\\u4e0b|\\u6c47\\u603b\\u4e00\\u4e0b|\\u5e2e\\u6211\\u67e5|\\u5e2e\\u5fd9\\u67e5|\\u67e5\\u8be2|\\u67e5\\u770b|\\u7edf\\u8ba1|\\u6c47\\u603b|\\u67e5\\u4e0b|\\u770b\\u4e0b|\\u67e5|\\u770b|\\u8bf7)?\\s*"
+                    + "([\\p{IsHan}]{2,4})(?:\\u7684)?(?:\\u8003\\u52e4|\\u6253\\u5361|\\u51fa\\u52e4|\\u8fdf\\u5230|\\u65e9\\u9000|\\u7f3a\\u5361|\\u8bf7\\u5047|\\u52a0\\u73ed|\\u5916\\u52e4)"
+                    + "(?:\\u60c5\\u51b5|\\u8bb0\\u5f55|\\u6570\\u636e|\\u7edf\\u8ba1|\\u660e\\u7ec6)?");
     private static final Pattern CLOTHING_SIZE_COUNT_PATTERN = Pattern.compile("\\|\\s*(XS|S|M|L|XL|[2-9]XL|10XL)\\s*\\|\\s*\\*?\\*?(\\d+)\\*?\\*?\\s*\\|",
             Pattern.CASE_INSENSITIVE);
+    private static final List<String> ORGANIZATION_NAME_MARKERS = List.of(
+            "\u90e8", "\u90e8\u95e8", "\u4e2d\u5fc3", "\u8f66\u95f4", "\u73ed\u7ec4", "\u5c0f\u7ec4", "\u7ec4",
+            "\u516c\u53f8", "\u751f\u4ea7", "\u5236\u9020", "\u4e8b\u4e1a\u90e8", "\u79d1");
+    private static final Set<String> PERSONAL_ATTENDANCE_NAME_STOP_WORDS = Set.of(
+            "\u4e2a\u4eba", "\u672c\u4eba", "\u81ea\u5df1", "\u5458\u5de5", "\u5f53\u524d", "\u767b\u5f55",
+            "\u7528\u6237", "\u540c\u4e8b", "\u4eba\u5458", "\u4e0a\u6708", "\u672c\u6708", "\u4eca\u5929",
+            "\u4eca\u65e5", "\u6628\u5929", "\u6628\u65e5", "\u5f53\u6708", "\u8fd9\u4e2a", "\u4e0a\u4e2a",
+            "\u6700\u8fd1");
     private static final Set<String> QUERY_STOP_WORDS = Set.of("目前", "现在", "现有", "当前", "请问", "哪些", "什么",
             "是什么", "有哪些", "有那些", "多少", "如何", "怎么", "可以", "一下", "如果", "情况下", "的情况下");
     private static final Set<String> SELF_IDENTITY_QUESTIONS = Set.of("我是谁", "请问我是谁", "我叫什么",
@@ -129,7 +152,8 @@ public class RagServiceImpl implements RagService {
             List.of("车间主任", "岗位", "职务")
     );
     private static final List<String> FOLLOW_UP_CUES = List.of("上面", "刚才", "继续", "这个", "那个",
-            "它", "他", "她", "这里", "那里", "换成", "改成", "如果是", "那如果");
+            "它", "他", "她", "这里", "那里", "换成", "改成", "如果是", "那如果",
+            "完整名单", "完整列表", "完整展示", "不要脱敏", "不脱敏", "姓名不要脱敏", "全部展示");
     private static final List<String> STANDALONE_INTENT_WORDS = List.of("什么", "哪些", "多少", "怎么",
             "如何", "为什么", "是否", "能不能", "需要", "可以", "排查", "统计", "查询", "翻译", "总结", "是谁");
     private static final List<String> STATISTICAL_QUESTION_KEYWORDS = List.of("统计", "汇总", "合计", "总数", "数量",
@@ -154,6 +178,8 @@ public class RagServiceImpl implements RagService {
     private final AiChatModelService aiChatModelService;
     private final FastGptRagClient fastGptRagClient;
     private final AiRagEngineConfigService ragEngineConfigService;
+    private final TwoHaoHrAttendanceStatService twoHaoHrAttendanceStatService;
+    private final TwoHaoHrLeaveEmployeeListService twoHaoHrLeaveEmployeeListService;
     private final ObjectMapper objectMapper;
     private final AiProperties aiProperties;
     private final PersonalSensitiveDataPolicy personalSensitiveDataPolicy;
@@ -198,6 +224,19 @@ public class RagServiceImpl implements RagService {
         if (isSelfIdentityQuestion(normalizedQuestion)) {
             return saveCurrentUserIdentityAnswer(conversation, userMessage, tenantId, departmentId, userId,
                     currentUserNickname, startNanos);
+        }
+
+        RagChatResponse leaveEmployeeListResponse = tryAnswerTwoHaoHrLeaveEmployeeList(request, knowledgeBases,
+                conversation, userMessage, tenantId, departmentId, userId, startNanos, effectiveQuestion);
+        if (leaveEmployeeListResponse != null) {
+            return leaveEmployeeListResponse;
+        }
+
+        RagChatResponse attendanceStatResponse = tryAnswerTwoHaoHrAttendanceStat(request, knowledgeBases, conversation,
+                userMessage, tenantId, departmentId, userId, currentUserNickname, startNanos, effectiveQuestion,
+                normalizedEffectiveQuestion);
+        if (attendanceStatResponse != null) {
+            return attendanceStatResponse;
         }
 
         if (isFastGptEngine()) {
@@ -1407,9 +1446,557 @@ public class RagServiceImpl implements RagService {
         return answer.toString();
     }
 
+    private RagChatResponse tryAnswerTwoHaoHrLeaveEmployeeList(RagChatRequest request,
+                                                               List<AiKnowledgeBaseDO> knowledgeBases,
+                                                               AiChatConversationDO conversation,
+                                                               AiChatMessageDO userMessage,
+                                                               Long tenantId, Long departmentId, Long userId,
+                                                               long startNanos, String effectiveQuestion) {
+        if (!isTwoHaoHrLeaveEmployeeListQuestion(request.getQuestion(), effectiveQuestion)) {
+            return null;
+        }
+        AiDataSourceDO dataSource = twoHaoHrAttendanceStatService.findTwoHaoHrDataSource(tenantId,
+                knowledgeBases.stream().map(AiKnowledgeBaseDO::getId).toList());
+        if (dataSource == null) {
+            return null;
+        }
+        AttendanceDateRange dateRange = resolveAttendanceDateRange(effectiveQuestion);
+        String objectType = resolveTwoHaoHrLeaveEmployeeObjectType(effectiveQuestion);
+        LeaveEmployeeListResult result = twoHaoHrLeaveEmployeeListService.listEmployees(tenantId, dataSource,
+                objectType, dateRange.startDate(), dateRange.endDate());
+        String answer = buildTwoHaoHrLeaveEmployeeListAnswer(result);
+        String debugInfo = "- twoHaoHrLeaveEmployeeList=true\n"
+                + "- knowledgeBaseId=" + request.getKnowledgeBaseId() + "\n"
+                + "- dataSourceId=" + dataSource.getId() + "\n"
+                + "- objectType=" + objectType + "\n"
+                + "- dateRange=" + formatDateRange(dateRange.startDate(), dateRange.endDate()) + "\n"
+                + "- rawRecordCount=" + result.rawRecordCount() + "\n"
+                + "- matchedCount=" + result.employees().size() + "\n"
+                + "- elapsedMs=" + elapsedMillis(startNanos);
+        log.info("RAG 2hao HR leave employee list answered directly, tenantId={}, departmentId={}, knowledgeBaseId={}, dataSourceId={}, conversationId={}, objectType={}, matchedCount={}, elapsedMs={}",
+                tenantId, departmentId, dataSource.getKnowledgeBaseId(), dataSource.getId(), conversation.getId(),
+                objectType, result.employees().size(), elapsedMillis(startNanos));
+        return saveDirectAnswer(conversation, userMessage, tenantId, departmentId, userId, answer, debugInfo,
+                startNanos);
+    }
+
+    private boolean isTwoHaoHrLeaveEmployeeListQuestion(String question, String effectiveQuestion) {
+        String text = (question == null ? "" : question) + "\n"
+                + (effectiveQuestion == null ? "" : effectiveQuestion);
+        boolean leaveIntent = containsAnyLiteral(text, "离职", "待离职", "离任", "离岗");
+        boolean listIntent = containsAnyLiteral(text, "名单", "列表", "明细", "清单", "人员", "姓名",
+                "完整", "不要脱敏", "不脱敏", "全部展示");
+        return leaveIntent && listIntent;
+    }
+
+    private String resolveTwoHaoHrLeaveEmployeeObjectType(String question) {
+        String text = question == null ? "" : question;
+        if (containsAnyLiteral(text, "待离职", "即将离职", "预离职")) {
+            return TwoHaoHrLeaveEmployeeListService.LEAVING_EMPLOYEE_LIST;
+        }
+        return TwoHaoHrLeaveEmployeeListService.LEAVE_EMPLOYEE_LIST;
+    }
+
+    private String buildTwoHaoHrLeaveEmployeeListAnswer(LeaveEmployeeListResult result) {
+        List<LeaveEmployee> employees = result.employees() == null ? Collections.emptyList() : result.employees();
+        String objectName = TwoHaoHrLeaveEmployeeListService.LEAVING_EMPLOYEE_LIST.equals(result.objectType())
+                ? "待离职员工" : "离职员工";
+        StringBuilder builder = new StringBuilder();
+        builder.append("### 2号人事部").append(objectName).append("名单\n\n");
+        builder.append("- 查询对象：").append(objectName).append('\n');
+        builder.append("- 查询范围：").append(formatDateRange(result.startDate(), result.endDate())).append('\n');
+        builder.append("- 原始同步记录数：").append(formatCount(result.rawRecordCount())).append(" 条\n");
+        builder.append("- 本次匹配人数：").append(formatCount(employees.size())).append(" 人\n");
+        builder.append("- 姓名展示：未脱敏，来自 2号人事部 API 原始同步记录\n\n");
+        if (employees.isEmpty()) {
+            builder.append("未查询到匹配的").append(objectName).append("记录。");
+            return builder.toString();
+        }
+        builder.append("| 序号 | 工号 | 姓名 | 离职日期 | 离职类型 | 离职原因 | 部门ID |\n");
+        builder.append("| ---: | --- | --- | --- | --- | --- | --- |\n");
+        for (int i = 0; i < employees.size(); i++) {
+            LeaveEmployee employee = employees.get(i);
+            builder.append("| ")
+                    .append(i + 1)
+                    .append(" | ")
+                    .append(formatText(employee.employeeNo()))
+                    .append(" | ")
+                    .append(formatText(employee.name()))
+                    .append(" | ")
+                    .append(employee.leaveDate() == null ? "-" : employee.leaveDate())
+                    .append(" | ")
+                    .append(formatText(employee.leaveTypeName()))
+                    .append(" | ")
+                    .append(formatText(employee.leaveReason()))
+                    .append(" | ")
+                    .append(formatText(employee.departmentId()))
+                    .append(" |\n");
+        }
+        return builder.toString();
+    }
+
+    private RagChatResponse tryAnswerTwoHaoHrAttendanceStat(RagChatRequest request,
+                                                            List<AiKnowledgeBaseDO> knowledgeBases,
+                                                            AiChatConversationDO conversation,
+                                                            AiChatMessageDO userMessage,
+                                                            Long tenantId, Long departmentId, Long userId,
+                                                            String currentUserNickname, long startNanos, String effectiveQuestion,
+                                                            String normalizedEffectiveQuestion) {
+        AiDataSourceDO dataSource = twoHaoHrAttendanceStatService.findTwoHaoHrDataSource(tenantId,
+                knowledgeBases.stream().map(AiKnowledgeBaseDO::getId).toList());
+        if (dataSource == null) {
+            return null;
+        }
+        PersonalAttendanceTarget personalTarget = resolveTwoHaoHrPersonalAttendanceTarget(request.getQuestion(),
+                currentUserNickname);
+        if (personalTarget != null) {
+            if (!hasText(personalTarget.employeeId()) && !hasText(personalTarget.employeeName())) {
+                String answer = buildTwoHaoHrPersonalAttendanceMissingUserAnswer();
+                String debugInfo = "- twoHaoHrPersonalAttendance=true\n"
+                        + "- dataSourceId=" + dataSource.getId() + "\n"
+                        + "- reason=current user nickname is empty\n"
+                        + "- elapsedMs=" + elapsedMillis(startNanos);
+                return saveDirectAnswer(conversation, userMessage, tenantId, departmentId, userId, answer, debugInfo,
+                        startNanos);
+            }
+            AttendanceDateRange dateRange = resolveAttendanceDateRange(request.getQuestion());
+            TwoHaoHrAttendanceStatReqVO statReqVO = new TwoHaoHrAttendanceStatReqVO();
+            statReqVO.setKnowledgeBaseId(dataSource.getKnowledgeBaseId());
+            statReqVO.setDataSourceId(dataSource.getId());
+            statReqVO.setEmployeeId(personalTarget.employeeId());
+            statReqVO.setEmployeeName(personalTarget.employeeName());
+            statReqVO.setEmployeeKeyword(request.getQuestion());
+            statReqVO.setStartDate(dateRange.startDate());
+            statReqVO.setEndDate(dateRange.endDate());
+            TwoHaoHrAttendanceStatRespVO stat = twoHaoHrAttendanceStatService.getDepartmentStat(statReqVO);
+            String answer = buildTwoHaoHrPersonalAttendanceStatAnswer(stat);
+            String debugInfo = buildTwoHaoHrPersonalAttendanceStatDebugInfo(request, stat, request.getQuestion(),
+                    elapsedMillis(startNanos));
+            log.info("RAG 2hao HR personal attendance stat answered directly, tenantId={}, departmentId={}, knowledgeBaseId={}, dataSourceId={}, conversationId={}, employeeMatchType={}, totalRecords={}, elapsedMs={}",
+                    tenantId, departmentId, dataSource.getKnowledgeBaseId(), dataSource.getId(), conversation.getId(),
+                    stat.getEmployeeMatchType(), stat.getTotalRecords(), elapsedMillis(startNanos));
+            return saveDirectAnswer(conversation, userMessage, tenantId, departmentId, userId, answer, debugInfo,
+                    startNanos);
+        }
+        if (!isTwoHaoHrAttendanceStatQuestion(effectiveQuestion, normalizedEffectiveQuestion)) {
+            return null;
+        }
+        AttendanceDateRange dateRange = resolveAttendanceDateRange(effectiveQuestion);
+        TwoHaoHrAttendanceStatReqVO statReqVO = new TwoHaoHrAttendanceStatReqVO();
+        statReqVO.setKnowledgeBaseId(dataSource.getKnowledgeBaseId());
+        statReqVO.setDataSourceId(dataSource.getId());
+        statReqVO.setDepartmentKeyword(effectiveQuestion);
+        statReqVO.setStartDate(dateRange.startDate());
+        statReqVO.setEndDate(dateRange.endDate());
+        TwoHaoHrAttendanceStatRespVO stat = twoHaoHrAttendanceStatService.getDepartmentStat(statReqVO);
+        String answer = buildTwoHaoHrAttendanceStatAnswer(stat, effectiveQuestion);
+        String debugInfo = buildTwoHaoHrAttendanceStatDebugInfo(request, stat, effectiveQuestion, elapsedMillis(startNanos));
+        log.info("RAG 2hao HR attendance stat answered directly, tenantId={}, departmentId={}, knowledgeBaseId={}, dataSourceId={}, conversationId={}, totalRecords={}, elapsedMs={}",
+                tenantId, departmentId, dataSource.getKnowledgeBaseId(), dataSource.getId(), conversation.getId(),
+                stat.getTotalRecords(), elapsedMillis(startNanos));
+        return saveDirectAnswer(conversation, userMessage, tenantId, departmentId, userId, answer, debugInfo, startNanos);
+    }
+
+    private boolean isTwoHaoHrAttendanceStatQuestion(String question, String normalizedQuestion) {
+        String text = question == null ? "" : question;
+        String normalized = normalizedQuestion == null ? normalizeQuestion(text) : normalizedQuestion;
+        boolean attendanceIntent = containsAnyLiteral(text, "考勤", "打卡", "出勤", "请假", "加班", "外勤",
+                "迟到", "早退", "缺卡", "旷工");
+        boolean statIntent = containsAnyLiteral(text, "统计", "汇总", "情况", "查询", "多少", "数据", "上月",
+                "本月", "这个月", "上个月", "最近") || containsAnyLiteral(normalized, "count", "total", "sum");
+        return attendanceIntent && statIntent;
+    }
+
+    private PersonalAttendanceTarget resolveTwoHaoHrPersonalAttendanceTarget(String question, String currentUserNickname) {
+        String text = question == null ? "" : question.trim();
+        if (text.isEmpty() || !containsAttendanceKeyword(text)) {
+            return null;
+        }
+        if (isSelfPersonalAttendanceQuestion(text)) {
+            return new PersonalAttendanceTarget(null, currentUserNickname == null ? null : currentUserNickname.trim());
+        }
+        if (hasText(currentUserNickname) && text.contains(currentUserNickname.trim())) {
+            return new PersonalAttendanceTarget(null, currentUserNickname.trim());
+        }
+        Matcher matcher = PERSONAL_ATTENDANCE_NAME_PATTERN.matcher(text);
+        while (matcher.find()) {
+            String candidate = cleanPersonalAttendanceName(matcher.group(1));
+            if (looksLikePersonalAttendanceName(candidate)) {
+                return new PersonalAttendanceTarget(null, candidate);
+            }
+        }
+        return null;
+    }
+
+    private boolean isSelfPersonalAttendanceQuestion(String text) {
+        return containsAnyLiteral(text, "\u6211\u7684\u8003\u52e4", "\u6211\u7684\u6253\u5361", "\u6211\u7684\u51fa\u52e4",
+                "\u6211\u7684\u8bf7\u5047", "\u6211\u7684\u52a0\u73ed", "\u6211\u7684\u5916\u52e4",
+                "\u672c\u4eba\u8003\u52e4", "\u672c\u4eba\u6253\u5361", "\u672c\u4eba\u51fa\u52e4",
+                "\u81ea\u5df1\u7684\u8003\u52e4", "\u767b\u5f55\u7528\u6237\u7684\u8003\u52e4",
+                "\u5f53\u524d\u7528\u6237\u7684\u8003\u52e4");
+    }
+
+    private String cleanPersonalAttendanceName(String candidate) {
+        String result = candidate == null ? "" : candidate.trim();
+        for (String prefix : List.of("帮我查一下", "帮忙查一下", "查询一下", "查看一下", "统计一下", "汇总一下",
+                "帮我查", "帮忙查", "查询", "查看", "统计", "汇总", "查下", "看下", "查", "看", "请")) {
+            if (result.startsWith(prefix) && result.length() > prefix.length()) {
+                result = result.substring(prefix.length()).trim();
+            }
+        }
+        while (result.endsWith("的") && result.length() > 2) {
+            result = result.substring(0, result.length() - 1).trim();
+        }
+        return result;
+    }
+
+    private boolean containsAttendanceKeyword(String text) {
+        return containsAnyLiteral(text, "\u8003\u52e4", "\u6253\u5361", "\u51fa\u52e4", "\u8bf7\u5047", "\u52a0\u73ed",
+                "\u5916\u52e4", "\u8fdf\u5230", "\u65e9\u9000", "\u7f3a\u5361", "\u65f7\u5de5");
+    }
+
+    private boolean looksLikePersonalAttendanceName(String value) {
+        String text = value == null ? "" : value.trim();
+        return text.length() >= 2 && text.length() <= 4
+                && !PERSONAL_ATTENDANCE_NAME_STOP_WORDS.contains(text)
+                && !looksLikeOrganizationName(text);
+    }
+
+    private boolean looksLikeOrganizationName(String value) {
+        String text = value == null ? "" : value.trim();
+        return ORGANIZATION_NAME_MARKERS.stream().anyMatch(text::contains);
+    }
+
+    private String buildTwoHaoHrPersonalAttendanceMissingUserAnswer() {
+        return """
+                ### 2号人事部个人考勤统计
+
+                未能从当前登录上下文确认要查询的员工姓名，请在问题中写明员工姓名后重试。
+                """;
+    }
+
+    private AttendanceDateRange resolveAttendanceDateRange(String question) {
+        LocalDate today = LocalDate.now();
+        String text = question == null ? "" : question;
+        if (containsAnyLiteral(text, "今天", "今日")) {
+            return new AttendanceDateRange(today, today);
+        }
+        if (containsAnyLiteral(text, "昨天", "昨日")) {
+            LocalDate yesterday = today.minusDays(1);
+            return new AttendanceDateRange(yesterday, yesterday);
+        }
+        if (containsAnyLiteral(text, "上月", "上个月")) {
+            YearMonth lastMonth = YearMonth.from(today).minusMonths(1);
+            return new AttendanceDateRange(lastMonth.atDay(1), lastMonth.atEndOfMonth());
+        }
+        if (containsAnyLiteral(text, "本月", "这个月", "当月")) {
+            YearMonth currentMonth = YearMonth.from(today);
+            return new AttendanceDateRange(currentMonth.atDay(1), today);
+        }
+        if (containsAnyLiteral(text, "最近30天", "近30天")) {
+            return new AttendanceDateRange(today.minusDays(29), today);
+        }
+        Matcher yearMonthMatcher = YEAR_MONTH_PATTERN.matcher(text);
+        if (yearMonthMatcher.find()) {
+            int year = Integer.parseInt(yearMonthMatcher.group(1));
+            int month = Integer.parseInt(yearMonthMatcher.group(2));
+            if (month >= 1 && month <= 12) {
+                YearMonth yearMonth = YearMonth.of(year, month);
+                return new AttendanceDateRange(yearMonth.atDay(1), yearMonth.atEndOfMonth());
+            }
+        }
+        Matcher monthMatcher = MONTH_PATTERN.matcher(text);
+        if (monthMatcher.find()) {
+            int month = Integer.parseInt(monthMatcher.group(1));
+            if (month >= 1 && month <= 12) {
+                int year = month > today.getMonthValue() ? today.getYear() - 1 : today.getYear();
+                YearMonth yearMonth = YearMonth.of(year, month);
+                return new AttendanceDateRange(yearMonth.atDay(1), yearMonth.atEndOfMonth());
+            }
+        }
+        return new AttendanceDateRange(null, null);
+    }
+
+    private String buildTwoHaoHrAttendanceStatAnswer(TwoHaoHrAttendanceStatRespVO stat, String question) {
+        List<TwoHaoHrAttendanceStatRespVO.TypeStat> typeStats = stat.getTypeStats() == null
+                ? Collections.emptyList() : stat.getTypeStats();
+        List<TwoHaoHrAttendanceStatRespVO.DepartmentStat> departmentStats = stat.getDepartmentStats() == null
+                ? Collections.emptyList() : stat.getDepartmentStats();
+        StringBuilder builder = new StringBuilder();
+        builder.append("### 2号人事部部门考勤统计\n\n");
+        builder.append("- 统计范围：").append(formatDateRange(stat)).append('\n');
+        builder.append("- 部门匹配：").append(formatDepartmentScope(stat)).append('\n');
+        builder.append("- 总记录数：").append(formatCount(stat.getTotalRecords())).append(" 条\n");
+        builder.append("- 涉及员工数：").append(formatCount(stat.getEmployeeCount())).append(" 人\n");
+        if (stat.getMinAttendanceDate() != null || stat.getMaxAttendanceDate() != null) {
+            builder.append("- 实际数据日期：")
+                    .append(stat.getMinAttendanceDate() == null ? "-" : stat.getMinAttendanceDate())
+                    .append(" 至 ")
+                    .append(stat.getMaxAttendanceDate() == null ? "-" : stat.getMaxAttendanceDate())
+                    .append('\n');
+        }
+        builder.append("\n| 考勤类型 | 记录数 | 涉及员工 |\n");
+        builder.append("| --- | ---: | ---: |\n");
+        for (TwoHaoHrAttendanceStatRespVO.TypeStat typeStat : typeStats) {
+            builder.append("| ")
+                    .append(typeStat.getRecordTypeName())
+                    .append(" | ")
+                    .append(formatCount(typeStat.getRecordCount()))
+                    .append(" | ")
+                    .append(formatCount(typeStat.getEmployeeCount()))
+                    .append(" |\n");
+        }
+        if (stat.getDailyStats() != null && !stat.getDailyStats().isEmpty()) {
+            builder.append("\n| 日期 | 总记录 | 打卡 | 打卡结果 | 请假 | 加班 | 外勤 |\n");
+            builder.append("| --- | ---: | ---: | ---: | ---: | ---: | ---: |\n");
+            stat.getDailyStats().stream().limit(31).forEach(daily -> builder.append("| ")
+                    .append(daily.getAttendanceDate())
+                    .append(" | ")
+                    .append(formatCount(daily.getTotalRecords()))
+                    .append(" | ")
+                    .append(formatCount(daily.getCardRecordCount()))
+                    .append(" | ")
+                    .append(formatCount(daily.getCardResultCount()))
+                    .append(" | ")
+                    .append(formatCount(daily.getLeaveCount()))
+                    .append(" | ")
+                    .append(formatCount(daily.getOvertimeCount()))
+                    .append(" | ")
+                    .append(formatCount(daily.getOutingCount()))
+                    .append(" |\n"));
+        }
+        if (shouldShowDepartmentBreakdown(question, stat, departmentStats)) {
+            builder.append("\n各部门考勤明细如下：\n\n");
+            builder.append("| 部门 | 总记录 | 涉及员工 | 打卡 | 打卡结果 | 请假 | 加班 | 外勤 | 排班 |\n");
+            builder.append("| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |\n");
+            departmentStats.stream().limit(50).forEach(department -> builder.append("| ")
+                    .append(formatDepartmentName(department))
+                    .append(" | ")
+                    .append(formatCount(department.getRecordCount()))
+                    .append(" | ")
+                    .append(formatCount(department.getEmployeeCount()))
+                    .append(" | ")
+                    .append(formatCount(department.getCardRecordCount()))
+                    .append(" | ")
+                    .append(formatCount(department.getCardResultCount()))
+                    .append(" | ")
+                    .append(formatCount(department.getLeaveCount()))
+                    .append(" | ")
+                    .append(formatCount(department.getOvertimeCount()))
+                    .append(" | ")
+                    .append(formatCount(department.getOutingCount()))
+                    .append(" | ")
+                    .append(formatCount(department.getShiftCount()))
+                    .append(" |\n"));
+            if (departmentStats.size() > 50) {
+                builder.append("\n仅展示记录数最高的 50 个部门；如需完整清单，请缩小部门或日期范围后重查。\n");
+            }
+        }
+        if (!shouldShowDepartmentBreakdown(question, stat, departmentStats)
+                && stat.getMatchedDepartmentCount() != null && stat.getMatchedDepartmentCount() > 1) {
+            builder.append("\n匹配到多个部门，以上为名称包含目标词的合并统计。匹配部门 Top 5：\n\n");
+            departmentStats.stream().limit(5).forEach(department -> builder.append("- ")
+                    .append(department.getDepartmentName() == null || department.getDepartmentName().isBlank()
+                            ? department.getDepartmentId() : department.getDepartmentName())
+                    .append("：")
+                    .append(formatCount(department.getRecordCount()))
+                    .append(" 条\n"));
+        }
+        builder.append("\n说明：结果来自 2号人事部考勤明细表的结构化聚合，不返回个人打卡明细、证件、薪资等敏感字段。");
+        return builder.toString();
+    }
+
+    private String buildTwoHaoHrPersonalAttendanceStatAnswer(TwoHaoHrAttendanceStatRespVO stat) {
+        List<TwoHaoHrAttendanceStatRespVO.TypeStat> typeStats = stat.getTypeStats() == null
+                ? Collections.emptyList() : stat.getTypeStats();
+        List<TwoHaoHrAttendanceStatRespVO.DepartmentStat> departmentStats = stat.getDepartmentStats() == null
+                ? Collections.emptyList() : stat.getDepartmentStats();
+        StringBuilder builder = new StringBuilder();
+        builder.append("### 2号人事部个人考勤统计\n\n");
+        builder.append("- 查询对象：").append(formatEmployeeScope(stat)).append('\n');
+        builder.append("- 统计范围：").append(formatDateRange(stat)).append('\n');
+        builder.append("- 总记录数：").append(formatCount(stat.getTotalRecords())).append(" 条\n");
+        builder.append("- 匹配员工数：").append(formatCount(stat.getEmployeeCount())).append(" 人\n");
+        if (stat.getMinAttendanceDate() != null || stat.getMaxAttendanceDate() != null) {
+            builder.append("- 实际数据日期：")
+                    .append(stat.getMinAttendanceDate() == null ? "-" : stat.getMinAttendanceDate())
+                    .append(" 至 ")
+                    .append(stat.getMaxAttendanceDate() == null ? "-" : stat.getMaxAttendanceDate())
+                    .append('\n');
+        }
+        if (stat.getEmployeeCount() != null && stat.getEmployeeCount() > 1
+                && "EMPLOYEE_NAME_CONTAINS".equals(stat.getEmployeeMatchType())) {
+            builder.append("\n提示：当前按姓名包含进行模糊匹配，匹配到多名员工；如需精确到单人，请使用员工 ID 或更完整姓名。\n");
+        }
+        if (formatCount(stat.getTotalRecords()).equals("0")) {
+            builder.append("\n未查询到匹配的考勤聚合记录。\n");
+        }
+        builder.append("\n| 考勤类型 | 记录数 | 涉及员工 |\n");
+        builder.append("| --- | ---: | ---: |\n");
+        for (TwoHaoHrAttendanceStatRespVO.TypeStat typeStat : typeStats) {
+            builder.append("| ")
+                    .append(typeStat.getRecordTypeName())
+                    .append(" | ")
+                    .append(formatCount(typeStat.getRecordCount()))
+                    .append(" | ")
+                    .append(formatCount(typeStat.getEmployeeCount()))
+                    .append(" |\n");
+        }
+        if (stat.getDailyStats() != null && !stat.getDailyStats().isEmpty()) {
+            builder.append("\n| 日期 | 总记录 | 打卡 | 打卡结果 | 请假 | 加班 | 外勤 |\n");
+            builder.append("| --- | ---: | ---: | ---: | ---: | ---: | ---: |\n");
+            stat.getDailyStats().stream().limit(31).forEach(daily -> builder.append("| ")
+                    .append(daily.getAttendanceDate())
+                    .append(" | ")
+                    .append(formatCount(daily.getTotalRecords()))
+                    .append(" | ")
+                    .append(formatCount(daily.getCardRecordCount()))
+                    .append(" | ")
+                    .append(formatCount(daily.getCardResultCount()))
+                    .append(" | ")
+                    .append(formatCount(daily.getLeaveCount()))
+                    .append(" | ")
+                    .append(formatCount(daily.getOvertimeCount()))
+                    .append(" | ")
+                    .append(formatCount(daily.getOutingCount()))
+                    .append(" |\n"));
+        }
+        if (!departmentStats.isEmpty()) {
+            builder.append("\n所属部门分布如下：\n\n");
+            builder.append("| 部门 | 总记录 | 涉及员工 | 打卡 | 打卡结果 | 请假 | 加班 | 外勤 | 排班 |\n");
+            builder.append("| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |\n");
+            departmentStats.stream().limit(20).forEach(department -> builder.append("| ")
+                    .append(formatDepartmentName(department))
+                    .append(" | ")
+                    .append(formatCount(department.getRecordCount()))
+                    .append(" | ")
+                    .append(formatCount(department.getEmployeeCount()))
+                    .append(" | ")
+                    .append(formatCount(department.getCardRecordCount()))
+                    .append(" | ")
+                    .append(formatCount(department.getCardResultCount()))
+                    .append(" | ")
+                    .append(formatCount(department.getLeaveCount()))
+                    .append(" | ")
+                    .append(formatCount(department.getOvertimeCount()))
+                    .append(" | ")
+                    .append(formatCount(department.getOutingCount()))
+                    .append(" | ")
+                    .append(formatCount(department.getShiftCount()))
+                    .append(" |\n"));
+        }
+        builder.append("\n说明：结果来自 2号人事部考勤明细表的结构化聚合，不返回个人打卡时间明细、证件、薪资等敏感字段。");
+        return builder.toString();
+    }
+
+    private boolean shouldShowDepartmentBreakdown(String question, TwoHaoHrAttendanceStatRespVO stat,
+                                                  List<TwoHaoHrAttendanceStatRespVO.DepartmentStat> departmentStats) {
+        if (departmentStats == null || departmentStats.isEmpty()) {
+            return false;
+        }
+        String text = (question == null ? "" : question) + "\n"
+                + (stat.getDepartmentKeyword() == null ? "" : stat.getDepartmentKeyword());
+        return containsAnyLiteral(text, "\u5404\u90e8\u95e8", "\u4e0b\u7ea7\u90e8\u95e8", "\u4e0b\u5c5e\u90e8\u95e8",
+                "\u5b50\u90e8\u95e8", "\u5206\u522b", "\u6309\u90e8\u95e8", "\u6bcf\u4e2a\u90e8\u95e8",
+                "\u90e8\u95e8\u660e\u7ec6", "\u90e8\u95e8\u5217\u8868");
+    }
+
+    private String formatDepartmentName(TwoHaoHrAttendanceStatRespVO.DepartmentStat department) {
+        if (department == null) {
+            return "-";
+        }
+        if (hasText(department.getDepartmentName())) {
+            return department.getDepartmentName();
+        }
+        return hasText(department.getDepartmentId()) ? department.getDepartmentId() : "-";
+    }
+
+    private String formatDateRange(TwoHaoHrAttendanceStatRespVO stat) {
+        return formatDateRange(stat.getStartDate(), stat.getEndDate());
+    }
+
+    private String formatDateRange(LocalDate startDate, LocalDate endDate) {
+        if (startDate == null && endDate == null) {
+            return "全部已同步日期";
+        }
+        return (startDate == null ? "-" : startDate) + " 至 "
+                + (endDate == null ? "-" : endDate);
+    }
+
+    private String formatDepartmentScope(TwoHaoHrAttendanceStatRespVO stat) {
+        if ("DEPARTMENT_ID".equals(stat.getDepartmentMatchType())) {
+            return "部门ID " + stat.getDepartmentId();
+        }
+        if ("DEPARTMENT_NAME_CONTAINS".equals(stat.getDepartmentMatchType())) {
+            return "部门名称包含 `" + stat.getDepartmentName() + "`，匹配 "
+                    + formatCount(stat.getMatchedDepartmentCount()) + " 个部门";
+        }
+        return "全部部门";
+    }
+
+    private String formatEmployeeScope(TwoHaoHrAttendanceStatRespVO stat) {
+        if ("EMPLOYEE_ID".equals(stat.getEmployeeMatchType())) {
+            return "员工ID/OA编码 `" + stat.getEmployeeId() + "`";
+        }
+        if ("EMPLOYEE_NAME_CONTAINS".equals(stat.getEmployeeMatchType())) {
+            return "员工姓名包含 `" + stat.getEmployeeName() + "`";
+        }
+        return "未指定员工";
+    }
+
+    private String buildTwoHaoHrAttendanceStatDebugInfo(RagChatRequest request, TwoHaoHrAttendanceStatRespVO stat,
+                                                        String effectiveQuestion, long elapsedMs) {
+        return "- twoHaoHrAttendanceStat=true\n"
+                + "- knowledgeBaseId=" + request.getKnowledgeBaseId() + "\n"
+                + "- dataSourceId=" + stat.getDataSourceId() + "\n"
+                + "- effectiveQuestion=" + effectiveQuestion + "\n"
+                + "- departmentMatchType=" + stat.getDepartmentMatchType() + "\n"
+                + "- departmentName=" + stat.getDepartmentName() + "\n"
+                + "- dateRange=" + formatDateRange(stat) + "\n"
+                + "- totalRecords=" + stat.getTotalRecords() + "\n"
+                + "- elapsedMs=" + elapsedMs;
+    }
+
+    private String buildTwoHaoHrPersonalAttendanceStatDebugInfo(RagChatRequest request,
+                                                                TwoHaoHrAttendanceStatRespVO stat,
+                                                                String question, long elapsedMs) {
+        return "- twoHaoHrPersonalAttendanceStat=true\n"
+                + "- knowledgeBaseId=" + request.getKnowledgeBaseId() + "\n"
+                + "- dataSourceId=" + stat.getDataSourceId() + "\n"
+                + "- question=" + question + "\n"
+                + "- employeeMatchType=" + stat.getEmployeeMatchType() + "\n"
+                + "- employeeName=" + stat.getEmployeeName() + "\n"
+                + "- dateRange=" + formatDateRange(stat) + "\n"
+                + "- totalRecords=" + stat.getTotalRecords() + "\n"
+                + "- elapsedMs=" + elapsedMs;
+    }
+
+    private String formatCount(Number value) {
+        return String.valueOf(value == null ? 0L : value.longValue());
+    }
+
+    private String formatText(String value) {
+        if (value == null || value.isBlank()) {
+            return "-";
+        }
+        return value.trim().replace("|", "\\|").replace("\n", " ");
+    }
+
+    private boolean containsAnyLiteral(String text, String... fragments) {
+        if (text == null || text.isBlank()) {
+            return false;
+        }
+        for (String fragment : fragments) {
+            if (fragment != null && !fragment.isBlank() && text.contains(fragment)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     private RagChatResponse saveDirectAnswer(AiChatConversationDO conversation, AiChatMessageDO userMessage,
-                                             Long tenantId, Long departmentId, Long userId, String answer,
-                                             String debugInfo, long startNanos) {
+                                              Long tenantId, Long departmentId, Long userId, String answer,
+                                              String debugInfo, long startNanos) {
         AiChatMessageDO assistantMessage = saveMessage(tenantId, departmentId, conversation.getId(), userId,
                 ChatMessageRoleEnum.ASSISTANT.getCode(), answer, null, 0L);
         updateConversationLastMessageTime(conversation.getId(), tenantId, departmentId);
@@ -2372,6 +2959,12 @@ public class RagServiceImpl implements RagService {
 
     private record FastGptCallOutcome(FastGptRagResult result, AiChatModelResponse modelResponse, long latencyMs,
                                       boolean skipped, String errorMessage) {
+    }
+
+    private record PersonalAttendanceTarget(String employeeId, String employeeName) {
+    }
+
+    private record AttendanceDateRange(LocalDate startDate, LocalDate endDate) {
     }
 
 }

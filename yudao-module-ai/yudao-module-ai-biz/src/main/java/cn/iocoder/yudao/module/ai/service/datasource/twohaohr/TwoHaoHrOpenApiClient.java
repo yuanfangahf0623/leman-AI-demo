@@ -305,6 +305,9 @@ public class TwoHaoHrOpenApiClient {
         if (data.isObject() && data.has("objects")) {
             return data;
         }
+        if (data.isArray() || data.isObject()) {
+            return data;
+        }
         return root;
     }
 

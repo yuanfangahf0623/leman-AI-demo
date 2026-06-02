@@ -15,21 +15,37 @@ ChatGPT / 外网
 ```text
 2 号人事部 / 外网回调
   -> https://twohaohr.leman-tech.com
-  -> 公网 IP 60.216.83.130:443
-  -> 路由器/NAT 转发到 Windows 虚拟机 8443
-  -> Caddy
+  -> Cloudflare Tunnel leman-n8n
   -> http://127.0.0.1:48080
   -> yudao-server
 ```
 
+说明：2 号人事部回调已改为优先走 Cloudflare Tunnel，不再依赖公网 80/443 到本机 Caddy 的 NAT 转发。当前 Tunnel 本机配置文件为：
+
+```text
+C:\Users\admin\.cloudflared\config.yml
+```
+
+其中 `twohaohr.leman-tech.com` 转发到 `http://localhost:48080`。
+
 ## DNS 配置
 
-阿里云 DNS 使用 A 记录，不切换主域名 NS：
+如果继续使用 Caddy/NAT 方案，阿里云 DNS 使用 A 记录，不切换主域名 NS：
 
 | 类型 | 主机记录 | 记录值 | 用途 |
 | --- | --- | --- | --- |
 | A | n8n | 60.216.83.130 | n8n Webhook 和 ChatGPT Actions |
 | A | twohaohr | 60.216.83.130 | 2 号人事部回调 |
+
+如果使用 Cloudflare Tunnel 方案，`twohaohr.leman-tech.com` 必须由 Cloudflare DNS 生效。当前 `leman-tech.com` 的权威 DNS 仍是阿里云 `dns19.hichina.com` / `dns20.hichina.com`，属于 Cloudflare Partial/CNAME setup，需要在阿里云 DNS 中把原有 `twohaohr -> 60.216.83.130` A 记录改为 CNAME：
+
+```text
+主机记录：twohaohr
+记录类型：CNAME
+记录值：twohaohr.leman-tech.com.cdn.cloudflare.net
+```
+
+仅在本机执行 `cloudflared tunnel route dns` 不会覆盖阿里云当前正在生效的 A 记录。
 
 ## NAT 转发
 
@@ -55,13 +71,30 @@ F:\GitHub\leman-AI-demo\deploy\caddy\Caddyfile.n8n
 | 域名 | 目标服务 |
 | --- | --- |
 | `n8n.leman-tech.com` | n8n `127.0.0.1:5678` |
-| `twohaohr.leman-tech.com/open-api/ai/twohaohr/callback*` | 后端 `127.0.0.1:48080` |
+| `twohaohr.leman-tech.com/open-api/ai/twohaohr/callback*` | 后端 `127.0.0.1:48080`，仅 Caddy/NAT 方案使用 |
 | `twohaohr.leman-tech.com` 其它路径 | 返回 404 |
 
 启动命令：
 
 ```powershell
 F:\GitHub\leman-AI-demo\scripts\start-caddy-n8n.ps1
+```
+
+Cloudflare Tunnel 启动命令：
+
+```powershell
+F:\GitHub\leman-AI-demo\scripts\start-cloudflared-leman.ps1
+```
+
+当前 Tunnel ingress：
+
+```yaml
+ingress:
+  - hostname: n8n.leman-tech.com
+    service: http://localhost:5678
+  - hostname: twohaohr.leman-tech.com
+    service: http://localhost:48080
+  - service: http_status:404
 ```
 
 当前用户登录自启动项：

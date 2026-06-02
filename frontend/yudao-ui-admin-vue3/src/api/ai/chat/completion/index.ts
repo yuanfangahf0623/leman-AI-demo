@@ -31,12 +31,15 @@ export interface AiChatCompletionRespVO {
   citations: AiChatCompletionCitationVO[]
 }
 
+const CHAT_COMPLETION_TIMEOUT = 120000
+
 export const AiChatCompletionApi = {
   // 非流式知识库问答
   completions: async (data: AiChatCompletionReqVO) => {
     return await request.post<AiChatCompletionRespVO>({
       url: '/ai/chat/completions',
-      data
+      data,
+      timeout: CHAT_COMPLETION_TIMEOUT
     })
   }
 }

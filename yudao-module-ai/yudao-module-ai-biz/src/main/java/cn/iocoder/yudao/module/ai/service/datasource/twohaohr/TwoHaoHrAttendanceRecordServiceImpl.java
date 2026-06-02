@@ -90,7 +90,8 @@ public class TwoHaoHrAttendanceRecordServiceImpl implements TwoHaoHrAttendanceRe
     }
 
     private String resolveExternalId(JsonNode payload, String recordType, String payloadHash) {
-        String externalId = text(payload, "id", "record_id", "attendance_id", "apply_id", "order_id", "uuid");
+        String externalId = text(payload, "id", "record_id", "attendance_id", "apply_id", "order_id", "uuid",
+                "source_id");
         if (externalId.isBlank()) {
             String employeeKey = text(payload, "emp_id", "employee_id", "emp_oa_code", "emp_no");
             String timeKey = text(payload, "start_time", "start_dt", "begin_time", "card_time", "dt", "add_dt");

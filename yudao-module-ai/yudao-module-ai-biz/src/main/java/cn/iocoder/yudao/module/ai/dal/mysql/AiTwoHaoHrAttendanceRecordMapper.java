@@ -1,9 +1,13 @@
 package cn.iocoder.yudao.module.ai.dal.mysql;
 
 import cn.iocoder.yudao.module.ai.dal.dataobject.AiTwoHaoHrAttendanceRecordDO;
+import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import org.apache.ibatis.annotations.Mapper;
+
+import java.util.List;
+import java.util.Map;
 
 /**
  * 2hao HR attendance detail record Mapper.
@@ -18,6 +22,10 @@ public interface AiTwoHaoHrAttendanceRecordMapper extends BaseMapper<AiTwoHaoHrA
                 .eq(AiTwoHaoHrAttendanceRecordDO::getDataSourceId, dataSourceId)
                 .eq(AiTwoHaoHrAttendanceRecordDO::getRecordType, recordType)
                 .eq(AiTwoHaoHrAttendanceRecordDO::getExternalId, externalId));
+    }
+
+    default List<Map<String, Object>> selectStatMaps(QueryWrapper<AiTwoHaoHrAttendanceRecordDO> queryWrapper) {
+        return selectMaps(queryWrapper);
     }
 
 }

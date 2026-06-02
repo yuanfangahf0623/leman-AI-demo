@@ -185,8 +185,21 @@
               <div class="message-content">
                 <MarkdownView :content="normalizeMessageMarkdown(messageItem.content)" />
               </div>
+              <div class="message-toolbar">
+                <el-tooltip content="复制消息" placement="top">
+                  <el-button
+                    link
+                    type="primary"
+                    class="message-copy-btn"
+                    @click="handleCopyMessage(messageItem)"
+                  >
+                    <Icon icon="ep:document-copy" class="mr-4px" />
+                    复制
+                  </el-button>
+                </el-tooltip>
+              </div>
 
-              <div v-if="isAssistantMessage(messageItem)" class="citation-area">
+              <div v-if="canShowCitationArea(messageItem)" class="citation-area">
                 <el-button
                   link
                   type="primary"
@@ -320,6 +333,7 @@ const citationLoadingMap = reactive<Record<number, boolean>>({})
 let tempMessageId = -1
 let highlightTimer: ReturnType<typeof setTimeout> | undefined
 let programmaticScrollTimer: ReturnType<typeof setTimeout> | undefined
+let thinkingTimer: ReturnType<typeof setInterval> | undefined
 let programmaticActiveQuestionId: number | undefined
 const PROGRAMMATIC_SCROLL_LOCK_MS = 1200
 const MARKDOWN_IMAGE_PATTERN = /!\[([^\]]*)\]\s*\(\s*(https?:\/\/[^\s)]+)\s*\)/g
@@ -547,9 +561,10 @@ const handleSend = async () => {
     id: assistantTempId,
     conversationId: activeConversationId.value || 0,
     role: 'assistant',
-    content: '正在思考...',
+    content: formatThinkingContent(0),
     createTime: now
   })
+  startThinkingTimer(assistantTempId)
   formData.question = ''
   await scrollToBottom()
 
@@ -561,6 +576,7 @@ const handleSend = async () => {
       stream: false,
       webSearchEnabled: formData.webSearchEnabled
     })
+    clearThinkingTimer()
     const responseIds = applyCompletionResponse(data, userTempId, assistantTempId)
     await getConversationList()
     await scrollToMessage(responseIds.assistantMessageId, {
@@ -569,10 +585,12 @@ const handleSend = async () => {
       highlight: false
     })
   } catch {
+    clearThinkingTimer()
     replaceMessage(assistantTempId, {
       content: '发送失败，请稍后重试。'
     })
   } finally {
+    clearThinkingTimer()
     loading.value = false
   }
 }
@@ -613,6 +631,29 @@ const replaceMessage = (id: number, patch: Partial<DisplayChatMessage>) => {
   }
 }
 
+const formatThinkingContent = (elapsedSeconds: number) => {
+  return `正在思考... 已思考 ${elapsedSeconds} 秒`
+}
+
+const startThinkingTimer = (messageId: number) => {
+  clearThinkingTimer()
+  const startedAt = Date.now()
+  thinkingTimer = setInterval(() => {
+    const elapsedSeconds = Math.floor((Date.now() - startedAt) / 1000)
+    replaceMessage(messageId, {
+      content: formatThinkingContent(elapsedSeconds)
+    })
+  }, 1000)
+}
+
+const clearThinkingTimer = () => {
+  if (!thinkingTimer) {
+    return
+  }
+  clearInterval(thinkingTimer)
+  thinkingTimer = undefined
+}
+
 const normalizeCompletionCitations = (
   citations: AiChatCompletionCitationVO[]
 ): DisplayCitation[] => {
@@ -637,6 +678,49 @@ const handleToggleCitations = async (messageItem: AiChatMessageVO) => {
     citationMap[messageItem.id] = citationCacheMap[messageItem.id]
   } finally {
     citationLoadingMap[messageItem.id] = false
+  }
+}
+
+const handleCopyMessage = async (messageItem: AiChatMessageVO) => {
+  const content = getCopyableMessageContent(messageItem)
+  if (!content) {
+    message.warning('\u6ca1\u6709\u53ef\u590d\u5236\u7684\u5185\u5bb9')
+    return
+  }
+  try {
+    await copyText(content)
+    message.success('\u5df2\u590d\u5236')
+  } catch {
+    message.error('\u590d\u5236\u5931\u8d25\uff0c\u8bf7\u624b\u52a8\u9009\u4e2d\u5185\u5bb9\u590d\u5236')
+  }
+}
+
+const getCopyableMessageContent = (messageItem: AiChatMessageVO) => {
+  return (messageItem.content || '').trim()
+}
+
+const copyText = async (text: string) => {
+  if (navigator.clipboard && window.isSecureContext) {
+    try {
+      await Promise.race([
+        navigator.clipboard.writeText(text),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('clipboard timeout')), 1000))
+      ])
+      return
+    } catch {}
+  }
+  const textarea = document.createElement('textarea')
+  textarea.value = text
+  textarea.setAttribute('readonly', 'true')
+  textarea.style.position = 'fixed'
+  textarea.style.left = '-9999px'
+  textarea.style.top = '0'
+  document.body.appendChild(textarea)
+  textarea.select()
+  const copied = document.execCommand('copy')
+  document.body.removeChild(textarea)
+  if (!copied) {
+    throw new Error('copy failed')
   }
 }
 
@@ -783,6 +867,10 @@ const isAssistantMessage = (messageItem: AiChatMessageVO) => {
   return messageItem.role === 'assistant'
 }
 
+const canShowCitationArea = (messageItem: AiChatMessageVO) => {
+  return isAssistantMessage(messageItem) && messageItem.id > 0
+}
+
 const getRoleLabel = (role?: string) => {
   if (role === 'user') return '用户'
   if (role === 'assistant') return '理文科技AI助手'
@@ -847,6 +935,7 @@ onBeforeUnmount(() => {
   if (programmaticScrollTimer) {
     clearTimeout(programmaticScrollTimer)
   }
+  clearThinkingTimer()
 })
 </script>
 
@@ -1254,6 +1343,27 @@ onBeforeUnmount(() => {
   border-radius: 6px;
   background: #fff;
   object-fit: contain;
+}
+
+.message-toolbar {
+  display: flex;
+  justify-content: flex-start;
+  margin-top: 8px;
+}
+
+.message-row.user .message-toolbar {
+  justify-content: flex-end;
+}
+
+.message-copy-btn {
+  height: 24px;
+  padding: 0;
+  color: var(--el-text-color-secondary);
+  font-size: 12px;
+}
+
+.message-copy-btn:hover {
+  color: var(--el-color-primary);
 }
 
 .citation-area {

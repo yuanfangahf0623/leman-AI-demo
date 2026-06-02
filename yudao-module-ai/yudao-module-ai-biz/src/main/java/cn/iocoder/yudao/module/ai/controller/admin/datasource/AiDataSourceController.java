@@ -10,10 +10,13 @@ import cn.iocoder.yudao.module.ai.controller.admin.datasource.vo.AiDataSourceRaw
 import cn.iocoder.yudao.module.ai.controller.admin.datasource.vo.AiDataSourceRawRecordRespVO;
 import cn.iocoder.yudao.module.ai.controller.admin.datasource.vo.AiDataSourceRespVO;
 import cn.iocoder.yudao.module.ai.controller.admin.datasource.vo.AiDataSourceUpdateReqVO;
+import cn.iocoder.yudao.module.ai.controller.admin.datasource.vo.TwoHaoHrAttendanceStatReqVO;
+import cn.iocoder.yudao.module.ai.controller.admin.datasource.vo.TwoHaoHrAttendanceStatRespVO;
 import cn.iocoder.yudao.module.ai.convert.AiDataSourceConvert;
 import cn.iocoder.yudao.module.ai.dal.dataobject.AiDataSourceDO;
 import cn.iocoder.yudao.module.ai.service.datasource.AiDataSourceRawRecordService;
 import cn.iocoder.yudao.module.ai.service.datasource.AiDataSourceService;
+import cn.iocoder.yudao.module.ai.service.datasource.twohaohr.TwoHaoHrAttendanceStatService;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotNull;
 import lombok.RequiredArgsConstructor;
@@ -41,6 +44,7 @@ public class AiDataSourceController {
 
     private final AiDataSourceService dataSourceService;
     private final AiDataSourceRawRecordService rawRecordService;
+    private final TwoHaoHrAttendanceStatService twoHaoHrAttendanceStatService;
 
     @GetMapping("/page")
     @PreAuthorize("@ss.hasPermission('ai:datasource:query')")
@@ -62,6 +66,13 @@ public class AiDataSourceController {
     public CommonResult<PageResult<AiDataSourceRawRecordRespVO>> getRawRecordPage(
             @Valid AiDataSourceRawRecordPageReqVO pageReqVO) {
         return CommonResult.success(rawRecordService.getRawRecordPage(pageReqVO));
+    }
+
+    @GetMapping("/twohaohr/attendance/department-stat")
+    @PreAuthorize("@ss.hasPermission('ai:datasource:query')")
+    public CommonResult<TwoHaoHrAttendanceStatRespVO> getTwoHaoHrAttendanceDepartmentStat(
+            @Valid TwoHaoHrAttendanceStatReqVO reqVO) {
+        return CommonResult.success(twoHaoHrAttendanceStatService.getDepartmentStat(reqVO));
     }
 
     @PostMapping("/create")

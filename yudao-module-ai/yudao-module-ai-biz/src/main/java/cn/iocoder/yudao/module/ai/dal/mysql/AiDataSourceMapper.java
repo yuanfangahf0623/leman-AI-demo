@@ -10,6 +10,8 @@ import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import org.apache.ibatis.annotations.Mapper;
 
+import java.util.List;
+
 /**
  * AI 数据源 Mapper。
  */
@@ -20,6 +22,16 @@ public interface AiDataSourceMapper extends BaseMapper<AiDataSourceDO> {
         return selectOne(Wrappers.lambdaQuery(AiDataSourceDO.class)
                 .eq(AiDataSourceDO::getId, id)
                 .eq(AiDataSourceDO::getTenantId, tenantId));
+    }
+
+    default List<AiDataSourceDO> selectListByTenantIdAndKnowledgeBaseIds(Long tenantId, List<Long> knowledgeBaseIds) {
+        if (knowledgeBaseIds == null || knowledgeBaseIds.isEmpty()) {
+            return List.of();
+        }
+        return selectList(Wrappers.lambdaQuery(AiDataSourceDO.class)
+                .eq(AiDataSourceDO::getTenantId, tenantId)
+                .in(AiDataSourceDO::getKnowledgeBaseId, knowledgeBaseIds)
+                .orderByDesc(AiDataSourceDO::getId));
     }
 
     default PageResult<AiDataSourceDO> selectPage(AiDataSourcePageReqVO reqVO, Long tenantId) {
