@@ -296,6 +296,39 @@ class KnowledgeSyncServiceImplTest {
     }
 
     @Test
+    void executeSyncJobShouldLimitTwoHaoHrKnowledgeRawRecordSample() throws Exception {
+        String configJson = objectMapper.writeValueAsString(Map.of(
+                "provider", "two-hao-hr",
+                "syncObjects", List.of("job_positions"),
+                "maxPages", 1
+        ));
+        mockJobAndDataSource(configJson, "API");
+        List<JsonNode> records = new java.util.ArrayList<>();
+        for (int i = 1; i <= 250; i++) {
+            records.add(objectMapper.readTree("{\"id\":\"r" + i + "\"}"));
+        }
+        when(twoHaoHrOpenApiClient.fetchPagedObjectsByGet(any(), eq("/api/job_positions/"), any()))
+                .thenReturn(records);
+        when(rawRecordService.toMaskedJson(any())).thenAnswer(invocation -> invocation.getArgument(0).toString());
+        when(documentService.createDocumentFromDataSource(any(AiDataSourceDO.class), any(AiDataSourceIngestReqVO.class)))
+                .thenReturn(AiDataSourceIngestRespVO.builder().documentId(502L).action("CREATE").build());
+
+        knowledgeSyncService.executeSyncJob(3001L);
+
+        ArgumentCaptor<AiDataSourceIngestReqVO> ingestCaptor = ArgumentCaptor.forClass(AiDataSourceIngestReqVO.class);
+        verify(documentService).createDocumentFromDataSource(any(AiDataSourceDO.class), ingestCaptor.capture());
+        AiDataSourceIngestReqVO ingestReqVO = ingestCaptor.getValue();
+        org.junit.jupiter.api.Assertions.assertTrue(ingestReqVO.getContent().contains("Knowledge document sample count: 200"));
+        org.junit.jupiter.api.Assertions.assertTrue(ingestReqVO.getContent().contains("\"id\":\"r200\""));
+        org.junit.jupiter.api.Assertions.assertFalse(ingestReqVO.getContent().contains("\"id\":\"r201\""));
+        assertEquals(250, ingestReqVO.getMetadata().get("recordCount"));
+        verify(rawRecordService).saveRecords(any(AiSyncJobDO.class), any(AiDataSourceDO.class),
+                eq("two-hao-hr"), eq("organization"), eq("job_positions"), eq("twohaohr://job_positions"), eq(records));
+        verify(syncJobMapper).updateResultByIdAndTenantId(eq(3001L), eq(1L), eq(1), eq(1), eq(0),
+                eq(SyncJobStatusEnum.SUCCESS.getCode()), any(), eq(null));
+    }
+
+    @Test
     void executeSyncJobShouldFetchEmployeesByAllDepartmentsWhenDepartmentIdMissing() throws Exception {
         String configJson = objectMapper.writeValueAsString(Map.of(
                 "provider", "two-hao-hr",
@@ -486,6 +519,64 @@ class KnowledgeSyncServiceImplTest {
     }
 
     @Test
+    void executeSyncJobShouldExpandShortCallbackSyncObjectAliases() throws Exception {
+        String configJson = objectMapper.writeValueAsString(Map.of(
+                "provider", "two-hao-hr",
+                "syncObjects", List.of("all"),
+                "departmentId", "d1",
+                "attendanceStartDate", "2026-05-01",
+                "attendanceEndDate", "2026-05-25",
+                "maxPages", 1
+        ));
+        mockJobAndDataSource(configJson, "API", "CALLBACK:ot");
+        JsonNode employee = objectMapper.readTree("{\"id\":\"e1\"}");
+        JsonNode overtime = objectMapper.readTree("{\"id\":\"ot1\",\"emp_id\":\"e1\"}");
+        when(twoHaoHrOpenApiClient.fetchEmployees(any())).thenReturn(List.of(employee));
+        when(twoHaoHrOpenApiClient.fetchPagedObjectsByPost(any(), eq("/api/attendance/ot_record/"), any()))
+                .thenReturn(List.of(overtime));
+        when(rawRecordService.toMaskedJson(any())).thenReturn("{\"id\":\"ot1\"}");
+        when(documentService.createDocumentFromDataSource(any(AiDataSourceDO.class), any(AiDataSourceIngestReqVO.class)))
+                .thenReturn(AiDataSourceIngestRespVO.builder().documentId(602L).action("CREATE").build());
+
+        knowledgeSyncService.executeSyncJob(3001L);
+
+        verify(twoHaoHrOpenApiClient).fetchPagedObjectsByPost(any(), eq("/api/attendance/ot_record/"), any());
+        verify(rawRecordService).saveRecords(any(AiSyncJobDO.class), any(AiDataSourceDO.class),
+                eq("two-hao-hr"), eq("attendance"), eq("attendance_overtime_record"),
+                eq("twohaohr://attendance_overtime_record"), any());
+        verify(attendanceRecordService).saveRecords(any(AiSyncJobDO.class), any(AiDataSourceDO.class),
+                eq("attendance_overtime_record"), any());
+        verify(syncJobMapper).updateResultByIdAndTenantId(eq(3001L), eq(1L), eq(1), eq(1), eq(0),
+                eq(SyncJobStatusEnum.SUCCESS.getCode()), any(), eq(null));
+    }
+
+    @Test
+    void executeSyncJobShouldExpandGenericShortCallbackSyncObjectAliases() throws Exception {
+        String configJson = objectMapper.writeValueAsString(Map.of(
+                "provider", "two-hao-hr",
+                "syncObjects", List.of("all"),
+                "maxPages", 1
+        ));
+        mockJobAndDataSource(configJson, "API", "CALLBACK:salary_fields");
+        JsonNode field = objectMapper.readTree("[{\"id\":\"f1\",\"name\":\"attendance_days\"}]");
+        when(twoHaoHrOpenApiClient.fetchRawDataByGet(any(),
+                eq("/api/smart_salary/attendance_stat/attendance_fields/"), any())).thenReturn(field);
+        when(rawRecordService.toMaskedJson(any())).thenReturn("{\"id\":\"f1\"}");
+        when(documentService.createDocumentFromDataSource(any(AiDataSourceDO.class), any(AiDataSourceIngestReqVO.class)))
+                .thenReturn(AiDataSourceIngestRespVO.builder().documentId(603L).action("CREATE").build());
+
+        knowledgeSyncService.executeSyncJob(3001L);
+
+        verify(twoHaoHrOpenApiClient).fetchRawDataByGet(any(),
+                eq("/api/smart_salary/attendance_stat/attendance_fields/"), any());
+        verify(rawRecordService).saveRecords(any(AiSyncJobDO.class), any(AiDataSourceDO.class),
+                eq("two-hao-hr"), eq("smart_salary"), eq("smart_salary_attendance_fields"),
+                eq("twohaohr://smart_salary_attendance_fields"), any());
+        verify(syncJobMapper).updateResultByIdAndTenantId(eq(3001L), eq(1L), eq(1), eq(1), eq(0),
+                eq(SyncJobStatusEnum.SUCCESS.getCode()), any(), eq(null));
+    }
+
+    @Test
     void executeSyncJobShouldSyncAttendanceByAllDepartmentsWhenDepartmentIdMissing() throws Exception {
         String configJson = objectMapper.writeValueAsString(Map.of(
                 "provider", "two-hao-hr",
@@ -595,11 +686,16 @@ class KnowledgeSyncServiceImplTest {
     }
 
     private void mockJobAndDataSource(String configJson, String sourceType) {
+        mockJobAndDataSource(configJson, sourceType, null);
+    }
+
+    private void mockJobAndDataSource(String configJson, String sourceType, String triggerType) {
         when(syncJobMapper.selectByIdAndTenantId(3001L, 1L)).thenReturn(AiSyncJobDO.builder()
                 .id(3001L)
                 .tenantId(1L)
                 .knowledgeBaseId(10L)
                 .dataSourceId(20L)
+                .triggerType(triggerType)
                 .status(SyncJobStatusEnum.PENDING.getCode())
                 .build());
         when(knowledgeService.getKnowledge(10L)).thenReturn(AiKnowledgeBaseDO.builder().id(10L).tenantId(1L).build());

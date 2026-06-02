@@ -81,6 +81,8 @@ public class KnowledgeSyncServiceImpl implements KnowledgeSyncService {
     private static final String CALLBACK_TRIGGER_PREFIX = "CALLBACK:";
     private static final int TWO_HAO_HR_MAX_PAGE_SIZE = 50;
     private static final int TWO_HAO_HR_ATTENDANCE_BATCH_SIZE = 50;
+    private static final int TWO_HAO_HR_KNOWLEDGE_RECORD_SAMPLE_LIMIT = 200;
+    private static final int TWO_HAO_HR_KNOWLEDGE_RECORD_JSON_MAX_CHARS = 4000;
     private static final String TWO_HAO_HR_SALARY_PLAN_LIST_PATH = "/api/smart_salary/biz_sub/plan_list/";
     private static final String TWO_HAO_HR_SALARY_ITEM_LIST_PATH = "/api/smart_salary/biz_sub/item_list/";
     private static final String TWO_HAO_HR_SALARY_ITEM_LIST_TYPE = "smart_salary_item_list";
@@ -187,8 +189,30 @@ public class KnowledgeSyncServiceImpl implements KnowledgeSyncService {
         Arrays.stream(syncObjects.split(","))
                 .map(value -> value == null ? "" : value.trim().toLowerCase(Locale.ROOT))
                 .filter(value -> !value.isEmpty())
-                .forEach(result::add);
+                .forEach(value -> addScopedSyncObject(result, value));
         return result;
+    }
+
+    private void addScopedSyncObject(Set<String> result, String value) {
+        result.add(value);
+        switch (value) {
+            case "card", "card_record" -> result.add("attendance_card_record");
+            case "card_result", "result" -> result.add("attendance_card_result");
+            case "leave" -> result.add("attendance_leave_record");
+            case "ot", "overtime" -> result.add("attendance_overtime_record");
+            case "outing", "out" -> result.add("attendance_outing_record");
+            case "emp_details" -> result.add("employee_details");
+            case "group_company" -> result.add("group_company_list");
+            case "leaving" -> result.add("leaving_employee_list");
+            case "transfer" -> result.add("employee_transfer");
+            case "salary_fields" -> result.add("smart_salary_attendance_fields");
+            case "interview" -> result.add("recruitment_interview");
+            case "security" -> result.add("security_overview");
+            case "entry_info" -> result.add("entry_info_list");
+            case "room_booking" -> result.add("room_booking_list");
+            default -> {
+            }
+        }
     }
 
     private boolean shouldSyncObject(TwoHaoHrDataSourceConfig config, Set<String> scopedSyncObjects,
@@ -714,11 +738,27 @@ public class KnowledgeSyncServiceImpl implements KnowledgeSyncService {
         builder.append("- 模块：").append(endpoint.moduleName()).append("\n");
         builder.append("- 对象：").append(endpoint.objectType()).append("\n");
         builder.append("- 记录数：").append(records.size()).append("\n\n");
-        for (int i = 0; i < records.size(); i++) {
+        int sampleCount = Math.min(records.size(), TWO_HAO_HR_KNOWLEDGE_RECORD_SAMPLE_LIMIT);
+        builder.append("- Knowledge document sample count: ").append(sampleCount).append("\n");
+        if (records.size() > sampleCount) {
+            builder.append("- Note: full raw records are stored in the database; structured statistics should use raw/structured tables.\n");
+        }
+        builder.append("\n");
+        for (int i = 0; i < sampleCount; i++) {
             builder.append("## 记录 ").append(i + 1).append("\n\n");
-            builder.append("```json\n").append(rawRecordService.toMaskedJson(records.get(i))).append("\n```\n\n");
+            builder.append("```json\n")
+                    .append(truncateKnowledgeRecordJson(rawRecordService.toMaskedJson(records.get(i))))
+                    .append("\n```\n\n");
         }
         return builder.toString();
+    }
+
+    private String truncateKnowledgeRecordJson(String json) {
+        if (json == null || json.length() <= TWO_HAO_HR_KNOWLEDGE_RECORD_JSON_MAX_CHARS) {
+            return json == null ? "" : json;
+        }
+        return json.substring(0, TWO_HAO_HR_KNOWLEDGE_RECORD_JSON_MAX_CHARS)
+                + "\n... truncated for knowledge document ...";
     }
 
     private void saveRawRecords(AiSyncJobDO syncJob, AiDataSourceDO dataSource, String moduleName,
