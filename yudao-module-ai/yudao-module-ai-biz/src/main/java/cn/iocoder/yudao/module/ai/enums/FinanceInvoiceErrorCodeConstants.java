@@ -1,0 +1,21 @@
+package cn.iocoder.yudao.module.ai.enums;
+
+/**
+ * Finance invoice error codes.
+ */
+public interface FinanceInvoiceErrorCodeConstants {
+
+    Integer INVOICE_NOT_EXISTS = 1_020_020_001;
+    Integer INVOICE_FILE_EMPTY = 1_020_020_002;
+    Integer INVOICE_FILE_TOO_LARGE = 1_020_020_003;
+    Integer INVOICE_FILE_TYPE_UNSUPPORTED = 1_020_020_004;
+    Integer INVOICE_FILE_NAME_INVALID = 1_020_020_005;
+    Integer INVOICE_FILE_CONTENT_INVALID = 1_020_020_006;
+    Integer INVOICE_FILE_STORAGE_FAILED = 1_020_020_007;
+    Integer INVOICE_STATUS_INVALID = 1_020_020_008;
+    Integer INVOICE_AI_RECOGNIZE_FAILED = 1_020_020_009;
+    Integer INVOICE_DUPLICATE_RISK_BLOCKED = 1_020_020_010;
+    Integer INVOICE_APPROVAL_START_FAILED = 1_020_020_011;
+    Integer INVOICE_PAYMENT_INFO_INVALID = 1_020_020_012;
+
+}

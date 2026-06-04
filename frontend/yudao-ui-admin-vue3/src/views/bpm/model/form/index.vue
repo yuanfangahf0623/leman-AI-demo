@@ -149,7 +149,7 @@ const formData: any = ref({
   description: '',
   type: BpmModelType.BPMN,
   formType: BpmModelFormType.NORMAL,
-  formId: '',
+  formId: undefined,
   formCustomCreatePath: '',
   formCustomViewPath: '',
   visible: true,

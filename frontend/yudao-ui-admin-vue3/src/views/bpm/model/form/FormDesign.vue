@@ -3,7 +3,7 @@
     <el-form-item label="表单类型" prop="formType" class="mb-20px">
       <el-radio-group v-model="modelData.formType">
         <el-radio
-          v-for="dict in getIntDictOptions(DICT_TYPE.BPM_MODEL_FORM_TYPE)"
+          v-for="dict in formTypeOptions"
           :key="dict.value"
           :value="dict.value"
         >
@@ -78,6 +78,27 @@ const props = defineProps({
 })
 
 const formRef = ref()
+const formTypeOptions = computed(() => {
+  const options = getIntDictOptions(DICT_TYPE.BPM_MODEL_FORM_TYPE)
+  return options.length > 0
+    ? options
+    : [
+        {
+          dictType: DICT_TYPE.BPM_MODEL_FORM_TYPE,
+          label: '流程表单',
+          value: BpmModelFormType.NORMAL,
+          colorType: '',
+          cssClass: ''
+        },
+        {
+          dictType: DICT_TYPE.BPM_MODEL_FORM_TYPE,
+          label: '业务表单',
+          value: BpmModelFormType.CUSTOM,
+          colorType: '',
+          cssClass: ''
+        }
+      ]
+})
 
 // 创建本地数据副本
 const modelData = defineModel<any>()

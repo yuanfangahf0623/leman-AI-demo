@@ -159,20 +159,20 @@ public class BpmAdminController {
     @PostMapping("/model/create")
     @PreAuthorize("@ss.hasPermission('bpm:model:create')")
     public CommonResult<Long> createModel(@RequestBody Map<String, Object> reqVO) {
-        return CommonResult.success(dataService.create(MODEL, reqVO));
+        return CommonResult.success(dataService.create(MODEL, normalizeModelWrite(reqVO)));
     }
 
     @PutMapping("/model/update")
     @PreAuthorize("@ss.hasPermission('bpm:model:update')")
     public CommonResult<Boolean> updateModel(@RequestBody Map<String, Object> reqVO) {
-        dataService.update(MODEL, reqVO);
+        dataService.update(MODEL, normalizeModelWrite(reqVO));
         return CommonResult.success(true);
     }
 
     @PutMapping("/model/update-bpmn")
     @PreAuthorize("@ss.hasPermission('bpm:model:update')")
     public CommonResult<Boolean> updateModelBpmn(@RequestBody Map<String, Object> reqVO) {
-        dataService.update(MODEL, reqVO);
+        dataService.update(MODEL, normalizeModelWrite(reqVO));
         return CommonResult.success(true);
     }
 
@@ -215,7 +215,7 @@ public class BpmAdminController {
     @PostMapping("/model/simple/update")
     @PreAuthorize("@ss.hasPermission('bpm:model:update')")
     public CommonResult<Boolean> updateSimpleModel(@RequestBody Map<String, Object> reqVO) {
-        dataService.update(MODEL, reqVO);
+        dataService.update(MODEL, normalizeModelWrite(reqVO));
         return CommonResult.success(true);
     }
 
@@ -444,7 +444,26 @@ public class BpmAdminController {
 
     private Map<String, Object> withModelDefault(Map<String, Object> model) {
         model.putIfAbsent("processDefinition", null);
+        model.putIfAbsent("type", 10);
+        model.putIfAbsent("visible", true);
         return model;
+    }
+
+    private Map<String, Object> normalizeModelWrite(Map<String, Object> reqVO) {
+        Map<String, Object> data = new LinkedHashMap<>(reqVO);
+        nullIfBlank(data, "formId");
+        nullIfBlank(data, "formType");
+        nullIfBlank(data, "type");
+        nullIfBlank(data, "startUserType");
+        nullIfBlank(data, "autoApprovalType");
+        return data;
+    }
+
+    private void nullIfBlank(Map<String, Object> data, String key) {
+        Object value = data.get(key);
+        if (value instanceof String stringValue && stringValue.isBlank()) {
+            data.put(key, null);
+        }
     }
 
     private void updateSorts(String tableName, String ids) {

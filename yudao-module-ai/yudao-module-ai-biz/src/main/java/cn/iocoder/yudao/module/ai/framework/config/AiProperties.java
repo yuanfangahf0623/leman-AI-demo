@@ -41,6 +41,8 @@ public class AiProperties {
      */
     private DocumentProperties document = new DocumentProperties();
 
+    private InvoiceProperties invoice = new InvoiceProperties();
+
     public ModelProperties getModel() {
         return model;
     }
@@ -87,6 +89,14 @@ public class AiProperties {
 
     public void setDocument(DocumentProperties document) {
         this.document = document;
+    }
+
+    public InvoiceProperties getInvoice() {
+        return invoice;
+    }
+
+    public void setInvoice(InvoiceProperties invoice) {
+        this.invoice = invoice;
     }
 
     public static class ModelProperties {
@@ -734,6 +744,39 @@ public class AiProperties {
 
         public void setOcr(OcrProperties ocr) {
             this.ocr = ocr;
+        }
+    }
+
+    public static class InvoiceProperties {
+
+        private Integer maxFileSizeMb = 20;
+
+        private String processDefinitionKey = "finance_invoice_approval";
+
+        private Boolean mockApprovalEnabled = true;
+
+        public Integer getMaxFileSizeMb() {
+            return maxFileSizeMb;
+        }
+
+        public void setMaxFileSizeMb(Integer maxFileSizeMb) {
+            this.maxFileSizeMb = maxFileSizeMb;
+        }
+
+        public String getProcessDefinitionKey() {
+            return processDefinitionKey;
+        }
+
+        public void setProcessDefinitionKey(String processDefinitionKey) {
+            this.processDefinitionKey = processDefinitionKey;
+        }
+
+        public Boolean getMockApprovalEnabled() {
+            return mockApprovalEnabled;
+        }
+
+        public void setMockApprovalEnabled(Boolean mockApprovalEnabled) {
+            this.mockApprovalEnabled = mockApprovalEnabled;
         }
     }
 

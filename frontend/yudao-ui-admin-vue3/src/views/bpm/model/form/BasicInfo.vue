@@ -50,7 +50,7 @@
     <el-form-item label="流程类型" prop="type" class="mb-20px">
       <el-radio-group v-model="modelData.type">
         <el-radio
-          v-for="dict in getIntDictOptions(DICT_TYPE.BPM_MODEL_TYPE)"
+          v-for="dict in modelTypeOptions"
           :key="dict.value"
           :value="dict.value"
         >
@@ -160,6 +160,7 @@ import { DICT_TYPE, getBoolDictOptions, getIntDictOptions } from '@/utils/dict'
 import { UserVO } from '@/api/system/user'
 import { DeptVO } from '@/api/system/dept'
 import { CategoryVO } from '@/api/bpm/category'
+import { BpmModelType } from '@/utils/constants'
 
 const props = defineProps({
   categoryList: {
@@ -183,6 +184,27 @@ const selectedManagerUsers = ref<UserVO[]>([])
 const userSelectFormRef = ref()
 const deptSelectFormRef = ref()
 const currentSelectType = ref<'start' | 'manager'>('start')
+const modelTypeOptions = computed(() => {
+  const options = getIntDictOptions(DICT_TYPE.BPM_MODEL_TYPE)
+  return options.length > 0
+    ? options
+    : [
+        {
+          dictType: DICT_TYPE.BPM_MODEL_TYPE,
+          label: 'BPMN 流程',
+          value: BpmModelType.BPMN,
+          colorType: '',
+          cssClass: ''
+        },
+        {
+          dictType: DICT_TYPE.BPM_MODEL_TYPE,
+          label: '简易流程',
+          value: BpmModelType.SIMPLE,
+          colorType: '',
+          cssClass: ''
+        }
+      ]
+})
 
 const rules = {
   name: [{ required: true, message: '流程名称不能为空', trigger: 'blur' }],
@@ -204,7 +226,7 @@ const rules = {
     }
   ],
   category: [{ required: true, message: '流程分类不能为空', trigger: 'blur' }],
-  type: [{ required: true, message: '是否可见不能为空', trigger: 'blur' }],
+  type: [{ required: true, message: '流程类型不能为空', trigger: 'blur' }],
   visible: [{ required: true, message: '是否可见不能为空', trigger: 'blur' }],
   managerUserIds: [{ required: true, message: '流程管理员不能为空', trigger: 'blur' }]
 }

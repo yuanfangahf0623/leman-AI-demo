@@ -215,6 +215,15 @@ export enum DICT_TYPE {
   // ========== ERP - 企业资源计划模块  ==========
   ERP_AUDIT_STATUS = 'erp_audit_status', // ERP 审批状态
   ERP_STOCK_RECORD_BIZ_TYPE = 'erp_stock_record_biz_type', // 库存明细的业务类型
+  FINANCE_INVOICE_SOURCE_TYPE = 'finance_invoice_source_type', // 发票来源
+  FINANCE_INVOICE_AI_STATUS = 'finance_invoice_ai_status', // 发票 AI 状态
+  FINANCE_INVOICE_REVIEW_STATUS = 'finance_invoice_review_status', // 发票财务确认状态
+  FINANCE_INVOICE_APPROVAL_STATUS = 'finance_invoice_approval_status', // 发票审批状态
+  FINANCE_INVOICE_BOOKKEEPING_STATUS = 'finance_invoice_bookkeeping_status', // 发票记账状态
+  FINANCE_INVOICE_PAYMENT_STATUS = 'finance_invoice_payment_status', // 发票付款状态
+  FINANCE_INVOICE_RISK_LEVEL = 'finance_invoice_risk_level', // 发票风险等级
+  FINANCE_INVOICE_EXPENSE_CATEGORY = 'finance_invoice_expense_category', // 发票费用类别
+  FINANCE_INVOICE_RISK_FLAG = 'finance_invoice_risk_flag', // 发票风险标记
 
   // ========== AI - 人工智能模块  ==========
   AI_PLATFORM = 'ai_platform', // AI 平台

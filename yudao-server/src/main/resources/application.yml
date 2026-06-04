@@ -27,6 +27,7 @@ spring:
         - classpath:sql/mysql/ai-module-upgrade-20260528-chatgpt-meeting-actions.sql
         - classpath:sql/mysql/ai-module-upgrade-20260603-teams-meeting-sync.sql
         - classpath:sql/mysql/system-menu-pages-20260509.sql
+        - classpath:sql/mysql/ai-module-upgrade-20260604-finance-invoice.sql
 
 mybatis-plus:
   configuration:
@@ -56,6 +57,10 @@ ai:
       password: ${AI_PGVECTOR_PASSWORD:${POSTGRES_PASSWORD:}}
       table-name: ${AI_PGVECTOR_TABLE_NAME:ai_vector_store}
       dimensions: ${AI_PGVECTOR_DIMENSIONS:1536}
+  invoice:
+    max-file-size-mb: ${AI_INVOICE_MAX_FILE_SIZE_MB:20}
+    process-definition-key: ${AI_INVOICE_PROCESS_DEFINITION_KEY:finance_invoice_approval}
+    mock-approval-enabled: ${AI_INVOICE_MOCK_APPROVAL_ENABLED:true}
   rag:
     engine: ${AI_RAG_ENGINE:fastgpt}
     default-top-k: ${AI_RAG_DEFAULT_TOP_K:5}

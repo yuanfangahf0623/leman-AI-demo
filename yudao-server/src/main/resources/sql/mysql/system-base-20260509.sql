@@ -387,6 +387,16 @@ INSERT IGNORE INTO `system_dict_data` (`id`, `sort`, `label`, `value`, `dict_typ
 (8, 0, '自定义', '0', 'infra_config_type', 0, 'success', 'system', 'system'),
 (9, 1, '系统内置', '1', 'infra_config_type', 0, 'primary', 'system', 'system');
 
+INSERT IGNORE INTO `system_dict_type` (`id`, `name`, `type`, `status`, `creator`, `updater`) VALUES
+(910101, '流程模型类型', 'bpm_model_type', 0, 'system', 'system'),
+(910102, '流程表单类型', 'bpm_model_form_type', 0, 'system', 'system');
+
+INSERT IGNORE INTO `system_dict_data` (`id`, `sort`, `label`, `value`, `dict_type`, `status`, `color_type`, `creator`, `updater`) VALUES
+(910201, 0, 'BPMN 流程', '10', 'bpm_model_type', 0, 'primary', 'system', 'system'),
+(910202, 1, '简易流程', '20', 'bpm_model_type', 0, 'success', 'system', 'system'),
+(910203, 0, '流程表单', '10', 'bpm_model_form_type', 0, 'primary', 'system', 'system'),
+(910204, 1, '业务表单', '20', 'bpm_model_form_type', 0, 'success', 'system', 'system');
+
 INSERT INTO `infra_config`
 (`category`, `name`, `key`, `value`, `type`, `visible`, `remark`, `creator`, `updater`)
 VALUES
