@@ -109,6 +109,35 @@ public interface FinanceInvoiceMapper extends BaseMapper<FinanceInvoiceDO> {
                 .eq(FinanceInvoiceDO::getTenantId, tenantId));
     }
 
+    default int updateRecognitionResultByIdAndTenantId(FinanceInvoiceDO invoice, Long tenantId) {
+        return update(null, Wrappers.lambdaUpdate(FinanceInvoiceDO.class)
+                .set(FinanceInvoiceDO::getSupplierName, invoice.getSupplierName())
+                .set(FinanceInvoiceDO::getSupplierTaxNo, invoice.getSupplierTaxNo())
+                .set(FinanceInvoiceDO::getInvoiceNo, invoice.getInvoiceNo())
+                .set(FinanceInvoiceDO::getInvoiceDate, invoice.getInvoiceDate())
+                .set(FinanceInvoiceDO::getDueDate, invoice.getDueDate())
+                .set(FinanceInvoiceDO::getCurrency, invoice.getCurrency())
+                .set(FinanceInvoiceDO::getNetAmount, invoice.getNetAmount())
+                .set(FinanceInvoiceDO::getVatAmount, invoice.getVatAmount())
+                .set(FinanceInvoiceDO::getGrossAmount, invoice.getGrossAmount())
+                .set(FinanceInvoiceDO::getIban, invoice.getIban())
+                .set(FinanceInvoiceDO::getBic, invoice.getBic())
+                .set(FinanceInvoiceDO::getPaymentAccountName, invoice.getPaymentAccountName())
+                .set(FinanceInvoiceDO::getExpenseCategory, invoice.getExpenseCategory())
+                .set(FinanceInvoiceDO::getBusinessDesc, invoice.getBusinessDesc())
+                .set(FinanceInvoiceDO::getPoNo, invoice.getPoNo())
+                .set(FinanceInvoiceDO::getContractNo, invoice.getContractNo())
+                .set(FinanceInvoiceDO::getProjectName, invoice.getProjectName())
+                .set(FinanceInvoiceDO::getAiStatus, invoice.getAiStatus())
+                .set(FinanceInvoiceDO::getAiConfidence, invoice.getAiConfidence())
+                .set(FinanceInvoiceDO::getAiRawResult, invoice.getAiRawResult())
+                .set(FinanceInvoiceDO::getAiSummary, invoice.getAiSummary())
+                .set(FinanceInvoiceDO::getAiErrorMessage, invoice.getAiErrorMessage())
+                .set(FinanceInvoiceDO::getApprovalStatus, invoice.getApprovalStatus())
+                .eq(FinanceInvoiceDO::getId, invoice.getId())
+                .eq(FinanceInvoiceDO::getTenantId, tenantId));
+    }
+
     default int deleteByIdAndTenantId(Long id, Long tenantId) {
         return delete(Wrappers.lambdaQuery(FinanceInvoiceDO.class)
                 .eq(FinanceInvoiceDO::getId, id)

@@ -5,6 +5,6 @@ package cn.iocoder.yudao.module.ai.service.invoice;
  */
 public interface FinanceInvoiceAiService {
 
-    InvoiceAiResult recognizeInvoice(Long invoiceId, String fileUrl, String fileType);
+    InvoiceAiResult recognizeInvoice(Long invoiceId, String fileUrl, String fileType, byte[] fileContent);
 
 }

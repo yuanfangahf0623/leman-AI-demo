@@ -755,6 +755,31 @@ public class AiProperties {
 
         private Boolean mockApprovalEnabled = true;
 
+        /**
+         * 发票字段识别方式。mock 用于本地开发；model 会把 OCR 文本交给聊天模型抽取结构化字段。
+         */
+        private String recognitionProvider = "mock";
+
+        /**
+         * 发票字段识别模型。为空时使用 ai.model.chat-model。
+         */
+        private String recognitionModel;
+
+        /**
+         * 发送给模型的 OCR 文本最大字符数，避免超长扫描件拖垮请求。
+         */
+        private Integer recognitionMaxOcrChars = 12000;
+
+        /**
+         * 发票字段识别模型最大输出 Token。
+         */
+        private Integer recognitionMaxTokens = 1200;
+
+        /**
+         * 模型识别失败时是否回退到 mock，开发环境默认开启；生产环境建议关闭。
+         */
+        private Boolean recognitionFallbackToMock = true;
+
         public Integer getMaxFileSizeMb() {
             return maxFileSizeMb;
         }
@@ -777,6 +802,46 @@ public class AiProperties {
 
         public void setMockApprovalEnabled(Boolean mockApprovalEnabled) {
             this.mockApprovalEnabled = mockApprovalEnabled;
+        }
+
+        public String getRecognitionProvider() {
+            return recognitionProvider;
+        }
+
+        public void setRecognitionProvider(String recognitionProvider) {
+            this.recognitionProvider = recognitionProvider;
+        }
+
+        public String getRecognitionModel() {
+            return recognitionModel;
+        }
+
+        public void setRecognitionModel(String recognitionModel) {
+            this.recognitionModel = recognitionModel;
+        }
+
+        public Integer getRecognitionMaxOcrChars() {
+            return recognitionMaxOcrChars;
+        }
+
+        public void setRecognitionMaxOcrChars(Integer recognitionMaxOcrChars) {
+            this.recognitionMaxOcrChars = recognitionMaxOcrChars;
+        }
+
+        public Integer getRecognitionMaxTokens() {
+            return recognitionMaxTokens;
+        }
+
+        public void setRecognitionMaxTokens(Integer recognitionMaxTokens) {
+            this.recognitionMaxTokens = recognitionMaxTokens;
+        }
+
+        public Boolean getRecognitionFallbackToMock() {
+            return recognitionFallbackToMock;
+        }
+
+        public void setRecognitionFallbackToMock(Boolean recognitionFallbackToMock) {
+            this.recognitionFallbackToMock = recognitionFallbackToMock;
         }
     }
 
@@ -826,6 +891,20 @@ public class AiProperties {
          * PDF 原生文本长度达到该阈值时跳过 OCR。
          */
         private Integer minTextLengthToSkipOcr = 20;
+
+        private Boolean visionFallbackEnabled = true;
+
+        private String visionModel = "gpt-4o";
+
+        private Integer visionFallbackMaxPages = 5;
+
+        private Integer visionFallbackMaxImageBytes = 6291456;
+
+        private Integer visionFallbackMinTextLength = 40;
+
+        private Double visionFallbackGarbledRatioThreshold = 0.25D;
+
+        private Integer visionFallbackTimeoutSeconds = 90;
 
         public Boolean getEnabled() {
             return enabled;
@@ -897,6 +976,62 @@ public class AiProperties {
 
         public void setMinTextLengthToSkipOcr(Integer minTextLengthToSkipOcr) {
             this.minTextLengthToSkipOcr = minTextLengthToSkipOcr;
+        }
+
+        public Boolean getVisionFallbackEnabled() {
+            return visionFallbackEnabled;
+        }
+
+        public void setVisionFallbackEnabled(Boolean visionFallbackEnabled) {
+            this.visionFallbackEnabled = visionFallbackEnabled;
+        }
+
+        public String getVisionModel() {
+            return visionModel;
+        }
+
+        public void setVisionModel(String visionModel) {
+            this.visionModel = visionModel;
+        }
+
+        public Integer getVisionFallbackMaxPages() {
+            return visionFallbackMaxPages;
+        }
+
+        public void setVisionFallbackMaxPages(Integer visionFallbackMaxPages) {
+            this.visionFallbackMaxPages = visionFallbackMaxPages;
+        }
+
+        public Integer getVisionFallbackMaxImageBytes() {
+            return visionFallbackMaxImageBytes;
+        }
+
+        public void setVisionFallbackMaxImageBytes(Integer visionFallbackMaxImageBytes) {
+            this.visionFallbackMaxImageBytes = visionFallbackMaxImageBytes;
+        }
+
+        public Integer getVisionFallbackMinTextLength() {
+            return visionFallbackMinTextLength;
+        }
+
+        public void setVisionFallbackMinTextLength(Integer visionFallbackMinTextLength) {
+            this.visionFallbackMinTextLength = visionFallbackMinTextLength;
+        }
+
+        public Double getVisionFallbackGarbledRatioThreshold() {
+            return visionFallbackGarbledRatioThreshold;
+        }
+
+        public void setVisionFallbackGarbledRatioThreshold(Double visionFallbackGarbledRatioThreshold) {
+            this.visionFallbackGarbledRatioThreshold = visionFallbackGarbledRatioThreshold;
+        }
+
+        public Integer getVisionFallbackTimeoutSeconds() {
+            return visionFallbackTimeoutSeconds;
+        }
+
+        public void setVisionFallbackTimeoutSeconds(Integer visionFallbackTimeoutSeconds) {
+            this.visionFallbackTimeoutSeconds = visionFallbackTimeoutSeconds;
         }
     }
 }

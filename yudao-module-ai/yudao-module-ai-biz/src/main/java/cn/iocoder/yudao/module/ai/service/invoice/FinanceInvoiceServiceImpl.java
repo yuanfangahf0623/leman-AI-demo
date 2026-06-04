@@ -34,6 +34,7 @@ import org.springframework.web.multipart.MultipartFile;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.math.BigDecimal;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
@@ -172,18 +173,21 @@ public class FinanceInvoiceServiceImpl implements FinanceInvoiceService {
         validateRecognizeStatus(invoice, force);
         updateAiStatus(id, tenantId, FinanceInvoiceConstants.AI_STATUS_RECOGNIZING, null);
         try {
+            byte[] fileContent = readStoredFileContent(invoice);
             InvoiceAiResult aiResult = invoiceAiService.recognizeInvoice(invoice.getId(), invoice.getFileUrl(),
-                    invoice.getFileType());
+                    invoice.getFileType(), fileContent);
             FinanceInvoiceDO updateObj = FinanceInvoiceConvert.INSTANCE.convertAiResult(aiResult);
             updateObj.setId(id);
             if (aiResult.success()) {
                 updateObj.setAiStatus(FinanceInvoiceConstants.AI_STATUS_RECOGNIZED);
-                updateObj.setApprovalStatus(FinanceInvoiceConstants.APPROVAL_STATUS_WAIT_CONFIRM);
+                updateObj.setApprovalStatus(resolveApprovalStatusAfterRecognition(invoice, force,
+                        FinanceInvoiceConstants.APPROVAL_STATUS_WAIT_CONFIRM));
             } else {
                 updateObj.setAiStatus(FinanceInvoiceConstants.AI_STATUS_FAILED);
-                updateObj.setApprovalStatus(FinanceInvoiceConstants.APPROVAL_STATUS_DRAFT);
+                updateObj.setApprovalStatus(resolveApprovalStatusAfterRecognition(invoice, force,
+                        FinanceInvoiceConstants.APPROVAL_STATUS_DRAFT));
             }
-            invoiceMapper.updateByIdAndTenantId(updateObj, tenantId);
+            invoiceMapper.updateRecognitionResultByIdAndTenantId(updateObj, tenantId);
             return validateInvoiceExists(id);
         } catch (Exception ex) {
             updateAiStatus(id, tenantId, FinanceInvoiceConstants.AI_STATUS_FAILED, safeErrorMessage(ex));
@@ -441,13 +445,22 @@ public class FinanceInvoiceServiceImpl implements FinanceInvoiceService {
     }
 
     private void validateRecognizeStatus(FinanceInvoiceDO invoice, boolean force) {
-        if (FinanceInvoiceConstants.APPROVAL_STATUS_APPROVING.equals(invoice.getApprovalStatus())
-                || FinanceInvoiceConstants.APPROVAL_STATUS_APPROVED.equals(invoice.getApprovalStatus())) {
+        if (!force && (FinanceInvoiceConstants.APPROVAL_STATUS_APPROVING.equals(invoice.getApprovalStatus())
+                || FinanceInvoiceConstants.APPROVAL_STATUS_APPROVED.equals(invoice.getApprovalStatus()))) {
             throw new ServiceException(INVOICE_STATUS_INVALID, "Approving or approved invoice cannot be recognized");
         }
         if (!force && FinanceInvoiceConstants.AI_STATUS_RECOGNIZING.equals(invoice.getAiStatus())) {
             throw new ServiceException(INVOICE_STATUS_INVALID, "Invoice is recognizing");
         }
+    }
+
+    private String resolveApprovalStatusAfterRecognition(FinanceInvoiceDO invoice, boolean force,
+                                                         String defaultApprovalStatus) {
+        if (force && (FinanceInvoiceConstants.APPROVAL_STATUS_APPROVING.equals(invoice.getApprovalStatus())
+                || FinanceInvoiceConstants.APPROVAL_STATUS_APPROVED.equals(invoice.getApprovalStatus()))) {
+            return invoice.getApprovalStatus();
+        }
+        return defaultApprovalStatus;
     }
 
     private void validateEditableStatus(FinanceInvoiceDO invoice) {
@@ -529,6 +542,14 @@ public class FinanceInvoiceServiceImpl implements FinanceInvoiceService {
             case "docx" -> "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
             default -> "application/octet-stream";
         };
+    }
+
+    private byte[] readStoredFileContent(FinanceInvoiceDO invoice) {
+        try (InputStream inputStream = fileStorageService.load(invoice.getObjectKey())) {
+            return inputStream.readAllBytes();
+        } catch (IOException ex) {
+            throw new ServiceException(INVOICE_FILE_STORAGE_FAILED, "Read invoice file failed");
+        }
     }
 
     private boolean containsRiskFlag(String riskFlagsJson, String riskFlag) {

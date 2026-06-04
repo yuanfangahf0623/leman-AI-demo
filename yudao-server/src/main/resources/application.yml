@@ -61,6 +61,11 @@ ai:
     max-file-size-mb: ${AI_INVOICE_MAX_FILE_SIZE_MB:20}
     process-definition-key: ${AI_INVOICE_PROCESS_DEFINITION_KEY:finance_invoice_approval}
     mock-approval-enabled: ${AI_INVOICE_MOCK_APPROVAL_ENABLED:true}
+    recognition-provider: ${AI_INVOICE_RECOGNITION_PROVIDER:mock}
+    recognition-model: ${AI_INVOICE_RECOGNITION_MODEL:}
+    recognition-max-ocr-chars: ${AI_INVOICE_RECOGNITION_MAX_OCR_CHARS:12000}
+    recognition-max-tokens: ${AI_INVOICE_RECOGNITION_MAX_TOKENS:1200}
+    recognition-fallback-to-mock: ${AI_INVOICE_RECOGNITION_FALLBACK_TO_MOCK:true}
   rag:
     engine: ${AI_RAG_ENGINE:fastgpt}
     default-top-k: ${AI_RAG_DEFAULT_TOP_K:5}
@@ -115,6 +120,13 @@ ai:
       max-pages: ${AI_DOCUMENT_OCR_MAX_PAGES:20}
       timeout-seconds: ${AI_DOCUMENT_OCR_TIMEOUT_SECONDS:60}
       min-text-length-to-skip-ocr: ${AI_DOCUMENT_OCR_MIN_TEXT_LENGTH_TO_SKIP_OCR:20}
+      vision-fallback-enabled: ${AI_DOCUMENT_OCR_VISION_FALLBACK_ENABLED:true}
+      vision-model: ${AI_DOCUMENT_OCR_VISION_MODEL:gpt-4o}
+      vision-fallback-max-pages: ${AI_DOCUMENT_OCR_VISION_FALLBACK_MAX_PAGES:5}
+      vision-fallback-max-image-bytes: ${AI_DOCUMENT_OCR_VISION_FALLBACK_MAX_IMAGE_BYTES:6291456}
+      vision-fallback-min-text-length: ${AI_DOCUMENT_OCR_VISION_FALLBACK_MIN_TEXT_LENGTH:40}
+      vision-fallback-garbled-ratio-threshold: ${AI_DOCUMENT_OCR_VISION_FALLBACK_GARBLED_RATIO_THRESHOLD:0.25}
+      vision-fallback-timeout-seconds: ${AI_DOCUMENT_OCR_VISION_FALLBACK_TIMEOUT_SECONDS:90}
 
 leman:
   auth:

@@ -32,7 +32,7 @@ import java.util.stream.Stream;
  * <p>该实现不会读取任何 API Key。启用前需要在部署环境安装 Tesseract，并通过配置指定可执行文件。</p>
  */
 @Component
-public class TesseractCliOcrService implements OcrService {
+public class TesseractCliOcrService implements OcrService, ImageRecognitionService {
 
     private static final Logger log = LoggerFactory.getLogger(TesseractCliOcrService.class);
     private static final String PROVIDER = "tesseract-cli";
@@ -54,22 +54,55 @@ public class TesseractCliOcrService implements OcrService {
         if (!isEnabled()) {
             throw new OcrException("OCR 未启用");
         }
-        Instant start = Instant.now();
         OcrProperties properties = getProperties();
         int pageCount = document.getNumberOfPages();
         int ocrPageCount = Math.min(pageCount, resolveMaxPages(properties));
         int dpi = resolveDpi(properties);
+        try {
+            PDFRenderer renderer = new PDFRenderer(document);
+            List<BufferedImage> images = new ArrayList<>(ocrPageCount);
+            for (int pageIndex = 0; pageIndex < ocrPageCount; pageIndex++) {
+                images.add(renderer.renderImageWithDPI(pageIndex, dpi));
+            }
+            OcrResult result = recognizeBufferedImages(images, context, pageCount, ocrPageCount < pageCount, "pdf");
+            result.getMetadata().put("ocrTotalPageCount", pageCount);
+            result.getMetadata().put("ocrMaxPagesReached", ocrPageCount < pageCount);
+            return result;
+        } catch (IOException ex) {
+            log.warn("PDF OCR 图片渲染失败，documentId={}, tenantId={}, knowledgeBaseId={}, errorType={}",
+                    context.getDocumentId(), context.getTenantId(), context.getKnowledgeBaseId(),
+                    ex.getClass().getSimpleName());
+            throw new OcrException("PDF OCR 图片渲染失败", ex);
+        }
+    }
+
+    @Override
+    public OcrResult recognizeImages(List<BufferedImage> images, DocumentParseContext context) throws OcrException {
+        if (!isEnabled()) {
+            throw new OcrException("OCR 未启用");
+        }
+        return recognizeBufferedImages(images, context, images == null ? 0 : images.size(), false, "image");
+    }
+
+    private OcrResult recognizeBufferedImages(List<BufferedImage> images, DocumentParseContext context,
+                                              int totalImageCount, boolean maxPagesReached, String sourceType)
+            throws OcrException {
+        if (images == null || images.isEmpty()) {
+            throw new OcrException("OCR 图片内容为空");
+        }
+        Instant start = Instant.now();
+        OcrProperties properties = getProperties();
+        int dpi = resolveDpi(properties);
         Path tempDirectory = null;
         try {
             tempDirectory = Files.createTempDirectory("ai-ocr-");
-            PDFRenderer renderer = new PDFRenderer(document);
             StringBuilder content = new StringBuilder();
-            for (int pageIndex = 0; pageIndex < ocrPageCount; pageIndex++) {
-                BufferedImage image = renderer.renderImageWithDPI(pageIndex, dpi);
+            for (int pageIndex = 0; pageIndex < images.size(); pageIndex++) {
+                BufferedImage image = images.get(pageIndex);
                 Path imagePath = tempDirectory.resolve("page-" + (pageIndex + 1) + ".png");
                 ImageIO.write(image, "png", imagePath.toFile());
                 content.append(runTesseract(imagePath, properties));
-                if (pageIndex < ocrPageCount - 1) {
+                if (pageIndex < images.size() - 1) {
                     content.append('\n');
                 }
             }
@@ -77,21 +110,22 @@ public class TesseractCliOcrService implements OcrService {
             Map<String, Object> metadata = new LinkedHashMap<>();
             metadata.put("ocr", true);
             metadata.put("ocrProvider", PROVIDER);
+            metadata.put("ocrSourceType", sourceType);
             metadata.put("ocrLanguage", properties.getLanguage());
             metadata.put("ocrDpi", dpi);
-            metadata.put("ocrPageCount", ocrPageCount);
-            metadata.put("ocrTotalPageCount", pageCount);
-            metadata.put("ocrMaxPagesReached", ocrPageCount < pageCount);
+            metadata.put("ocrPageCount", images.size());
+            metadata.put("ocrTotalPageCount", totalImageCount);
+            metadata.put("ocrMaxPagesReached", maxPagesReached);
             metadata.put("ocrCharCount", content.length());
             metadata.put("ocrDurationMs", Duration.between(start, Instant.now()).toMillis());
-            log.info("PDF OCR 识别完成，documentId={}, tenantId={}, knowledgeBaseId={}, pages={}, durationMs={}",
-                    context.getDocumentId(), context.getTenantId(), context.getKnowledgeBaseId(), ocrPageCount,
-                    metadata.get("ocrDurationMs"));
+            log.info("图片 OCR 识别完成，documentId={}, tenantId={}, knowledgeBaseId={}, sourceType={}, images={}, durationMs={}",
+                    context.getDocumentId(), context.getTenantId(), context.getKnowledgeBaseId(), sourceType,
+                    images.size(), metadata.get("ocrDurationMs"));
             return new OcrResult(content.toString(), metadata);
         } catch (IOException ex) {
-            log.warn("PDF OCR 引擎调用失败，documentId={}, tenantId={}, knowledgeBaseId={}, errorType={}",
+            log.warn("图片 OCR 引擎调用失败，documentId={}, tenantId={}, knowledgeBaseId={}, sourceType={}, errorType={}",
                     context.getDocumentId(), context.getTenantId(), context.getKnowledgeBaseId(),
-                    ex.getClass().getSimpleName());
+                    sourceType, ex.getClass().getSimpleName());
             throw new OcrException("OCR 引擎不可用，请检查 Tesseract 配置", ex);
         } finally {
             deleteQuietly(tempDirectory);
