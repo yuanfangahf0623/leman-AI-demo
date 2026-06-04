@@ -1,6 +1,7 @@
 package cn.iocoder.yudao.module.ai.framework.config;
 
 import cn.iocoder.yudao.framework.common.exception.ServiceException;
+import cn.iocoder.yudao.module.ai.framework.meeting.AiTeamsMeetingProperties;
 import cn.iocoder.yudao.module.ai.framework.vector.KnowledgeVectorStore;
 import cn.iocoder.yudao.module.ai.framework.vector.MockKnowledgeVectorStore;
 import cn.iocoder.yudao.module.ai.framework.vector.pgvector.PgVectorKnowledgeVectorStore;
@@ -32,7 +33,7 @@ import static cn.iocoder.yudao.module.ai.enums.AiVectorStoreErrorCodeConstants.V
  * <p>当前阶段注册配置属性和 Embedding 抽象，openai-compatible 暂不创建真实外部客户端。</p>
  */
 @AutoConfiguration
-@EnableConfigurationProperties(AiProperties.class)
+@EnableConfigurationProperties({AiProperties.class, AiTeamsMeetingProperties.class})
 @MapperScan("cn.iocoder.yudao.module.ai.dal.mysql")
 public class AiAutoConfiguration {
 

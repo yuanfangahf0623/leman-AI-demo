@@ -28,11 +28,23 @@ public class AiMeetingDO {
 
     private String sourceType;
 
+    private String sourceMeetingId;
+
+    private String sourceOnlineMeetingId;
+
     private Long knowledgeBaseId;
+
+    private Long transcriptDocumentId;
+
+    private Long minutesDocumentId;
 
     private String minutesStatus;
 
     private String transcriptStatus;
+
+    private String syncStatus;
+
+    private String errorMessage;
 
     private Boolean chatgptVisible;
 

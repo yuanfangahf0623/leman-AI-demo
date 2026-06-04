@@ -17,4 +17,10 @@ public interface AiMeetingActionItemMapper extends BaseMapper<AiMeetingActionIte
                 .orderByAsc(AiMeetingActionItemDO::getId));
     }
 
+    default int deleteByMeetingId(Long tenantId, Long meetingId) {
+        return delete(new LambdaQueryWrapper<AiMeetingActionItemDO>()
+                .eq(AiMeetingActionItemDO::getTenantId, tenantId)
+                .eq(AiMeetingActionItemDO::getMeetingId, meetingId));
+    }
+
 }

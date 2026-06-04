@@ -2,6 +2,7 @@ package cn.iocoder.yudao.module.ai.dal.mysql.chatgpt;
 
 import cn.iocoder.yudao.module.ai.dal.dataobject.meeting.AiMeetingMinutesDO;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
 import org.apache.ibatis.annotations.Mapper;
 
@@ -13,6 +14,19 @@ public interface AiMeetingMinutesMapper extends BaseMapper<AiMeetingMinutesDO> {
                 .eq(AiMeetingMinutesDO::getTenantId, tenantId)
                 .eq(AiMeetingMinutesDO::getMeetingId, meetingId)
                 .last("LIMIT 1"));
+    }
+
+    default int updateByMeetingId(Long tenantId, AiMeetingMinutesDO minutes) {
+        return update(null, new LambdaUpdateWrapper<AiMeetingMinutesDO>()
+                .set(AiMeetingMinutesDO::getTitle, minutes.getTitle())
+                .set(AiMeetingMinutesDO::getSummary, minutes.getSummary())
+                .set(AiMeetingMinutesDO::getKeyPointsJson, minutes.getKeyPointsJson())
+                .set(AiMeetingMinutesDO::getDecisionsJson, minutes.getDecisionsJson())
+                .set(AiMeetingMinutesDO::getActionItemsJson, minutes.getActionItemsJson())
+                .set(AiMeetingMinutesDO::getRisksJson, minutes.getRisksJson())
+                .set(AiMeetingMinutesDO::getOpenQuestionsJson, minutes.getOpenQuestionsJson())
+                .eq(AiMeetingMinutesDO::getTenantId, tenantId)
+                .eq(AiMeetingMinutesDO::getMeetingId, minutes.getMeetingId()));
     }
 
 }

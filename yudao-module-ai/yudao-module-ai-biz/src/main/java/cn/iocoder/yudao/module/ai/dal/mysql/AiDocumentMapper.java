@@ -30,6 +30,14 @@ public interface AiDocumentMapper extends BaseMapper<AiDocumentDO> {
                 .eq(AiDocumentDO::getSourceUri, sourceUri));
     }
 
+    default AiDocumentDO selectBySourceUri(Long tenantId, Long knowledgeBaseId, String sourceUri) {
+        return selectOne(Wrappers.lambdaQuery(AiDocumentDO.class)
+                .eq(AiDocumentDO::getTenantId, tenantId)
+                .eq(AiDocumentDO::getKnowledgeBaseId, knowledgeBaseId)
+                .eq(AiDocumentDO::getSourceUri, sourceUri)
+                .last("LIMIT 1"));
+    }
+
     default int updateSyncDocumentByIdAndTenantId(AiDocumentDO document, Long tenantId) {
         return update(null, Wrappers.lambdaUpdate(AiDocumentDO.class)
                 .set(AiDocumentDO::getDirectoryId, document.getDirectoryId())

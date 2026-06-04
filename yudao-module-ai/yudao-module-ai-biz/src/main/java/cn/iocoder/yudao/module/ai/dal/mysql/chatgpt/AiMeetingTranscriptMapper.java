@@ -2,6 +2,7 @@ package cn.iocoder.yudao.module.ai.dal.mysql.chatgpt;
 
 import cn.iocoder.yudao.module.ai.dal.dataobject.meeting.AiMeetingTranscriptDO;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
 import org.apache.ibatis.annotations.Mapper;
 
@@ -13,6 +14,15 @@ public interface AiMeetingTranscriptMapper extends BaseMapper<AiMeetingTranscrip
                 .eq(AiMeetingTranscriptDO::getTenantId, tenantId)
                 .eq(AiMeetingTranscriptDO::getMeetingId, meetingId)
                 .last("LIMIT 1"));
+    }
+
+    default int updateByMeetingId(Long tenantId, AiMeetingTranscriptDO transcript) {
+        return update(null, new LambdaUpdateWrapper<AiMeetingTranscriptDO>()
+                .set(AiMeetingTranscriptDO::getSourceTranscriptId, transcript.getSourceTranscriptId())
+                .set(AiMeetingTranscriptDO::getCleanedContent, transcript.getCleanedContent())
+                .set(AiMeetingTranscriptDO::getContent, transcript.getContent())
+                .eq(AiMeetingTranscriptDO::getTenantId, tenantId)
+                .eq(AiMeetingTranscriptDO::getMeetingId, transcript.getMeetingId()));
     }
 
 }

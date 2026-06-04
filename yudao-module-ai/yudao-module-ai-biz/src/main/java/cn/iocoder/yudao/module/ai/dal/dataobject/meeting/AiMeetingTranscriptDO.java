@@ -16,6 +16,8 @@ public class AiMeetingTranscriptDO {
 
     private Long meetingId;
 
+    private String sourceTranscriptId;
+
     private String cleanedContent;
 
     private String content;

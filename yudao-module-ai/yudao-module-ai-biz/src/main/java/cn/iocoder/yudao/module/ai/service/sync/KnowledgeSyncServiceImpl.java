@@ -42,6 +42,7 @@ import java.nio.file.Paths;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.time.Duration;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -81,10 +82,23 @@ public class KnowledgeSyncServiceImpl implements KnowledgeSyncService {
     private static final String CALLBACK_TRIGGER_PREFIX = "CALLBACK:";
     private static final int TWO_HAO_HR_MAX_PAGE_SIZE = 50;
     private static final int TWO_HAO_HR_ATTENDANCE_BATCH_SIZE = 50;
+    private static final int TWO_HAO_HR_EMPLOYEE_ID_BATCH_SIZE = 100;
+    private static final int TWO_HAO_HR_RECRUITMENT_PAGE_SIZE = 50;
+    private static final int TWO_HAO_HR_MEETING_ROOM_PAGE_SIZE = 200;
     private static final int TWO_HAO_HR_KNOWLEDGE_RECORD_SAMPLE_LIMIT = 200;
     private static final int TWO_HAO_HR_KNOWLEDGE_RECORD_JSON_MAX_CHARS = 4000;
+    private static final String TWO_HAO_HR_COMPANY_INFO_PATH = "/api/company/info/";
+    private static final String TWO_HAO_HR_LEAVING_EMPLOYEE_LIST_PATH = "/api/employees/leaving_list/";
+    private static final String TWO_HAO_HR_EMPLOYEE_TRANSFER_PATH = "/api/emp_transfer/";
     private static final String TWO_HAO_HR_SALARY_PLAN_LIST_PATH = "/api/smart_salary/biz_sub/plan_list/";
     private static final String TWO_HAO_HR_SALARY_ITEM_LIST_PATH = "/api/smart_salary/biz_sub/item_list/";
+    private static final String TWO_HAO_HR_SMART_SALARY_ATTENDANCE_FIELDS_PATH =
+            "/api/smart_salary/attendance_stat/attendance_fields/";
+    private static final String TWO_HAO_HR_INTENTION_EMPLOYEE_SEARCH_PATH = "/api/intention_employee/search/";
+    private static final String TWO_HAO_HR_ENTRY_ID_LOOKUP_PATH = "/api/base/get_entry_id/";
+    private static final String TWO_HAO_HR_ENTRY_INFO_PATH = "/api/employee/emp_entry_sign/get_entry_info/";
+    private static final String TWO_HAO_HR_MEETING_ROOM_LIST_PATH = "/api/meeting_room/meeting_room_list/";
+    private static final String TWO_HAO_HR_ROOM_BOOKING_LIST_PATH = "/api/meeting_room/room_booking_list/";
     private static final String TWO_HAO_HR_SALARY_ITEM_LIST_TYPE = "smart_salary_item_list";
 
     private final AiSyncJobMapper syncJobMapper;
@@ -532,11 +546,11 @@ public class KnowledgeSyncServiceImpl implements KnowledgeSyncService {
         endpoints.add(getEndpoint("hr", "leave_employee_list", "2号人事部离职员工列表",
                 "/api/employees/leave_list/", Map.of(), true));
         endpoints.add(getEndpoint("hr", "leaving_employee_list", "2号人事部待离职员工列表",
-                "/api/employees/leaving_list/", Map.of(), true));
+                TWO_HAO_HR_LEAVING_EMPLOYEE_LIST_PATH, Map.of(), true));
         endpoints.add(getEndpoint("hr", "employee_custom_fields", "2号人事部员工自定义字段",
                 "/api/employees/custom/", Map.of(), false));
         endpoints.add(getEndpoint("hr", "employee_transfer", "2号人事部人事异动",
-                "/api/emp_transfer/", Map.of(), true));
+                TWO_HAO_HR_EMPLOYEE_TRANSFER_PATH, Map.of(), false));
         endpoints.add(postEndpoint("attendance", "attendance_card_record", "2号人事部打卡记录",
                 "/api/attendance/card_record/", dateRangePayload, true));
         endpoints.add(postEndpoint("attendance", "attendance_card_result", "2号人事部打卡结果",
@@ -560,7 +574,7 @@ public class KnowledgeSyncServiceImpl implements KnowledgeSyncService {
         endpoints.add(getEndpoint("smart_salary", "smart_salary_item_list", "2号人事部智能薪酬项目",
                 "/api/smart_salary/biz_sub/item_list/", Map.of(), false));
         endpoints.add(getEndpoint("smart_salary", "smart_salary_attendance_fields", "2号人事部薪酬考勤字段",
-                "/api/smart_salary/attendance_stat/attendance_fields/", Map.of(), false));
+                TWO_HAO_HR_SMART_SALARY_ATTENDANCE_FIELDS_PATH, Map.of(), false));
         endpoints.add(getEndpoint("salary", "payslip_info", "2号人事部电子工资条",
                 "/api/payslip/payslip_info/", yearMonthQuery, true));
         endpoints.add(postEndpoint("performance", "performance_plan_list", "2号人事部绩效计划",
@@ -570,7 +584,11 @@ public class KnowledgeSyncServiceImpl implements KnowledgeSyncService {
         endpoints.add(postEndpoint("performance", "performance_examine_list", "2号人事部绩效考核列表",
                 "/api/performance/plan/examine/list/", Map.of(), true));
         endpoints.add(getEndpoint("recruitment", "recruitment_interview", "2号人事部招聘面试",
-                "/api/recruitment/interview/", Map.of(), true));
+                "/api/recruitment/interview/", Map.of(
+                        "start_date", config.getApprovalAddStartDate(),
+                        "end_date", config.getApprovalAddEndDate(),
+                        "limit", String.valueOf(TWO_HAO_HR_RECRUITMENT_PAGE_SIZE)
+                ), true));
         endpoints.add(getEndpoint("social_security", "security_overview", "2号人事部社保信息",
                 "/api/security/", Map.of(), false));
         endpoints.add(getEndpoint("econtract", "econtract_sign_balance", "2号人事部电子合同签署额度",
@@ -584,11 +602,11 @@ public class KnowledgeSyncServiceImpl implements KnowledgeSyncService {
         endpoints.add(getEndpoint("training", "entry_form_list", "2号人事部入职登记表模板",
                 "/api/employee/emp_entry_sign/form_list/", Map.of(), false));
         endpoints.add(getEndpoint("training", "entry_info_list", "2号人事部入职登记信息",
-                "/api/employee/emp_entry_sign/get_entry_info/", Map.of(), true));
+                TWO_HAO_HR_ENTRY_INFO_PATH, Map.of(), false));
         endpoints.add(getEndpoint("admin", "meeting_room_list", "2号人事部会议室列表",
-                "/api/meeting_room/meeting_room_list/", Map.of(), false));
+                TWO_HAO_HR_MEETING_ROOM_LIST_PATH, Map.of(), false));
         endpoints.add(postEndpoint("admin", "room_booking_list", "2号人事部会议室预定",
-                "/api/meeting_room/room_booking_list/", dateRangePayload, true));
+                TWO_HAO_HR_ROOM_BOOKING_LIST_PATH, Map.of(), true));
         endpoints.add(getEndpoint("settings", "settings_contract_companies", "2号人事部设置-合同公司",
                 "/api/contract_companies/", Map.of(), false));
         endpoints.add(getEndpoint("settings", "settings_work_places", "2号人事部设置-工作地点",
@@ -674,8 +692,26 @@ public class KnowledgeSyncServiceImpl implements KnowledgeSyncService {
 
     private List<JsonNode> fetchTwoHaoHrEndpointRecords(TwoHaoHrDataSourceConfig config,
                                                        TwoHaoHrReadEndpoint endpoint) {
+        if ("leaving_employee_list".equals(endpoint.objectType())) {
+            return fetchTwoHaoHrLeavingEmployeeRecords(config);
+        }
+        if ("employee_transfer".equals(endpoint.objectType())) {
+            return fetchTwoHaoHrEmployeeTransferRecords(config);
+        }
         if (TWO_HAO_HR_SALARY_ITEM_LIST_TYPE.equals(endpoint.objectType())) {
             return fetchTwoHaoHrSalaryItemRecords(config);
+        }
+        if ("smart_salary_attendance_fields".equals(endpoint.objectType())) {
+            return fetchTwoHaoHrSmartSalaryAttendanceFieldRecords(config);
+        }
+        if ("entry_info_list".equals(endpoint.objectType())) {
+            return fetchTwoHaoHrEntryInfoRecords(config);
+        }
+        if ("meeting_room_list".equals(endpoint.objectType())) {
+            return fetchTwoHaoHrMeetingRoomRecords(config);
+        }
+        if ("room_booking_list".equals(endpoint.objectType())) {
+            return fetchTwoHaoHrRoomBookingRecords(config);
         }
         if ("POST".equals(endpoint.method())) {
             if (endpoint.paged()) {
@@ -687,6 +723,33 @@ public class KnowledgeSyncServiceImpl implements KnowledgeSyncService {
             return twoHaoHrOpenApiClient.fetchPagedObjectsByGet(config, endpoint.path(), endpoint.queryParams());
         }
         return recordsOf(twoHaoHrOpenApiClient.fetchRawDataByGet(config, endpoint.path(), endpoint.queryParams()));
+    }
+
+    private List<JsonNode> fetchTwoHaoHrLeavingEmployeeRecords(TwoHaoHrDataSourceConfig config) {
+        List<JsonNode> records = new ArrayList<>();
+        Set<String> seenKeys = new LinkedHashSet<>();
+        for (String date : datesBetween(config.getApprovalAddStartDate(), config.getApprovalAddEndDate())) {
+            addUniqueRecords(records, seenKeys, twoHaoHrOpenApiClient.fetchPagedObjectsByGet(config,
+                    TWO_HAO_HR_LEAVING_EMPLOYEE_LIST_PATH, Map.of("leave_date", date)));
+            addUniqueRecords(records, seenKeys, twoHaoHrOpenApiClient.fetchPagedObjectsByGet(config,
+                    TWO_HAO_HR_LEAVING_EMPLOYEE_LIST_PATH, Map.of("leave_approved_date", date)));
+        }
+        return records;
+    }
+
+    private List<JsonNode> fetchTwoHaoHrEmployeeTransferRecords(TwoHaoHrDataSourceConfig config) {
+        List<String> employeeIds = fetchTwoHaoHrEmployeeIds(config);
+        if (employeeIds.isEmpty()) {
+            return List.of();
+        }
+        List<JsonNode> records = new ArrayList<>();
+        for (int from = 0; from < employeeIds.size(); from += TWO_HAO_HR_EMPLOYEE_ID_BATCH_SIZE) {
+            int to = Math.min(from + TWO_HAO_HR_EMPLOYEE_ID_BATCH_SIZE, employeeIds.size());
+            String ids = String.join(",", employeeIds.subList(from, to));
+            records.addAll(recordsOf(twoHaoHrOpenApiClient.fetchRawDataByGet(config,
+                    TWO_HAO_HR_EMPLOYEE_TRANSFER_PATH, Map.of("ids", ids))));
+        }
+        return records;
     }
 
     private List<JsonNode> fetchTwoHaoHrSalaryItemRecords(TwoHaoHrDataSourceConfig config) {
@@ -711,6 +774,43 @@ public class KnowledgeSyncServiceImpl implements KnowledgeSyncService {
         return records;
     }
 
+    private List<JsonNode> fetchTwoHaoHrSmartSalaryAttendanceFieldRecords(TwoHaoHrDataSourceConfig config) {
+        String companyId = fetchTwoHaoHrCompanyId(config);
+        List<JsonNode> records = new ArrayList<>();
+        for (int attendCode : List.of(1, 2)) {
+            Map<String, String> queryParams = new LinkedHashMap<>();
+            queryParams.put("attend_code", String.valueOf(attendCode));
+            if (!companyId.isBlank()) {
+                queryParams.put("company_id", companyId);
+            }
+            List<JsonNode> fields = recordsOf(twoHaoHrOpenApiClient.fetchRawDataByGet(config,
+                    TWO_HAO_HR_SMART_SALARY_ATTENDANCE_FIELDS_PATH, queryParams));
+            for (JsonNode field : fields) {
+                records.add(enrichTwoHaoHrAttendanceField(field, attendCode, companyId));
+            }
+        }
+        return records;
+    }
+
+    private String fetchTwoHaoHrCompanyId(TwoHaoHrDataSourceConfig config) {
+        try {
+            return text(twoHaoHrOpenApiClient.fetchRawDataByGet(config, TWO_HAO_HR_COMPANY_INFO_PATH, Map.of()), "id");
+        } catch (ServiceException ex) {
+            log.warn("2hao HR company id lookup failed for smart salary attendance fields, errorType={}",
+                    ex.getClass().getSimpleName());
+            return "";
+        }
+    }
+
+    private JsonNode enrichTwoHaoHrAttendanceField(JsonNode field, int attendCode, String companyId) {
+        ObjectNode enriched = field != null && field.isObject() ? field.deepCopy() : objectMapper.createObjectNode();
+        enriched.put("attend_code", attendCode);
+        if (!companyId.isBlank()) {
+            enriched.put("company_id", companyId);
+        }
+        return enriched;
+    }
+
     private JsonNode enrichTwoHaoHrSalaryItem(JsonNode item, JsonNode plan) {
         if (!item.isObject()) {
             return item;
@@ -729,6 +829,106 @@ public class KnowledgeSyncServiceImpl implements KnowledgeSyncService {
             enriched.set("sub_plan_type", planType);
         }
         return enriched;
+    }
+
+    private List<JsonNode> fetchTwoHaoHrEntryInfoRecords(TwoHaoHrDataSourceConfig config) {
+        List<JsonNode> candidates = twoHaoHrOpenApiClient.fetchPagedObjectsByGet(config,
+                TWO_HAO_HR_INTENTION_EMPLOYEE_SEARCH_PATH, Map.of());
+        if (candidates.isEmpty()) {
+            return List.of();
+        }
+        List<JsonNode> records = new ArrayList<>();
+        Set<String> seenEntryIds = new LinkedHashSet<>();
+        for (JsonNode candidate : candidates) {
+            String entryId = text(candidate, "entry_id", "entryId");
+            if (entryId.isBlank()) {
+                entryId = fetchTwoHaoHrEntryIdByMobile(config, text(candidate, "mobile", "phone"));
+            }
+            if (entryId.isBlank() || !seenEntryIds.add(entryId)) {
+                continue;
+            }
+            try {
+                JsonNode entryInfo = twoHaoHrOpenApiClient.fetchRawDataByGet(config, TWO_HAO_HR_ENTRY_INFO_PATH,
+                        Map.of("entry_id", entryId));
+                records.add(enrichTwoHaoHrEntryInfo(entryInfo, candidate, entryId));
+            } catch (ServiceException ex) {
+                log.warn("2hao HR entry info lookup failed, candidateId={}, errorType={}",
+                        text(candidate, "id"), ex.getClass().getSimpleName());
+            }
+        }
+        return records;
+    }
+
+    private String fetchTwoHaoHrEntryIdByMobile(TwoHaoHrDataSourceConfig config, String mobile) {
+        if (mobile == null || mobile.isBlank()) {
+            return "";
+        }
+        try {
+            return text(twoHaoHrOpenApiClient.fetchRawDataByGet(config, TWO_HAO_HR_ENTRY_ID_LOOKUP_PATH,
+                    Map.of("mobile", mobile)), "entry_id");
+        } catch (ServiceException ex) {
+            log.warn("2hao HR entry id lookup failed, errorType={}", ex.getClass().getSimpleName());
+            return "";
+        }
+    }
+
+    private JsonNode enrichTwoHaoHrEntryInfo(JsonNode entryInfo, JsonNode candidate, String entryId) {
+        ObjectNode enriched = entryInfo != null && entryInfo.isObject() ? entryInfo.deepCopy() : objectMapper.createObjectNode();
+        enriched.put("entry_id", entryId);
+        String intentionEmployeeId = text(candidate, "id");
+        if (!intentionEmployeeId.isBlank()) {
+            enriched.put("intention_employee_id", intentionEmployeeId);
+        }
+        String name = text(candidate, "name", "user_name", "emp_name");
+        if (!name.isBlank()) {
+            enriched.put("candidate_name", name);
+        }
+        return enriched;
+    }
+
+    private List<JsonNode> fetchTwoHaoHrMeetingRoomRecords(TwoHaoHrDataSourceConfig config) {
+        List<JsonNode> records = new ArrayList<>();
+        int page = 1;
+        int totalPage = 1;
+        while (page <= totalPage && page <= config.getMaxPages()) {
+            JsonNode pageData = twoHaoHrOpenApiClient.fetchRawDataByGet(config, TWO_HAO_HR_MEETING_ROOM_LIST_PATH,
+                    Map.of("p", String.valueOf(page), "limit", String.valueOf(TWO_HAO_HR_MEETING_ROOM_PAGE_SIZE)));
+            records.addAll(recordsOfArrayField(pageData, "room_info_list"));
+            totalPage = Math.max(1, pageData.path("totalpage").asInt(1));
+            page++;
+        }
+        return records;
+    }
+
+    private List<JsonNode> fetchTwoHaoHrRoomBookingRecords(TwoHaoHrDataSourceConfig config) {
+        List<JsonNode> rooms = fetchTwoHaoHrMeetingRoomRecords(config);
+        if (rooms.isEmpty()) {
+            return List.of();
+        }
+        List<JsonNode> records = new ArrayList<>();
+        Set<String> seenKeys = new LinkedHashSet<>();
+        for (JsonNode room : rooms) {
+            String roomId = text(room, "room_id");
+            if (roomId.isBlank()) {
+                continue;
+            }
+            int page = 1;
+            int totalPage = 1;
+            while (page <= totalPage && page <= config.getMaxPages()) {
+                Map<String, Object> payload = new LinkedHashMap<>();
+                payload.put("room_id", roomId);
+                payload.put("start_time", config.getApprovalAddStartDate() + " 00:00:00");
+                payload.put("end_time", config.getApprovalAddEndDate() + " 23:59:59");
+                payload.put("p", page);
+                payload.put("limit", TWO_HAO_HR_MEETING_ROOM_PAGE_SIZE);
+                JsonNode pageData = twoHaoHrOpenApiClient.fetchRawDataByPost(config, TWO_HAO_HR_ROOM_BOOKING_LIST_PATH,
+                        payload);
+                addUniqueRecords(records, seenKeys, recordsOfArrayField(pageData, "room_booking_info_list"));
+                totalPage = Math.max(1, pageData.path("totalpage").asInt(1));
+                page++;
+            }
+        }
+        return records;
     }
 
     private String buildTwoHaoHrRawRecordsMarkdown(TwoHaoHrReadEndpoint endpoint, List<JsonNode> records) {
@@ -790,6 +990,50 @@ public class KnowledgeSyncServiceImpl implements KnowledgeSyncService {
                 flattenAny(child, records);
             }
         }
+    }
+
+    private List<String> datesBetween(String startDate, String endDate) {
+        try {
+            LocalDate start = LocalDate.parse(startDate);
+            LocalDate end = LocalDate.parse(endDate);
+            if (end.isBefore(start)) {
+                return List.of(start.toString());
+            }
+            List<String> dates = new ArrayList<>();
+            LocalDate current = start;
+            while (!current.isAfter(end)) {
+                dates.add(current.toString());
+                current = current.plusDays(1);
+            }
+            return dates;
+        } catch (Exception ex) {
+            return startDate == null || startDate.isBlank() ? List.of() : List.of(startDate);
+        }
+    }
+
+    private void addUniqueRecords(List<JsonNode> target, Set<String> seenKeys, List<JsonNode> records) {
+        for (JsonNode record : records) {
+            String key = text(record, "id", "employee_id", "emp_id", "meeting_id", "entry_id");
+            if (key.isBlank()) {
+                key = record.toString();
+            }
+            if (seenKeys.add(key)) {
+                target.add(record);
+            }
+        }
+    }
+
+    private List<JsonNode> recordsOfArrayField(JsonNode data, String fieldName) {
+        if (data == null || data.isMissingNode() || data.isNull()) {
+            return List.of();
+        }
+        JsonNode field = data.path(fieldName);
+        if (!field.isArray()) {
+            return List.of();
+        }
+        List<JsonNode> records = new ArrayList<>();
+        field.forEach(records::add);
+        return records;
     }
 
     private List<JsonNode> recordsOf(JsonNode data) {

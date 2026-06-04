@@ -25,6 +25,7 @@ spring:
         - classpath:sql/mysql/ai-module.sql
         - classpath:sql/mysql/ai-module-upgrade-20260522-fastgpt-citation-source.sql
         - classpath:sql/mysql/ai-module-upgrade-20260528-chatgpt-meeting-actions.sql
+        - classpath:sql/mysql/ai-module-upgrade-20260603-teams-meeting-sync.sql
         - classpath:sql/mysql/system-menu-pages-20260509.sql
 
 mybatis-plus:
@@ -74,6 +75,22 @@ ai:
       max-transcript-chars: ${CHATGPT_ACTION_MAX_TRANSCRIPT_CHARS:20000}
       default-top-k: ${CHATGPT_ACTION_DEFAULT_TOP_K:5}
       enable-sensitive-mask: ${CHATGPT_ACTION_ENABLE_SENSITIVE_MASK:true}
+  teams:
+    meeting:
+      enabled: ${TEAMS_MEETING_SYNC_ENABLED:false}
+      graph-base-url: ${TEAMS_GRAPH_BASE_URL:https://graph.microsoft.com/v1.0}
+      login-base-url: ${TEAMS_LOGIN_BASE_URL:https://login.microsoftonline.com}
+      tenant-id: ${MICROSOFT_TENANT_ID:}
+      client-id: ${MICROSOFT_CLIENT_ID:}
+      client-secret: ${MICROSOFT_CLIENT_SECRET:}
+      default-organizer-user-id: ${TEAMS_MEETING_DEFAULT_ORGANIZER_USER_ID:}
+      default-knowledge-base-id: ${TEAMS_MEETING_DEFAULT_KNOWLEDGE_BASE_ID:}
+      default-chatgpt-visible: ${TEAMS_MEETING_DEFAULT_CHATGPT_VISIBLE:false}
+      default-sensitivity-level: ${TEAMS_MEETING_DEFAULT_SENSITIVITY_LEVEL:NORMAL}
+      sync-top: ${TEAMS_MEETING_SYNC_TOP:50}
+      transcript-max-chars: ${TEAMS_MEETING_TRANSCRIPT_MAX_CHARS:200000}
+      connect-timeout-seconds: ${TEAMS_MEETING_CONNECT_TIMEOUT_SECONDS:10}
+      read-timeout-seconds: ${TEAMS_MEETING_READ_TIMEOUT_SECONDS:120}
   document:
     default-chunk-size: ${AI_DOCUMENT_DEFAULT_CHUNK_SIZE:800}
     default-chunk-overlap: ${AI_DOCUMENT_DEFAULT_CHUNK_OVERLAP:100}
