@@ -61,12 +61,32 @@ docker compose -f deploy/dev/docker-compose.middleware.yml logs -f nacos
 | Redis | `127.0.0.1:6379` | 无 | `redis123` |
 | Nacos | `http://127.0.0.1:8848/nacos` | 本地默认未开启认证 | 本地默认未开启认证 |
 | PostgreSQL + pgvector | `127.0.0.1:5432` | `postgres` | `postgres` |
-| MinIO API | `http://127.0.0.1:9000` | `minioadmin` | `minioadmin` |
-| MinIO Console | `http://127.0.0.1:9001` | `minioadmin` | `minioadmin` |
+| MinIO API | `http://192.168.19.246:9000` | configured on Synology | configured on Synology |
+| MinIO Console | `http://192.168.19.246:9001` | configured on Synology | configured on Synology |
 | Qdrant HTTP | `http://127.0.0.1:6333` | 无 | 无 |
 | Qdrant gRPC | `127.0.0.1:6334` | 无 | 无 |
 | RabbitMQ | `127.0.0.1:5672` | `admin` | `rabbitmq123` |
 | RabbitMQ Console | `http://127.0.0.1:15672` | `admin` | `rabbitmq123` |
+
+## AI document object storage
+
+Backend document uploads use Synology MinIO by default:
+
+```text
+AI_DOCUMENT_STORAGE_TYPE=minio
+AI_DOCUMENT_MINIO_ENDPOINT=http://192.168.19.246:9000
+AI_DOCUMENT_MINIO_EXTERNAL_ENDPOINT=http://192.168.19.246:9000
+AI_DOCUMENT_MINIO_BUCKET=yudao-ai-documents
+AI_DOCUMENT_MINIO_REGION=us-east-1
+AI_DOCUMENT_MINIO_ACCESS_KEY=<set in local/user env>
+AI_DOCUMENT_MINIO_SECRET_KEY=<set in local/user env>
+```
+
+The local MinIO compose service is kept only as an explicit fallback profile:
+
+```powershell
+docker compose -f deploy/dev/docker-compose.middleware.yml --profile local-minio up -d minio
+```
 
 ## OCR 运行依赖
 
@@ -123,6 +143,8 @@ POSTGRES_PORT, POSTGRES_DB, POSTGRES_USER, POSTGRES_PASSWORD
 MINIO_API_PORT, MINIO_CONSOLE_PORT, MINIO_ROOT_USER, MINIO_ROOT_PASSWORD
 QDRANT_HTTP_PORT, QDRANT_GRPC_PORT
 RABBITMQ_PORT, RABBITMQ_MANAGEMENT_PORT, RABBITMQ_DEFAULT_USER, RABBITMQ_DEFAULT_PASS
+AI_DOCUMENT_STORAGE_TYPE, AI_DOCUMENT_MINIO_ENDPOINT, AI_DOCUMENT_MINIO_EXTERNAL_ENDPOINT, AI_DOCUMENT_MINIO_BUCKET
+AI_DOCUMENT_MINIO_ACCESS_KEY, AI_DOCUMENT_MINIO_SECRET_KEY, AI_DOCUMENT_MINIO_REGION
 AI_DOCUMENT_OCR_ENABLED, AI_DOCUMENT_OCR_TESSERACT_EXECUTABLE, AI_DOCUMENT_OCR_TESSDATA_DIRECTORY, AI_DOCUMENT_OCR_LANGUAGE
 ```
 

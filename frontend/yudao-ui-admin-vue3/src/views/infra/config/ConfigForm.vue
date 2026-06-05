@@ -17,7 +17,20 @@
         <el-input v-model="formData.key" placeholder="请输入参数键名" />
       </el-form-item>
       <el-form-item label="参数键值" prop="value">
-        <el-input v-model="formData.value" placeholder="请输入参数键值" />
+        <el-select
+          v-if="isAiDocumentStorageTypeConfig"
+          v-model="formData.value"
+          placeholder="请选择存储方式"
+          class="w-1/1"
+        >
+          <el-option
+            v-for="item in aiDocumentStorageTypeOptions"
+            :key="item.value"
+            :label="item.label"
+            :value="item.value"
+          />
+        </el-select>
+        <el-input v-else v-model="formData.value" placeholder="请输入参数键值" />
       </el-form-item>
       <el-form-item label="是否可见" prop="visible">
         <el-radio-group v-model="formData.visible">
@@ -62,6 +75,14 @@ const formData = ref({
   visible: true,
   remark: ''
 })
+const AI_DOCUMENT_STORAGE_TYPE_KEY = 'AI_DOCUMENT_STORAGE_TYPE'
+const aiDocumentStorageTypeOptions = [
+  { label: '群晖存储', value: 'minio' },
+  { label: '本地存储', value: 'local' }
+]
+const isAiDocumentStorageTypeConfig = computed(
+  () => formData.value.key === AI_DOCUMENT_STORAGE_TYPE_KEY
+)
 const formRules = reactive({
   category: [{ required: true, message: '参数分类不能为空', trigger: 'blur' }],
   name: [{ required: true, message: '参数名称不能为空', trigger: 'blur' }],

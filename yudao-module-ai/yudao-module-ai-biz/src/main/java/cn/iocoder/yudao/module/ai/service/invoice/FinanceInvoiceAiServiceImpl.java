@@ -2,7 +2,6 @@ package cn.iocoder.yudao.module.ai.service.invoice;
 
 import cn.iocoder.yudao.framework.common.exception.ServiceException;
 import cn.iocoder.yudao.module.ai.enums.FinanceInvoiceConstants;
-import cn.iocoder.yudao.module.ai.framework.config.AiProperties;
 import cn.iocoder.yudao.module.ai.framework.ocr.ImageRecognitionService;
 import cn.iocoder.yudao.module.ai.framework.ocr.OcrException;
 import cn.iocoder.yudao.module.ai.framework.ocr.OcrResult;
@@ -18,6 +17,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.pdfbox.pdmodel.PDDocument;
+import org.apache.pdfbox.text.PDFTextStripper;
 import org.springframework.stereotype.Service;
 
 import javax.imageio.ImageIO;
@@ -68,7 +68,7 @@ public class FinanceInvoiceAiServiceImpl implements FinanceInvoiceAiService {
     private final OcrService ocrService;
     private final ImageRecognitionService imageRecognitionService;
     private final AiChatModelService aiChatModelService;
-    private final AiProperties aiProperties;
+    private final AiInvoiceRecognitionConfigService invoiceRecognitionConfigService;
 
     @Override
     public InvoiceAiResult recognizeInvoice(Long invoiceId, String fileUrl, String fileType, byte[] fileContent) {
@@ -78,7 +78,7 @@ public class FinanceInvoiceAiServiceImpl implements FinanceInvoiceAiService {
             if (modelResult != null && modelResult.success()) {
                 return modelResult;
             }
-            if (!Boolean.TRUE.equals(aiProperties.getInvoice().getRecognitionFallbackToMock())) {
+            if (!invoiceRecognitionConfigService.isRecognitionFallbackToMock()) {
                 return modelResult == null ? failedResult("Invoice model recognition failed") : modelResult;
             }
         }
@@ -94,7 +94,7 @@ public class FinanceInvoiceAiServiceImpl implements FinanceInvoiceAiService {
         }
         String ocrText = truncateOcrText(normalizeOcrText(ocrExtraction.content()));
         AiChatModelRequest request = AiChatModelRequest.builder()
-                .model(blankToNull(aiProperties.getInvoice().getRecognitionModel()))
+                .model(blankToNull(invoiceRecognitionConfigService.getRecognitionModel()))
                 .systemPrompt(buildSystemPrompt())
                 .userPrompt(buildUserPrompt(fileType, ocrText))
                 .temperature(0D)
@@ -261,11 +261,15 @@ public class FinanceInvoiceAiServiceImpl implements FinanceInvoiceAiService {
                 .build();
         try {
             if ("pdf".equals(extension)) {
+                String pdfText = extractPdfText(fileContent);
                 if (!ocrService.isEnabled()) {
-                    return OcrExtractionResult.skipped("ocr-disabled");
+                    return pdfText == null || pdfText.isBlank()
+                            ? OcrExtractionResult.skipped("ocr-disabled")
+                            : OcrExtractionResult.success(new OcrResult(pdfText,
+                            Map.of("source", "pdfbox", "ocrSkippedReason", "ocr-disabled")));
                 }
                 try (PDDocument document = PDDocument.load(new ByteArrayInputStream(fileContent))) {
-                    return OcrExtractionResult.success(ocrService.recognizePdf(document, context));
+                    return mergePdfTextAndOcrText(pdfText, ocrService.recognizePdf(document, context));
                 }
             }
             if (FinanceInvoiceConstants.IMAGE_EXTENSIONS.contains(extension)) {
@@ -282,6 +286,44 @@ public class FinanceInvoiceAiServiceImpl implements FinanceInvoiceAiService {
         } catch (OcrException | IOException ex) {
             return OcrExtractionResult.failed(ex.getClass().getSimpleName());
         }
+    }
+
+    private String extractPdfText(byte[] fileContent) {
+        try (PDDocument document = PDDocument.load(new ByteArrayInputStream(fileContent))) {
+            return normalizeOcrText(new PDFTextStripper().getText(document));
+        } catch (IOException ex) {
+            return "";
+        }
+    }
+
+    private OcrExtractionResult mergePdfTextAndOcrText(String pdfText, OcrResult ocrResult) {
+        String normalizedPdfText = normalizeOcrText(pdfText);
+        String normalizedOcrText = normalizeOcrText(ocrResult == null ? null : ocrResult.getContent());
+        Map<String, Object> metadata = new LinkedHashMap<>();
+        metadata.put("source", "pdfbox+ocr");
+        if (ocrResult != null && ocrResult.getMetadata() != null) {
+            metadata.putAll(ocrResult.getMetadata());
+        }
+        if (normalizedPdfText != null && !normalizedPdfText.isBlank()) {
+            metadata.put("pdfTextChars", normalizedPdfText.length());
+        }
+        if (normalizedOcrText != null && !normalizedOcrText.isBlank()) {
+            metadata.put("ocrTextChars", normalizedOcrText.length());
+        }
+        StringBuilder content = new StringBuilder();
+        if (normalizedPdfText != null && !normalizedPdfText.isBlank()) {
+            content.append(normalizedPdfText);
+        }
+        if (normalizedOcrText != null && !normalizedOcrText.isBlank()) {
+            if (!content.isEmpty()) {
+                content.append("\n\n[OCR_TEXT]\n");
+            }
+            content.append(normalizedOcrText);
+        }
+        if (content.isEmpty()) {
+            return OcrExtractionResult.success(ocrResult);
+        }
+        return OcrExtractionResult.success(new OcrResult(content.toString(), metadata));
     }
 
     private String normalizeFileType(String fileType) {
@@ -332,7 +374,7 @@ public class FinanceInvoiceAiServiceImpl implements FinanceInvoiceAiService {
     }
 
     private boolean isModelRecognitionEnabled() {
-        String provider = aiProperties.getInvoice().getRecognitionProvider();
+        String provider = invoiceRecognitionConfigService.getRecognitionProvider();
         return PROVIDER_MODEL.equalsIgnoreCase(provider)
                 || "llm".equalsIgnoreCase(provider)
                 || "openai-compatible".equalsIgnoreCase(provider);
@@ -514,7 +556,7 @@ public class FinanceInvoiceAiServiceImpl implements FinanceInvoiceAiService {
 
     private int countMojibakeMarkers(String text) {
         int count = 0;
-        String markers = "äåæçèéöüÄÅÆÇÈÉÂÃ";
+        String markers = "äåæçèéöüÄÅÆÇÈÉÂÃ¤»¬¼";
         for (int i = 0; i < text.length(); i++) {
             if (markers.indexOf(text.charAt(i)) >= 0) {
                 count++;
@@ -524,7 +566,7 @@ public class FinanceInvoiceAiServiceImpl implements FinanceInvoiceAiService {
     }
 
     private int resolveMaxOcrChars() {
-        Integer value = aiProperties.getInvoice().getRecognitionMaxOcrChars();
+        Integer value = invoiceRecognitionConfigService.getRecognitionMaxOcrChars();
         if (value == null || value <= 0) {
             return DEFAULT_MAX_OCR_CHARS;
         }
@@ -532,7 +574,7 @@ public class FinanceInvoiceAiServiceImpl implements FinanceInvoiceAiService {
     }
 
     private int resolveMaxTokens() {
-        Integer value = aiProperties.getInvoice().getRecognitionMaxTokens();
+        Integer value = invoiceRecognitionConfigService.getRecognitionMaxTokens();
         if (value == null || value <= 0) {
             return DEFAULT_MAX_TOKENS;
         }
@@ -556,7 +598,7 @@ public class FinanceInvoiceAiServiceImpl implements FinanceInvoiceAiService {
         if (value == null) {
             return null;
         }
-        String trimmed = value.trim();
+        String trimmed = normalizeOcrText(value.trim());
         if (trimmed.isEmpty() || "null".equalsIgnoreCase(trimmed) || "unknown".equalsIgnoreCase(trimmed)
                 || "未明确".equals(trimmed) || "无法确认".equals(trimmed)) {
             return null;

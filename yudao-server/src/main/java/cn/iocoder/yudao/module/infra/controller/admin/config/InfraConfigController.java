@@ -44,6 +44,11 @@ public class InfraConfigController {
     private static final String RAG_ENGINE_FASTGPT = "fastgpt";
     private static final String RAG_ENGINE_LOCAL = "local";
     private static final Set<String> SUPPORTED_RAG_ENGINES = Set.of(RAG_ENGINE_FASTGPT, RAG_ENGINE_LOCAL);
+    private static final String AI_DOCUMENT_STORAGE_TYPE_KEY = "AI_DOCUMENT_STORAGE_TYPE";
+    private static final String AI_DOCUMENT_STORAGE_TYPE_MINIO = "minio";
+    private static final String AI_DOCUMENT_STORAGE_TYPE_LOCAL = "local";
+    private static final Set<String> SUPPORTED_AI_DOCUMENT_STORAGE_TYPES = Set.of(
+            AI_DOCUMENT_STORAGE_TYPE_MINIO, AI_DOCUMENT_STORAGE_TYPE_LOCAL);
     private static final TableDef CONFIG = def("infra_config",
             cols("id", "category", "name", "key", "value", "type", "visible", "remark"),
             cols("category", "name", "key", "type", "visible"), "id DESC");
@@ -144,6 +149,9 @@ public class InfraConfigController {
         if (RAG_ENGINE_KEY.equals(key) && data.containsKey("value")) {
             data.put("value", normalizeRagEngineValue(data.get("value")));
         }
+        if (AI_DOCUMENT_STORAGE_TYPE_KEY.equals(key) && data.containsKey("value")) {
+            data.put("value", normalizeAiDocumentStorageTypeValue(data.get("value")));
+        }
         return data;
     }
 
@@ -161,6 +169,13 @@ public class InfraConfigController {
             }
             data.put("value", engine);
         }
+        if (AI_DOCUMENT_STORAGE_TYPE_KEY.equals(data.get("key"))) {
+            String storageType = normalizeAiDocumentStorageTypeValue(data.get("value"));
+            if (!SUPPORTED_AI_DOCUMENT_STORAGE_TYPES.contains(storageType)) {
+                throw new ServiceException(400, "AI_DOCUMENT_STORAGE_TYPE only supports minio or local");
+            }
+            data.put("value", storageType);
+        }
     }
 
     private String normalizeRagEngineValue(Object value) {
@@ -171,6 +186,22 @@ public class InfraConfigController {
         String normalized = engine.trim().toLowerCase(Locale.ROOT);
         if ("fast".equals(normalized)) {
             return RAG_ENGINE_FASTGPT;
+        }
+        return normalized;
+    }
+
+    private String normalizeAiDocumentStorageTypeValue(Object value) {
+        String storageType = stringValue(value);
+        if (!StringUtils.hasText(storageType)) {
+            return "";
+        }
+        String normalized = storageType.trim().toLowerCase(Locale.ROOT);
+        if ("synology".equals(normalized) || "synology-minio".equals(normalized)
+                || "nas".equals(normalized) || "remote".equals(normalized)) {
+            return AI_DOCUMENT_STORAGE_TYPE_MINIO;
+        }
+        if ("local-file".equals(normalized) || "filesystem".equals(normalized)) {
+            return AI_DOCUMENT_STORAGE_TYPE_LOCAL;
         }
         return normalized;
     }

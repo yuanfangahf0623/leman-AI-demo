@@ -132,7 +132,6 @@ function Ensure-DockerContainers {
         "leman-dev-rabbitmq",
         "leman-dev-postgres",
         "leman-dev-qdrant",
-        "leman-dev-minio",
         "fastgpt-app",
         "fastgpt-plugin",
         "fastgpt-aiproxy",
@@ -143,7 +142,6 @@ function Ensure-DockerContainers {
         "fastgpt-opensandbox-server",
         "fastgpt-aiproxy-pg",
         "fastgpt-mcp-server",
-        "fastgpt-minio",
         "fastgpt-mongo",
         "n8n"
     )

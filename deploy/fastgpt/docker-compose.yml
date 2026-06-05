@@ -23,7 +23,7 @@ x-share-db-config: &x-share-db-config
   STORAGE_PUBLIC_BUCKET: fastgpt-public
   STORAGE_PRIVATE_BUCKET: fastgpt-private
   STORAGE_EXTERNAL_ENDPOINT: ${FASTGPT_STORAGE_EXTERNAL_ENDPOINT:?Set FASTGPT_STORAGE_EXTERNAL_ENDPOINT in .env}
-  STORAGE_S3_ENDPOINT: ${FASTGPT_STORAGE_S3_ENDPOINT:-http://fastgpt-minio:9000}
+  STORAGE_S3_ENDPOINT: ${FASTGPT_STORAGE_S3_ENDPOINT:?Set FASTGPT_STORAGE_S3_ENDPOINT in .env}
   STORAGE_S3_FORCE_PATH_STYLE: true
   STORAGE_S3_MAX_RETRIES: 3
 x-log-config: &x-log-config
@@ -120,6 +120,8 @@ services:
     volumes:
       - fastgpt-redis:/data
   fastgpt-minio:
+    profiles:
+      - local-minio
     image: registry.cn-hangzhou.aliyuncs.com/fastgpt/minio:RELEASE.2025-09-07T16-13-09Z
     container_name: fastgpt-minio
     restart: always
@@ -157,8 +159,6 @@ services:
       fastgpt-vector:
         condition: service_healthy
       fastgpt-redis:
-        condition: service_healthy
-      fastgpt-minio:
         condition: service_healthy
       fastgpt-code-sandbox:
         condition: service_healthy
@@ -279,8 +279,6 @@ services:
       LOG_OTEL_SERVICE_NAME: fastgpt-plugin
     depends_on:
       fastgpt-mongo:
-        condition: service_healthy
-      fastgpt-minio:
         condition: service_healthy
     healthcheck:
       test: ['CMD', 'curl', '-f', 'http://localhost:3000/health']

@@ -665,9 +665,19 @@ public class AiProperties {
         private Integer embeddingMaxConsecutiveFailures = 3;
 
         /**
+         * Storage implementation: minio or local.
+         */
+        private String storageType = "minio";
+
+        /**
          * 文档上传本地存储目录。生产环境应切换为对象存储实现，例如 MinIO。
          */
         private String storageBasePath = ".data/ai-documents";
+
+        /**
+         * MinIO object storage configuration.
+         */
+        private MinioProperties minio = new MinioProperties();
 
         /**
          * OCR 识别配置。默认关闭，避免本地未安装 OCR 引擎时影响普通文档解析。
@@ -730,6 +740,14 @@ public class AiProperties {
             this.embeddingMaxConsecutiveFailures = embeddingMaxConsecutiveFailures;
         }
 
+        public String getStorageType() {
+            return storageType;
+        }
+
+        public void setStorageType(String storageType) {
+            this.storageType = storageType;
+        }
+
         public String getStorageBasePath() {
             return storageBasePath;
         }
@@ -738,12 +756,101 @@ public class AiProperties {
             this.storageBasePath = storageBasePath;
         }
 
+        public MinioProperties getMinio() {
+            return minio;
+        }
+
+        public void setMinio(MinioProperties minio) {
+            this.minio = minio;
+        }
+
         public OcrProperties getOcr() {
             return ocr;
         }
 
         public void setOcr(OcrProperties ocr) {
             this.ocr = ocr;
+        }
+    }
+
+    public static class MinioProperties {
+
+        /**
+         * Internal S3 endpoint used by the backend.
+         */
+        private String endpoint = "http://192.168.19.246:9000";
+
+        /**
+         * Endpoint written to file source URLs.
+         */
+        private String externalEndpoint = "http://192.168.19.246:9000";
+
+        /**
+         * Bucket for uploaded knowledge and invoice files.
+         */
+        private String bucket = "yudao-ai-documents";
+
+        /**
+         * Access key is provided by environment variables or deployment config.
+         */
+        private String accessKey;
+
+        /**
+         * Secret key is provided by environment variables or deployment config.
+         */
+        private String secretKey;
+
+        /**
+         * S3 region used by MinIO-compatible clients.
+         */
+        private String region = "us-east-1";
+
+        public String getEndpoint() {
+            return endpoint;
+        }
+
+        public void setEndpoint(String endpoint) {
+            this.endpoint = endpoint;
+        }
+
+        public String getExternalEndpoint() {
+            return externalEndpoint;
+        }
+
+        public void setExternalEndpoint(String externalEndpoint) {
+            this.externalEndpoint = externalEndpoint;
+        }
+
+        public String getBucket() {
+            return bucket;
+        }
+
+        public void setBucket(String bucket) {
+            this.bucket = bucket;
+        }
+
+        public String getAccessKey() {
+            return accessKey;
+        }
+
+        public void setAccessKey(String accessKey) {
+            this.accessKey = accessKey;
+        }
+
+        public String getSecretKey() {
+            return secretKey;
+        }
+
+        public void setSecretKey(String secretKey) {
+            this.secretKey = secretKey;
+        }
+
+        public String getRegion() {
+            return region;
+        }
+
+        public void setRegion(String region) {
+            this.region = region;
         }
     }
 

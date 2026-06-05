@@ -21,7 +21,7 @@ import static cn.iocoder.yudao.module.ai.enums.AiDocumentErrorCodeConstants.DOCU
  */
 @Service
 @RequiredArgsConstructor
-public class LocalFileStorageService implements FileStorageService {
+public class LocalFileStorageService implements DocumentFileStorageBackend {
 
     private final AiProperties aiProperties;
 

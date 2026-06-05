@@ -6,8 +6,8 @@
 
 - FastGPT Web/API：`13000`
 - FastGPT MCP：`13005`
-- FastGPT MinIO API：`19000`
-- FastGPT MinIO Console：`19001`
+- FastGPT MinIO API：`192.168.19.246:19000`
+- FastGPT MinIO Console：`192.168.19.246:19001`
 
 端口避开了本项目现有中间件的 `9000/9001`、`5432`、`3306`、`6379` 等端口。
 
@@ -66,8 +66,8 @@ docker compose --env-file deploy/fastgpt/.env -f deploy/fastgpt/docker-compose.y
 
 ```powershell
 FASTGPT_STORAGE_VENDOR=minio
-FASTGPT_STORAGE_S3_ENDPOINT=http://<synology-ip>:9000
-FASTGPT_STORAGE_EXTERNAL_ENDPOINT=http://<synology-ip>:9000
+FASTGPT_STORAGE_S3_ENDPOINT=http://<synology-ip>:19000
+FASTGPT_STORAGE_EXTERNAL_ENDPOINT=http://<synology-ip>:19000
 FASTGPT_MINIO_ROOT_USER=<synology-minio-access-key>
 FASTGPT_MINIO_ROOT_PASSWORD=<synology-minio-secret-key>
 ```

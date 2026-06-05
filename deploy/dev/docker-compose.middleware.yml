@@ -75,6 +75,8 @@ services:
       - middleware
 
   minio:
+    profiles:
+      - local-minio
     image: minio/minio:latest
     container_name: leman-dev-minio
     restart: unless-stopped

@@ -109,7 +109,15 @@ ai:
     embedding-batch-max-retries: ${AI_DOCUMENT_EMBEDDING_BATCH_MAX_RETRIES:2}
     embedding-retry-backoff-millis: ${AI_DOCUMENT_EMBEDDING_RETRY_BACKOFF_MILLIS:1000}
     embedding-max-consecutive-failures: ${AI_DOCUMENT_EMBEDDING_MAX_CONSECUTIVE_FAILURES:3}
+    storage-type: ${AI_DOCUMENT_STORAGE_TYPE:minio}
     storage-base-path: ${AI_DOCUMENT_STORAGE_BASE_PATH:.data/ai-documents}
+    minio:
+      endpoint: ${AI_DOCUMENT_MINIO_ENDPOINT:http://192.168.19.246:9000}
+      external-endpoint: ${AI_DOCUMENT_MINIO_EXTERNAL_ENDPOINT:http://192.168.19.246:9000}
+      bucket: ${AI_DOCUMENT_MINIO_BUCKET:yudao-ai-documents}
+      access-key: ${AI_DOCUMENT_MINIO_ACCESS_KEY:}
+      secret-key: ${AI_DOCUMENT_MINIO_SECRET_KEY:}
+      region: ${AI_DOCUMENT_MINIO_REGION:us-east-1}
     ocr:
       enabled: ${AI_DOCUMENT_OCR_ENABLED:false}
       provider: ${AI_DOCUMENT_OCR_PROVIDER:tesseract-cli}

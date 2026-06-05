@@ -400,7 +400,13 @@ INSERT IGNORE INTO `system_dict_data` (`id`, `sort`, `label`, `value`, `dict_typ
 INSERT INTO `infra_config`
 (`category`, `name`, `key`, `value`, `type`, `visible`, `remark`, `creator`, `updater`)
 VALUES
-('AI', 'RAG 引擎', 'ai.rag.engine', 'fastgpt', 1, b'1', 'fastgpt=FastGPT RAG engine; local=local pgvector RAG engine', 'system', 'system')
+('AI', 'RAG 引擎', 'ai.rag.engine', 'fastgpt', 1, b'1', 'fastgpt=FastGPT RAG engine; local=local pgvector RAG engine', 'system', 'system'),
+('AI', 'AI 文档存储方式', 'AI_DOCUMENT_STORAGE_TYPE', 'minio', 1, b'1', 'minio=Synology MinIO storage; local=local disk storage', 'system', 'system'),
+('AI', '发票识别方式', 'ai.invoice.recognition.provider', 'model', 1, b'1', 'mock=本地模拟；model/llm/openai-compatible=调用模型抽取发票字段', 'system', 'system'),
+('AI', '发票识别模型', 'ai.invoice.recognition.model', 'gpt-4o', 1, b'1', '发票字段抽取模型，不包含 API Key', 'system', 'system'),
+('AI', '发票识别最大 OCR 字符数', 'ai.invoice.recognition.max-ocr-chars', '12000', 1, b'1', '发送给模型的 OCR 文本最大字符数', 'system', 'system'),
+('AI', '发票识别最大输出 Token', 'ai.invoice.recognition.max-tokens', '1200', 1, b'1', '发票字段识别模型最大输出 Token', 'system', 'system'),
+('AI', '发票识别失败回退 Mock', 'ai.invoice.recognition.fallback-to-mock', 'true', 1, b'1', '开发环境可开启；生产环境建议关闭', 'system', 'system')
 ON DUPLICATE KEY UPDATE `key` = `key`;
 
 INSERT IGNORE INTO `bpm_category` (`id`, `tenant_id`, `name`, `code`, `status`, `sort`, `creator`, `updater`)
