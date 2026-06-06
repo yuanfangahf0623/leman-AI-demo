@@ -194,11 +194,15 @@ const getList = async () => {
     // 注意：必须一次性赋值给 categoryGroup，否则每次操作后，列表会重新渲染，滚动条的位置会偏离！！！
     categoryGroup.value = categoryList.map((category: any) => ({
       ...category,
-      modelList: modelList.filter((model: any) => model.categoryName == category.name)
+      modelList: modelList.filter((model: any) => isSameCategory(model, category))
     }))
   } finally {
     loading.value = false
   }
+}
+
+const isSameCategory = (model: any, category: any) => {
+  return model.category === category.code || model.categoryName === category.name
 }
 
 /** 初始化 **/
@@ -220,7 +224,7 @@ onActivated(() => {
   .el-form--inline .el-form-item {
     margin-right: 10px;
   }
-  
+
   .el-divider--horizontal {
     margin-top: 6px;
   }

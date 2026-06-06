@@ -452,10 +452,14 @@ public class BpmAdminController {
     private Map<String, Object> normalizeModelWrite(Map<String, Object> reqVO) {
         Map<String, Object> data = new LinkedHashMap<>(reqVO);
         nullIfBlank(data, "formId");
+        nullIfBlank(data, "form_id");
         nullIfBlank(data, "formType");
+        nullIfBlank(data, "form_type");
         nullIfBlank(data, "type");
         nullIfBlank(data, "startUserType");
+        nullIfBlank(data, "start_user_type");
         nullIfBlank(data, "autoApprovalType");
+        nullIfBlank(data, "auto_approval_type");
         return data;
     }
 

@@ -113,8 +113,7 @@ mvn -pl yudao-server spring-boot:run
 也可以打包后启动：
 
 ```powershell
-mvn clean package -DskipTests
-java -jar yudao-server\target\yudao-server-1.0.0-SNAPSHOT.jar
+.\scripts\start-yudao-server.ps1 -Build
 ```
 
 后端默认端口：

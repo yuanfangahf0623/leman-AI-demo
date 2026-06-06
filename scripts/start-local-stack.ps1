@@ -10,6 +10,7 @@ param(
 $ErrorActionPreference = "Stop"
 
 $repoRoot = Resolve-Path (Join-Path $PSScriptRoot "..")
+$backendScript = Join-Path $PSScriptRoot "start-yudao-server.ps1"
 $frontendDir = Join-Path $repoRoot "frontend\yudao-ui-admin-vue3"
 $logDir = Join-Path $repoRoot "logs"
 New-Item -ItemType Directory -Force -Path $logDir | Out-Null
@@ -175,8 +176,12 @@ function Start-Backend {
         return
     }
 
-    Write-StackLog "Starting backend."
-    & (Join-Path $PSScriptRoot "start-yudao-server.ps1")
+    if (-not (Test-Path $backendScript)) {
+        throw "Backend startup script not found: $backendScript"
+    }
+
+    Write-StackLog "Starting backend via scripts/start-yudao-server.ps1."
+    & $backendScript
     Wait-TcpPort -Name "Backend" -Port 48080 | Out-Null
 }
 
