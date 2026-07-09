@@ -3,6 +3,8 @@ package cn.iocoder.yudao.module.ai.controller.admin.lead;
 import cn.iocoder.yudao.framework.common.pojo.CommonResult;
 import cn.iocoder.yudao.framework.common.pojo.PageResult;
 import cn.iocoder.yudao.module.ai.controller.admin.lead.vo.LeadAgentDashboardRespVO;
+import cn.iocoder.yudao.module.ai.controller.admin.lead.vo.LeadCrawlJobPageReqVO;
+import cn.iocoder.yudao.module.ai.controller.admin.lead.vo.LeadCrawlJobRespVO;
 import cn.iocoder.yudao.module.ai.controller.admin.lead.vo.LeadCustomerPageReqVO;
 import cn.iocoder.yudao.module.ai.controller.admin.lead.vo.LeadCustomerRespVO;
 import cn.iocoder.yudao.module.ai.controller.admin.lead.vo.LeadExportRuleRespVO;
@@ -14,10 +16,15 @@ import cn.iocoder.yudao.module.ai.controller.admin.lead.vo.LeadHistoryRespVO;
 import cn.iocoder.yudao.module.ai.controller.admin.lead.vo.LeadMarketPageReqVO;
 import cn.iocoder.yudao.module.ai.controller.admin.lead.vo.LeadMarketRespVO;
 import cn.iocoder.yudao.module.ai.controller.admin.lead.vo.LeadMarketSaveReqVO;
+import cn.iocoder.yudao.module.ai.controller.admin.lead.vo.LeadRunCreateReqVO;
 import cn.iocoder.yudao.module.ai.service.lead.LeadAgentService;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotNull;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.ContentDisposition;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -29,6 +36,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 
 /**
@@ -46,6 +54,24 @@ public class LeadAgentController {
     @PreAuthorize("@ss.hasPermission('ai:lead-agent:query')")
     public CommonResult<LeadAgentDashboardRespVO> getDashboard() {
         return CommonResult.success(leadAgentService.getDashboard());
+    }
+
+    @PostMapping("/run/start")
+    @PreAuthorize("@ss.hasPermission('ai:lead-agent:execute')")
+    public CommonResult<Long> startRun(@Valid @RequestBody LeadRunCreateReqVO createReqVO) {
+        return CommonResult.success(leadAgentService.startRun(createReqVO));
+    }
+
+    @GetMapping("/job/page")
+    @PreAuthorize("@ss.hasPermission('ai:lead-agent:query')")
+    public CommonResult<PageResult<LeadCrawlJobRespVO>> getJobPage(@Valid LeadCrawlJobPageReqVO pageReqVO) {
+        return CommonResult.success(leadAgentService.getJobPage(pageReqVO));
+    }
+
+    @GetMapping("/job/get")
+    @PreAuthorize("@ss.hasPermission('ai:lead-agent:query')")
+    public CommonResult<LeadCrawlJobRespVO> getJob(@RequestParam("id") @NotNull(message = "job id is required") Long id) {
+        return CommonResult.success(leadAgentService.getJob(id));
     }
 
     @GetMapping("/market/page")
@@ -116,6 +142,18 @@ public class LeadAgentController {
     @PreAuthorize("@ss.hasPermission('ai:lead-agent:query')")
     public CommonResult<PageResult<LeadCustomerRespVO>> getCustomerPage(@Valid LeadCustomerPageReqVO pageReqVO) {
         return CommonResult.success(leadAgentService.getCustomerPage(pageReqVO));
+    }
+
+    @GetMapping("/customer/export-excel")
+    @PreAuthorize("@ss.hasPermission('ai:lead-agent:export')")
+    public ResponseEntity<byte[]> exportCustomers(@Valid LeadCustomerPageReqVO pageReqVO) {
+        return ResponseEntity.ok()
+                .contentType(MediaType.parseMediaType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"))
+                .header(HttpHeaders.CONTENT_DISPOSITION, ContentDisposition.attachment()
+                        .filename("lead-agent-customers.xlsx", StandardCharsets.UTF_8)
+                        .build()
+                        .toString())
+                .body(leadAgentService.exportCustomers(pageReqVO));
     }
 
     @GetMapping("/history/page")

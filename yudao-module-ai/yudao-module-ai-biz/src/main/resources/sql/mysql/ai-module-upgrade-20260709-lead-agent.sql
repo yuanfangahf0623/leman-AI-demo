@@ -138,6 +138,35 @@ CREATE TABLE IF NOT EXISTS `ai_lead_crawl_history` (
     `deleted` BIT NOT NULL DEFAULT b'0'
 ) COMMENT 'AI lead agent crawl history';
 
+CREATE TABLE IF NOT EXISTS `ai_lead_crawl_job` (
+    `id` BIGINT PRIMARY KEY AUTO_INCREMENT,
+    `tenant_id` BIGINT NOT NULL DEFAULT 0 COMMENT 'Tenant id',
+    `run_id` VARCHAR(64) NOT NULL COMMENT 'Collection run id',
+    `category_code` VARCHAR(64) NULL COMMENT 'Selected market category code',
+    `country` VARCHAR(128) NULL COMMENT 'Selected country',
+    `max_results` INT NOT NULL DEFAULT 50 COMMENT 'Maximum candidate websites',
+    `max_pages_per_site` INT NOT NULL DEFAULT 5 COMMENT 'Maximum pages per candidate website',
+    `crawl_timeout_seconds` INT NOT NULL DEFAULT 15 COMMENT 'Per-page crawl timeout seconds',
+    `search_provider` VARCHAR(64) NOT NULL DEFAULT 'auto' COMMENT 'Search provider',
+    `analysis_provider` VARCHAR(128) NOT NULL DEFAULT 'rules' COMMENT 'Analysis provider',
+    `skip_social_verification` BIT NOT NULL DEFAULT b'0' COMMENT 'Skip public social verification',
+    `enable_ai_review` BIT NOT NULL DEFAULT b'0' COMMENT 'Enable optional LLM review',
+    `status` VARCHAR(32) NOT NULL DEFAULT 'PENDING' COMMENT 'PENDING/RUNNING/SUCCESS/FAILED',
+    `total_candidates` INT NOT NULL DEFAULT 0 COMMENT 'Candidate count',
+    `crawled_count` INT NOT NULL DEFAULT 0 COMMENT 'Crawled candidate count',
+    `lead_count` INT NOT NULL DEFAULT 0 COMMENT 'Deduplicated lead count',
+    `exported_count` INT NOT NULL DEFAULT 0 COMMENT 'Lead count matching export rules',
+    `rejected_count` INT NOT NULL DEFAULT 0 COMMENT 'Lead count rejected by export rules',
+    `error_message` VARCHAR(1024) NULL COMMENT 'Failure message',
+    `started_at` DATETIME NULL COMMENT 'Started time',
+    `finished_at` DATETIME NULL COMMENT 'Finished time',
+    `creator` VARCHAR(64) NULL,
+    `create_time` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    `updater` VARCHAR(64) NULL,
+    `update_time` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    `deleted` BIT NOT NULL DEFAULT b'0'
+) COMMENT 'AI lead agent crawl job';
+
 SET @index_exists := (
     SELECT COUNT(1) FROM INFORMATION_SCHEMA.STATISTICS
     WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'ai_lead_market_category'
@@ -262,6 +291,32 @@ SET @index_exists := (
 );
 SET @ddl := IF(@index_exists = 0,
     'CREATE INDEX idx_ai_lead_history_domain ON ai_lead_crawl_history (tenant_id, domain, id)',
+    'SELECT 1'
+);
+PREPARE stmt FROM @ddl;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
+
+SET @index_exists := (
+    SELECT COUNT(1) FROM INFORMATION_SCHEMA.STATISTICS
+    WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'ai_lead_crawl_job'
+      AND INDEX_NAME = 'uk_ai_lead_job_run'
+);
+SET @ddl := IF(@index_exists = 0,
+    'CREATE UNIQUE INDEX uk_ai_lead_job_run ON ai_lead_crawl_job (tenant_id, run_id, deleted)',
+    'SELECT 1'
+);
+PREPARE stmt FROM @ddl;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
+
+SET @index_exists := (
+    SELECT COUNT(1) FROM INFORMATION_SCHEMA.STATISTICS
+    WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'ai_lead_crawl_job'
+      AND INDEX_NAME = 'idx_ai_lead_job_status'
+);
+SET @ddl := IF(@index_exists = 0,
+    'CREATE INDEX idx_ai_lead_job_status ON ai_lead_crawl_job (tenant_id, status, id)',
     'SELECT 1'
 );
 PREPARE stmt FROM @ddl;
@@ -461,15 +516,100 @@ VALUES
 ON DUPLICATE KEY UPDATE
     `deleted` = b'0';
 
+INSERT INTO `ai_lead_market_category`
+(`tenant_id`, `category_code`, `category_name`, `weight`, `enabled`, `creator`, `updater`)
+SELECT 1, `category_code`, `category_name`, `weight`, `enabled`, 'admin', 'admin'
+FROM `ai_lead_market_category`
+WHERE `tenant_id` = 0 AND `deleted` = b'0'
+ON DUPLICATE KEY UPDATE
+    `deleted` = b'0';
+
+INSERT INTO `ai_lead_market_country` (`tenant_id`, `category_id`, `country`, `sort_order`, `creator`, `updater`)
+SELECT 1, target_category.`id`, source_country.`country`, source_country.`sort_order`, 'admin', 'admin'
+FROM `ai_lead_market_country` source_country
+JOIN `ai_lead_market_category` source_category
+    ON source_category.`id` = source_country.`category_id`
+    AND source_category.`tenant_id` = 0
+    AND source_category.`deleted` = b'0'
+JOIN `ai_lead_market_category` target_category
+    ON target_category.`tenant_id` = 1
+    AND target_category.`category_code` = source_category.`category_code`
+    AND target_category.`deleted` = b'0'
+WHERE source_country.`tenant_id` = 0 AND source_country.`deleted` = b'0'
+ON DUPLICATE KEY UPDATE
+    `sort_order` = VALUES(`sort_order`),
+    `deleted` = b'0';
+
+INSERT INTO `ai_lead_market_keyword` (`tenant_id`, `category_id`, `keyword`, `sort_order`, `creator`, `updater`)
+SELECT 1, target_category.`id`, source_keyword.`keyword`, source_keyword.`sort_order`, 'admin', 'admin'
+FROM `ai_lead_market_keyword` source_keyword
+JOIN `ai_lead_market_category` source_category
+    ON source_category.`id` = source_keyword.`category_id`
+    AND source_category.`tenant_id` = 0
+    AND source_category.`deleted` = b'0'
+JOIN `ai_lead_market_category` target_category
+    ON target_category.`tenant_id` = 1
+    AND target_category.`category_code` = source_category.`category_code`
+    AND target_category.`deleted` = b'0'
+WHERE source_keyword.`tenant_id` = 0 AND source_keyword.`deleted` = b'0'
+ON DUPLICATE KEY UPDATE
+    `sort_order` = VALUES(`sort_order`),
+    `deleted` = b'0';
+
+INSERT INTO `ai_lead_filter_rule` (`tenant_id`, `rule_type`, `rule_value`, `sort_order`, `enabled`, `creator`, `updater`)
+SELECT 1, `rule_type`, `rule_value`, `sort_order`, `enabled`, 'admin', 'admin'
+FROM `ai_lead_filter_rule`
+WHERE `tenant_id` = 0 AND `deleted` = b'0'
+ON DUPLICATE KEY UPDATE
+    `sort_order` = VALUES(`sort_order`),
+    `enabled` = VALUES(`enabled`),
+    `deleted` = b'0';
+
+INSERT INTO `ai_lead_export_rule`
+(`tenant_id`, `min_score`, `include_target_only`, `require_email`, `allowed_grades`,
+ `include_possible_duplicates`, `write_rejected_file`, `creator`, `updater`)
+SELECT 1, `min_score`, `include_target_only`, `require_email`, `allowed_grades`,
+       `include_possible_duplicates`, `write_rejected_file`, 'admin', 'admin'
+FROM `ai_lead_export_rule`
+WHERE `tenant_id` = 0 AND `deleted` = b'0'
+LIMIT 1
+ON DUPLICATE KEY UPDATE
+    `deleted` = b'0';
+
 INSERT INTO `system_menu`
 (`id`, `name`, `permission`, `type`, `sort`, `parent_id`, `path`, `icon`, `component`, `component_name`,
  `status`, `visible`, `keep_alive`, `always_show`, `creator`, `create_time`, `updater`, `update_time`, `deleted`)
 VALUES
-(910607, '线索采集', 'ai:lead-agent:query', 2, 7, 910600, 'lead-agent', 'ep:aim',
- 'ai/lead-agent/index', 'AiLeadAgent', 0, b'1', b'1', b'1', 'admin', NOW(), 'admin', NOW(), b'0'),
-(910670, '线索采集查询', 'ai:lead-agent:query', 3, 1, 910607, '', '', '', NULL,
+(920700, 'lead_agent', '', 1, 13, 0, '/lead-agent', 'ep:aim', NULL, NULL,
  0, b'1', b'1', b'1', 'admin', NOW(), 'admin', NOW(), b'0'),
-(910671, '线索采集配置', 'ai:lead-agent:update', 3, 2, 910607, '', '', '', NULL,
+(920701, 'Lead Agent Workbench', 'ai:lead-agent:query', 2, 1, 920700, 'workbench', 'ep:aim',
+ 'ai/lead-agent/index', 'LeadAgentWorkbench', 0, b'1', b'1', b'1', 'admin', NOW(), 'admin', NOW(), b'0'),
+(920720, 'lead_agent query', 'ai:lead-agent:query', 3, 1, 920701, '', '', '', NULL,
+ 0, b'1', b'1', b'1', 'admin', NOW(), 'admin', NOW(), b'0'),
+(920721, 'lead_agent update', 'ai:lead-agent:update', 3, 2, 920701, '', '', '', NULL,
+ 0, b'1', b'1', b'1', 'admin', NOW(), 'admin', NOW(), b'0'),
+(920722, 'lead_agent execute', 'ai:lead-agent:execute', 3, 3, 920701, '', '', '', NULL,
+ 0, b'1', b'1', b'1', 'admin', NOW(), 'admin', NOW(), b'0'),
+(920723, 'lead_agent export', 'ai:lead-agent:export', 3, 4, 920701, '', '', '', NULL,
  0, b'1', b'1', b'1', 'admin', NOW(), 'admin', NOW(), b'0')
 ON DUPLICATE KEY UPDATE
-    `id` = `id`;
+    `name` = VALUES(`name`),
+    `permission` = VALUES(`permission`),
+    `type` = VALUES(`type`),
+    `sort` = VALUES(`sort`),
+    `parent_id` = VALUES(`parent_id`),
+    `path` = VALUES(`path`),
+    `icon` = VALUES(`icon`),
+    `component` = VALUES(`component`),
+    `component_name` = VALUES(`component_name`),
+    `status` = VALUES(`status`),
+    `visible` = VALUES(`visible`),
+    `keep_alive` = VALUES(`keep_alive`),
+    `always_show` = VALUES(`always_show`),
+    `deleted` = b'0',
+    `updater` = 'admin',
+    `update_time` = NOW();
+
+UPDATE `system_menu`
+SET `visible` = b'0', `status` = 1, `updater` = 'admin', `update_time` = NOW()
+WHERE `id` IN (910607, 910670, 910671) AND `deleted` = b'0';

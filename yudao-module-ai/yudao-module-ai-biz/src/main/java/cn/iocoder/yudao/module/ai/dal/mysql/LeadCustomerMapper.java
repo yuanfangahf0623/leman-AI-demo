@@ -43,4 +43,21 @@ public interface LeadCustomerMapper extends BaseMapper<LeadCustomerDO> {
                 .orderByDesc(LeadCustomerDO::getId));
     }
 
+    default List<LeadCustomerDO> selectList(LeadCustomerPageReqVO reqVO, Long tenantId) {
+        return selectList(Wrappers.lambdaQuery(LeadCustomerDO.class)
+                .eq(LeadCustomerDO::getTenantId, tenantId)
+                .like(StringUtils.isNotBlank(reqVO.getCompanyName()),
+                        LeadCustomerDO::getCompanyName, reqVO.getCompanyName())
+                .like(StringUtils.isNotBlank(reqVO.getDomain()),
+                        LeadCustomerDO::getDomain, reqVO.getDomain())
+                .eq(StringUtils.isNotBlank(reqVO.getCountry()), LeadCustomerDO::getCountry, reqVO.getCountry())
+                .eq(StringUtils.isNotBlank(reqVO.getMatchedCategory()),
+                        LeadCustomerDO::getMatchedCategory, reqVO.getMatchedCategory())
+                .eq(reqVO.getTarget() != null, LeadCustomerDO::getTarget, reqVO.getTarget())
+                .ge(reqVO.getMinScore() != null, LeadCustomerDO::getScore, reqVO.getMinScore())
+                .isNotNull(Boolean.TRUE.equals(reqVO.getHasEmail()), LeadCustomerDO::getBestEmail)
+                .orderByDesc(LeadCustomerDO::getScore)
+                .orderByDesc(LeadCustomerDO::getId));
+    }
+
 }

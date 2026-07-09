@@ -2,9 +2,11 @@ package cn.iocoder.yudao.module.ai.convert;
 
 import cn.iocoder.yudao.framework.common.pojo.PageResult;
 import cn.iocoder.yudao.module.ai.controller.admin.lead.vo.LeadCustomerRespVO;
+import cn.iocoder.yudao.module.ai.controller.admin.lead.vo.LeadCrawlJobRespVO;
 import cn.iocoder.yudao.module.ai.controller.admin.lead.vo.LeadExportRuleRespVO;
 import cn.iocoder.yudao.module.ai.controller.admin.lead.vo.LeadHistoryRespVO;
 import cn.iocoder.yudao.module.ai.controller.admin.lead.vo.LeadMarketRespVO;
+import cn.iocoder.yudao.module.ai.dal.dataobject.LeadCrawlJobDO;
 import cn.iocoder.yudao.module.ai.dal.dataobject.LeadCrawlHistoryDO;
 import cn.iocoder.yudao.module.ai.dal.dataobject.LeadCustomerDO;
 import cn.iocoder.yudao.module.ai.dal.dataobject.LeadExportRuleDO;
@@ -167,11 +169,64 @@ public class LeadAgentConvert {
         return new PageResult<>(page.getList().stream().map(this::convertHistory).toList(), page.getTotal());
     }
 
+    public LeadCrawlJobRespVO convertJob(LeadCrawlJobDO bean) {
+        if (bean == null) {
+            return null;
+        }
+        LeadCrawlJobRespVO result = new LeadCrawlJobRespVO();
+        result.setId(bean.getId());
+        result.setRunId(bean.getRunId());
+        result.setCategoryCode(bean.getCategoryCode());
+        result.setCountry(bean.getCountry());
+        result.setMaxResults(bean.getMaxResults());
+        result.setMaxPagesPerSite(bean.getMaxPagesPerSite());
+        result.setCrawlTimeoutSeconds(bean.getCrawlTimeoutSeconds());
+        result.setSearchProvider(bean.getSearchProvider());
+        result.setAnalysisProvider(bean.getAnalysisProvider());
+        result.setSkipSocialVerification(bean.getSkipSocialVerification());
+        result.setEnableAiReview(bean.getEnableAiReview());
+        result.setStatus(bean.getStatus());
+        result.setTotalCandidates(bean.getTotalCandidates());
+        result.setCrawledCount(bean.getCrawledCount());
+        result.setLeadCount(bean.getLeadCount());
+        result.setExportedCount(bean.getExportedCount());
+        result.setRejectedCount(bean.getRejectedCount());
+        result.setErrorMessage(bean.getErrorMessage());
+        result.setStartedAt(bean.getStartedAt());
+        result.setFinishedAt(bean.getFinishedAt());
+        result.setCreateTime(bean.getCreateTime());
+        result.setUpdateTime(bean.getUpdateTime());
+        return result;
+    }
+
+    public PageResult<LeadCrawlJobRespVO> convertJobPage(PageResult<LeadCrawlJobDO> page) {
+        if (page == null) {
+            return null;
+        }
+        return new PageResult<>(page.getList().stream().map(this::convertJob).toList(), page.getTotal());
+    }
+
     public String writeStringList(List<String> values) {
         try {
             return OBJECT_MAPPER.writeValueAsString(values == null ? List.of() : values);
         } catch (JsonProcessingException ex) {
             return "[]";
+        }
+    }
+
+    public String writeMapList(List<Map<String, Object>> values) {
+        try {
+            return OBJECT_MAPPER.writeValueAsString(values == null ? List.of() : values);
+        } catch (JsonProcessingException ex) {
+            return "[]";
+        }
+    }
+
+    public String writeMap(Map<String, Object> value) {
+        try {
+            return OBJECT_MAPPER.writeValueAsString(value == null ? Map.of() : value);
+        } catch (JsonProcessingException ex) {
+            return "{}";
         }
     }
 

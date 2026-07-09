@@ -3,6 +3,8 @@ package cn.iocoder.yudao.module.ai.service.lead;
 import cn.iocoder.yudao.framework.common.exception.ServiceException;
 import cn.iocoder.yudao.framework.common.pojo.PageResult;
 import cn.iocoder.yudao.module.ai.controller.admin.lead.vo.LeadAgentDashboardRespVO;
+import cn.iocoder.yudao.module.ai.controller.admin.lead.vo.LeadCrawlJobPageReqVO;
+import cn.iocoder.yudao.module.ai.controller.admin.lead.vo.LeadCrawlJobRespVO;
 import cn.iocoder.yudao.module.ai.controller.admin.lead.vo.LeadCustomerPageReqVO;
 import cn.iocoder.yudao.module.ai.controller.admin.lead.vo.LeadCustomerRespVO;
 import cn.iocoder.yudao.module.ai.controller.admin.lead.vo.LeadExportRuleRespVO;
@@ -14,8 +16,10 @@ import cn.iocoder.yudao.module.ai.controller.admin.lead.vo.LeadHistoryRespVO;
 import cn.iocoder.yudao.module.ai.controller.admin.lead.vo.LeadMarketPageReqVO;
 import cn.iocoder.yudao.module.ai.controller.admin.lead.vo.LeadMarketRespVO;
 import cn.iocoder.yudao.module.ai.controller.admin.lead.vo.LeadMarketSaveReqVO;
+import cn.iocoder.yudao.module.ai.controller.admin.lead.vo.LeadRunCreateReqVO;
 import cn.iocoder.yudao.module.ai.convert.LeadAgentConvert;
 import cn.iocoder.yudao.module.ai.dal.dataobject.LeadCrawlHistoryDO;
+import cn.iocoder.yudao.module.ai.dal.dataobject.LeadCrawlJobDO;
 import cn.iocoder.yudao.module.ai.dal.dataobject.LeadCustomerDO;
 import cn.iocoder.yudao.module.ai.dal.dataobject.LeadExportRuleDO;
 import cn.iocoder.yudao.module.ai.dal.dataobject.LeadFilterRuleDO;
@@ -23,6 +27,7 @@ import cn.iocoder.yudao.module.ai.dal.dataobject.LeadMarketCategoryDO;
 import cn.iocoder.yudao.module.ai.dal.dataobject.LeadMarketCountryDO;
 import cn.iocoder.yudao.module.ai.dal.dataobject.LeadMarketKeywordDO;
 import cn.iocoder.yudao.module.ai.dal.mysql.LeadCrawlHistoryMapper;
+import cn.iocoder.yudao.module.ai.dal.mysql.LeadCrawlJobMapper;
 import cn.iocoder.yudao.module.ai.dal.mysql.LeadCustomerMapper;
 import cn.iocoder.yudao.module.ai.dal.mysql.LeadExportRuleMapper;
 import cn.iocoder.yudao.module.ai.dal.mysql.LeadFilterRuleMapper;
@@ -30,11 +35,14 @@ import cn.iocoder.yudao.module.ai.dal.mysql.LeadMarketCategoryMapper;
 import cn.iocoder.yudao.module.ai.dal.mysql.LeadMarketCountryMapper;
 import cn.iocoder.yudao.module.ai.dal.mysql.LeadMarketKeywordMapper;
 import cn.iocoder.yudao.module.ai.framework.tenant.AiTenantContextHolder;
+import cn.iocoder.yudao.module.ai.service.lead.executor.LeadAgentExecutionModels;
+import cn.iocoder.yudao.module.ai.service.lead.executor.LeadExcelExporter;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -43,9 +51,13 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.UUID;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
+import static cn.iocoder.yudao.module.ai.enums.LeadAgentErrorCodeConstants.LEAD_CRAWL_JOB_CREATE_FAILED;
+import static cn.iocoder.yudao.module.ai.enums.LeadAgentErrorCodeConstants.LEAD_CRAWL_JOB_NOT_EXISTS;
+import static cn.iocoder.yudao.module.ai.enums.LeadAgentErrorCodeConstants.LEAD_EXPORT_FAILED;
 import static cn.iocoder.yudao.module.ai.enums.LeadAgentErrorCodeConstants.LEAD_EXPORT_GRADE_INVALID;
 import static cn.iocoder.yudao.module.ai.enums.LeadAgentErrorCodeConstants.LEAD_MARKET_CODE_DUPLICATE;
 import static cn.iocoder.yudao.module.ai.enums.LeadAgentErrorCodeConstants.LEAD_MARKET_COUNTRY_EMPTY;
@@ -77,6 +89,9 @@ public class LeadAgentServiceImpl implements LeadAgentService {
     private final LeadExportRuleMapper exportRuleMapper;
     private final LeadCustomerMapper customerMapper;
     private final LeadCrawlHistoryMapper crawlHistoryMapper;
+    private final LeadCrawlJobMapper crawlJobMapper;
+    private final LeadAgentRunner leadAgentRunner;
+    private final LeadExcelExporter leadExcelExporter;
 
     @Override
     public PageResult<LeadMarketRespVO> getMarketPage(LeadMarketPageReqVO pageReqVO) {
@@ -212,6 +227,68 @@ public class LeadAgentServiceImpl implements LeadAgentService {
     }
 
     @Override
+    public Long startRun(LeadRunCreateReqVO createReqVO) {
+        Long tenantId = AiTenantContextHolder.getTenantId();
+        if (hasText(createReqVO.getCategoryCode())) {
+            LeadMarketCategoryDO category = marketCategoryMapper.selectByTenantIdAndCode(tenantId,
+                    createReqVO.getCategoryCode().trim());
+            if (category == null) {
+                throw new ServiceException(LEAD_MARKET_NOT_EXISTS, "Lead Agent market category does not exist");
+            }
+        }
+        LeadCrawlJobDO job = new LeadCrawlJobDO();
+        job.setTenantId(tenantId);
+        job.setRunId(nextRunId());
+        job.setCategoryCode(trimToNull(createReqVO.getCategoryCode()));
+        job.setCountry(trimToNull(createReqVO.getCountry()));
+        job.setMaxResults(createReqVO.getMaxResults() == null ? 50 : createReqVO.getMaxResults());
+        job.setMaxPagesPerSite(createReqVO.getMaxPagesPerSite() == null ? 5 : createReqVO.getMaxPagesPerSite());
+        job.setCrawlTimeoutSeconds(createReqVO.getCrawlTimeoutSeconds() == null ? 15 : createReqVO.getCrawlTimeoutSeconds());
+        job.setSearchProvider(hasText(createReqVO.getSearchProvider()) ? createReqVO.getSearchProvider().trim() : "auto");
+        job.setAnalysisProvider("rules");
+        job.setSkipSocialVerification(Boolean.TRUE.equals(createReqVO.getSkipSocialVerification()));
+        job.setEnableAiReview(Boolean.TRUE.equals(createReqVO.getEnableAiReview()));
+        job.setStatus(LeadAgentExecutionModels.STATUS_PENDING);
+        job.setTotalCandidates(0);
+        job.setCrawledCount(0);
+        job.setLeadCount(0);
+        job.setExportedCount(0);
+        job.setRejectedCount(0);
+        try {
+            crawlJobMapper.insert(job);
+        } catch (RuntimeException ex) {
+            throw new ServiceException(LEAD_CRAWL_JOB_CREATE_FAILED, "Lead Agent job create failed");
+        }
+        leadAgentRunner.submit(job);
+        return job.getId();
+    }
+
+    @Override
+    public PageResult<LeadCrawlJobRespVO> getJobPage(LeadCrawlJobPageReqVO pageReqVO) {
+        return LeadAgentConvert.INSTANCE.convertJobPage(
+                crawlJobMapper.selectPage(pageReqVO, AiTenantContextHolder.getTenantId()));
+    }
+
+    @Override
+    public LeadCrawlJobRespVO getJob(Long id) {
+        return LeadAgentConvert.INSTANCE.convertJob(validateJobExists(id, AiTenantContextHolder.getTenantId()));
+    }
+
+    @Override
+    public byte[] exportCustomers(LeadCustomerPageReqVO pageReqVO) {
+        Long tenantId = AiTenantContextHolder.getTenantId();
+        List<LeadCustomerRespVO> customers = customerMapper.selectList(pageReqVO, tenantId).stream()
+                .map(LeadAgentConvert.INSTANCE::convertCustomer)
+                .toList();
+        LeadExportRuleRespVO rules = getExportRules();
+        try {
+            return leadExcelExporter.exportCustomers(customers, rules);
+        } catch (RuntimeException ex) {
+            throw new ServiceException(LEAD_EXPORT_FAILED, "Lead Agent Excel export failed");
+        }
+    }
+
+    @Override
     public LeadAgentDashboardRespVO getDashboard() {
         Long tenantId = AiTenantContextHolder.getTenantId();
         List<LeadCustomerDO> customers = customerMapper.selectListByTenantId(tenantId);
@@ -241,6 +318,27 @@ public class LeadAgentServiceImpl implements LeadAgentService {
         result.setCategoryCounts(countBy(customers, LeadCustomerDO::getMatchedCategory));
         result.setProviderCounts(countBy(historyItems, LeadCrawlHistoryDO::getSearchProvider));
         return result;
+    }
+
+    private LeadCrawlJobDO validateJobExists(Long id, Long tenantId) {
+        if (id == null) {
+            throw new ServiceException(LEAD_CRAWL_JOB_NOT_EXISTS, "Lead Agent job does not exist");
+        }
+        LeadCrawlJobDO job = crawlJobMapper.selectByIdAndTenantId(id, tenantId);
+        if (job == null) {
+            throw new ServiceException(LEAD_CRAWL_JOB_NOT_EXISTS, "Lead Agent job does not exist");
+        }
+        return job;
+    }
+
+    private String nextRunId() {
+        String timestamp = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMddHHmmss"));
+        String suffix = UUID.randomUUID().toString().replace("-", "").substring(0, 8);
+        return "lead-" + timestamp + "-" + suffix;
+    }
+
+    private String trimToNull(String value) {
+        return hasText(value) ? value.trim() : null;
     }
 
     private void fillMarket(LeadMarketCategoryDO category, Long tenantId, LeadMarketSaveReqVO saveReqVO) {

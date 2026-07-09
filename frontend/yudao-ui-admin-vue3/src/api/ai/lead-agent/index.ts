@@ -24,8 +24,56 @@ export interface LeadExportRuleVO {
   writeRejectedFile: boolean
 }
 
+export interface LeadRunCreateReqVO {
+  categoryCode?: string
+  country?: string
+  searchProvider?: string
+  enableAiReview?: boolean
+  skipSocialVerification?: boolean
+  maxResults?: number
+  maxPagesPerSite?: number
+  crawlTimeoutSeconds?: number
+}
+
+export interface LeadCrawlJobVO {
+  id: number
+  runId: string
+  categoryCode?: string
+  country?: string
+  maxResults: number
+  maxPagesPerSite: number
+  crawlTimeoutSeconds: number
+  searchProvider: string
+  analysisProvider: string
+  skipSocialVerification: boolean
+  enableAiReview: boolean
+  status: string
+  totalCandidates: number
+  crawledCount: number
+  leadCount: number
+  exportedCount: number
+  rejectedCount: number
+  errorMessage?: string
+  startedAt?: string
+  finishedAt?: string
+  createTime?: string
+  updateTime?: string
+}
+
 export const getDashboard = async () => {
   return await request.get({ url: '/ai/lead-agent/dashboard' })
+}
+
+export const startRun = async (data: LeadRunCreateReqVO) => {
+  return await request.post({ url: '/ai/lead-agent/run/start', data })
+}
+
+export const getJobPage = async (params) => {
+  return await request.get({ url: '/ai/lead-agent/job/page', params })
+}
+
+export const getJob = async (id: number) => {
+  return await request.get({ url: '/ai/lead-agent/job/get?id=' + id })
 }
 
 export const getMarketPage = async (params) => {
@@ -70,6 +118,10 @@ export const updateExportRules = async (data: LeadExportRuleVO) => {
 
 export const getCustomerPage = async (params) => {
   return await request.get({ url: '/ai/lead-agent/customer/page', params })
+}
+
+export const exportCustomers = async (params) => {
+  return await request.download<Blob>({ url: '/ai/lead-agent/customer/export-excel', params })
 }
 
 export const getHistoryPage = async (params) => {
