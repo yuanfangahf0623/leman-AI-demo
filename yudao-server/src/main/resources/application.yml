@@ -28,6 +28,7 @@ spring:
         - classpath:sql/mysql/ai-module-upgrade-20260603-teams-meeting-sync.sql
         - classpath:sql/mysql/system-menu-pages-20260509.sql
         - classpath:sql/mysql/ai-module-upgrade-20260604-finance-invoice.sql
+        - classpath:sql/mysql/ai-module-upgrade-20260624-rfq-email-automation.sql
 
 mybatis-plus:
   configuration:
@@ -101,6 +102,42 @@ ai:
       transcript-max-chars: ${TEAMS_MEETING_TRANSCRIPT_MAX_CHARS:200000}
       connect-timeout-seconds: ${TEAMS_MEETING_CONNECT_TIMEOUT_SECONDS:10}
       read-timeout-seconds: ${TEAMS_MEETING_READ_TIMEOUT_SECONDS:120}
+  rfq:
+    email:
+      enabled: ${RFQ_EMAIL_SYNC_ENABLED:false}
+      sync-interval-millis: ${RFQ_EMAIL_SYNC_INTERVAL_MILLIS:30000}
+      sync-initial-delay-millis: ${RFQ_EMAIL_SYNC_INITIAL_DELAY_MILLIS:5000}
+      default-folder: ${RFQ_EMAIL_DEFAULT_FOLDER:INBOX}
+      connect-timeout-millis: ${RFQ_EMAIL_CONNECT_TIMEOUT_MILLIS:10000}
+      read-timeout-millis: ${RFQ_EMAIL_READ_TIMEOUT_MILLIS:60000}
+      max-messages-per-poll: ${RFQ_EMAIL_MAX_MESSAGES_PER_POLL:20}
+      mailboxes:
+        - enabled: ${RFQ_IMAP_ENABLED:false}
+          account: ${RFQ_IMAP_ACCOUNT:}
+          tenant-id: ${RFQ_IMAP_TENANT_ID:0}
+          host: ${RFQ_IMAP_HOST:}
+          port: ${RFQ_IMAP_PORT:993}
+          username: ${RFQ_IMAP_USERNAME:}
+          password: ${RFQ_IMAP_PASSWORD:}
+          folder: ${RFQ_IMAP_FOLDER:INBOX}
+          max-messages-per-poll: ${RFQ_IMAP_MAX_MESSAGES_PER_POLL:20}
+    hermes:
+      model: ${RFQ_HERMES_MODEL:}
+      system-prompt: ${RFQ_HERMES_SYSTEM_PROMPT:}
+      max-input-chars: ${RFQ_HERMES_MAX_INPUT_CHARS:24000}
+      max-tokens: ${RFQ_HERMES_MAX_TOKENS:2000}
+    classification:
+      model: ${RFQ_CLASSIFICATION_MODEL:}
+      system-prompt: ${RFQ_CLASSIFICATION_SYSTEM_PROMPT:}
+      max-input-chars: ${RFQ_CLASSIFICATION_MAX_INPUT_CHARS:24000}
+      max-tokens: ${RFQ_CLASSIFICATION_MAX_TOKENS:800}
+    detection:
+      internal-email-domains: ${RFQ_INTERNAL_EMAIL_DOMAINS:leman-tech.com,lecho-gmbh.de}
+      internal-sender-keywords: ${RFQ_INTERNAL_SENDER_KEYWORDS:Fang Yuan,yuanf}
+      internal-company-keywords: ${RFQ_INTERNAL_COMPANY_KEYWORDS:leman-tech,Leman Tech,理文科技,理文科技（山东）股份有限公司,LECHO GmbH}
+      intent-keywords: ${RFQ_INTENT_KEYWORDS:rfq,request for quote,request for quotation,quotation request,quote request,please quote,please provide a quote,please send a quote,can you quote,need a quote,looking for quotation,pricing request,price request,request pricing,please provide pricing,pricing,cost estimate,quotation,quotation for,quote,quote for,offer,price consultation,design change study,hmg study,询价,询盘,报价,请报价,报价单,询价单,采购询价}
+    security:
+      password-key: ${RFQ_PASSWORD_KEY:}
   document:
     default-chunk-size: ${AI_DOCUMENT_DEFAULT_CHUNK_SIZE:800}
     default-chunk-overlap: ${AI_DOCUMENT_DEFAULT_CHUNK_OVERLAP:100}

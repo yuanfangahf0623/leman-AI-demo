@@ -37,6 +37,7 @@ import static cn.iocoder.yudao.module.ai.enums.AiChatModelErrorCodeConstants.CHA
 public class OpenAiCompatibleChatModelService implements AiChatModelService {
 
     private static final String CHAT_COMPLETIONS_PATH = "/chat/completions";
+    private static final String RESPONSE_FORMAT_JSON_OBJECT = "json_object";
     private static final int DEFAULT_CONNECT_TIMEOUT_SECONDS = 10;
     private static final int DEFAULT_READ_TIMEOUT_SECONDS = 60;
     private static final int HTTP_SUCCESS_MIN = 200;
@@ -186,6 +187,10 @@ public class OpenAiCompatibleChatModelService implements AiChatModelService {
         }
         if (request != null && request.getMaxTokens() != null) {
             requestBody.put("max_tokens", request.getMaxTokens());
+        }
+        if (request != null && request.getMetadata() != null
+                && RESPONSE_FORMAT_JSON_OBJECT.equals(request.getMetadata().get("responseFormat"))) {
+            requestBody.put("response_format", Map.of("type", RESPONSE_FORMAT_JSON_OBJECT));
         }
         try {
             return objectMapper.writeValueAsString(requestBody);

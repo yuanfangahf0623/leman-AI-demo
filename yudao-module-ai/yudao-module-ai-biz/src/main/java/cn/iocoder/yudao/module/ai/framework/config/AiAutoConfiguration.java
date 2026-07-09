@@ -2,6 +2,7 @@ package cn.iocoder.yudao.module.ai.framework.config;
 
 import cn.iocoder.yudao.framework.common.exception.ServiceException;
 import cn.iocoder.yudao.module.ai.framework.meeting.AiTeamsMeetingProperties;
+import cn.iocoder.yudao.module.ai.framework.rfq.AiRfqProperties;
 import cn.iocoder.yudao.module.ai.framework.vector.KnowledgeVectorStore;
 import cn.iocoder.yudao.module.ai.framework.vector.MockKnowledgeVectorStore;
 import cn.iocoder.yudao.module.ai.framework.vector.pgvector.PgVectorKnowledgeVectorStore;
@@ -22,6 +23,7 @@ import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.context.annotation.Bean;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.datasource.DriverManagerDataSource;
+import org.springframework.scheduling.annotation.EnableScheduling;
 
 import static cn.iocoder.yudao.module.ai.enums.AiChatModelErrorCodeConstants.CHAT_MODEL_PROVIDER_UNSUPPORTED;
 import static cn.iocoder.yudao.module.ai.enums.AiEmbeddingErrorCodeConstants.EMBEDDING_PROVIDER_UNSUPPORTED;
@@ -33,7 +35,8 @@ import static cn.iocoder.yudao.module.ai.enums.AiVectorStoreErrorCodeConstants.V
  * <p>当前阶段注册配置属性和 Embedding 抽象，openai-compatible 暂不创建真实外部客户端。</p>
  */
 @AutoConfiguration
-@EnableConfigurationProperties({AiProperties.class, AiTeamsMeetingProperties.class})
+@EnableConfigurationProperties({AiProperties.class, AiTeamsMeetingProperties.class, AiRfqProperties.class})
+@EnableScheduling
 @MapperScan("cn.iocoder.yudao.module.ai.dal.mysql")
 public class AiAutoConfiguration {
 
