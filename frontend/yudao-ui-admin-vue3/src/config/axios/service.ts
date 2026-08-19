@@ -29,7 +29,8 @@ const ignoreMsgs = [
 export const isRelogin = { show: false }
 // Axios 无感知刷新令牌，参考 https://www.dashingdog.cn/article/11 与 https://segmentfault.com/a/1190000020210980 实现
 // 请求队列
-let requestList: any[] = []
+type RequestQueueCallback = (error?: unknown) => void
+let requestList: RequestQueueCallback[] = []
 // 是否正在刷新中
 let isRefreshToken = false
 // 请求白名单，无须 token 的接口
@@ -155,6 +156,7 @@ service.interceptors.response.use(
         isRefreshToken = true
         // 1. 如果获取不到刷新令牌，则只能执行登出操作
         if (!getRefreshToken()) {
+          isRefreshToken = false
           return handleAuthorized()
         }
         // 2. 进行刷新访问令牌
@@ -163,7 +165,7 @@ service.interceptors.response.use(
           // 2.1 刷新成功，则回放队列的请求 + 当前请求
           setToken((await refreshTokenRes).data.data)
           config.headers!.Authorization = 'Bearer ' + getAccessToken()
-          requestList.forEach((cb: any) => {
+          requestList.forEach((cb) => {
             cb()
           })
           requestList = []
@@ -173,9 +175,9 @@ service.interceptors.response.use(
           return service(config)
         } catch (e) {
           // 为什么需要 catch 异常呢？刷新失败时，请求因为 Promise.reject 触发异常。
-          // 2.2 刷新失败，只回放队列的请求
-          requestList.forEach((cb: any) => {
-            cb()
+          // 2.2 刷新失败，拒绝队列中的请求，避免使用过期令牌再次请求形成 401 风暴
+          requestList.forEach((cb) => {
+            cb(e)
           })
           // 提示是否要登出。即不回放当前请求！不然会形成递归
           return handleAuthorized()
@@ -185,8 +187,12 @@ service.interceptors.response.use(
         }
       } else {
         // 添加到队列，等待刷新获取到新的令牌
-        return new Promise((resolve) => {
-          requestList.push(() => {
+        return new Promise((resolve, reject) => {
+          requestList.push((error) => {
+            if (error) {
+              reject(error)
+              return
+            }
             config.headers!.Authorization = 'Bearer ' + getAccessToken() // 让每个请求携带自定义token 请根据实际情况自行修改
             resolve(service(config))
           })
@@ -247,13 +253,18 @@ const refreshToken = async () => {
 }
 const handleAuthorized = () => {
   const { t } = useI18n()
+  const timeoutMessage = t('sys.api.timeoutMessage')
   if (!isRelogin.show) {
     // 如果已经到登录页面则不进行弹窗提示
     if (window.location.href.includes('login')) {
-      return
+      resetRouter()
+      deleteUserCache()
+      removeToken()
+      isRelogin.show = false
+      return Promise.reject(timeoutMessage)
     }
     isRelogin.show = true
-    ElMessageBox.confirm(t('sys.api.timeoutMessage'), t('common.confirmTitle'), {
+    ElMessageBox.confirm(timeoutMessage, t('common.confirmTitle'), {
       showCancelButton: false,
       closeOnClickModal: false,
       showClose: false,
@@ -269,6 +280,6 @@ const handleAuthorized = () => {
       window.location.href = window.location.href
     })
   }
-  return Promise.reject(t('sys.api.timeoutMessage'))
+  return Promise.reject(timeoutMessage)
 }
 export { service }

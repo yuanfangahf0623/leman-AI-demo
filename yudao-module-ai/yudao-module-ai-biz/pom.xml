@@ -20,6 +20,10 @@
     <dependencies>
         <dependency>
             <groupId>cn.iocoder.yudao</groupId>
+            <artifactId>yudao-common</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>cn.iocoder.yudao</groupId>
             <artifactId>yudao-module-ai-api</artifactId>
         </dependency>
 

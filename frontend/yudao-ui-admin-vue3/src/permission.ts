@@ -1,7 +1,7 @@
 import router from './router'
 import type { RouteRecordRaw } from 'vue-router'
 import { isRelogin } from '@/config/axios/service'
-import { getAccessToken } from '@/utils/auth'
+import { getAccessToken, removeToken } from '@/utils/auth'
 import { useTitle } from '@/hooks/web/useTitle'
 import { useNProgress } from '@/hooks/web/useNProgress'
 import { usePageLoading } from '@/hooks/web/usePageLoading'
@@ -62,7 +62,9 @@ router.beforeEach(async (to, from, next) => {
   loadStart()
   if (getAccessToken()) {
     if (to.path === '/login') {
-      next({ path: '/' })
+      removeToken()
+      isRelogin.show = false
+      next()
     } else {
       const dictStore = useDictStoreWithOut()
       const userStore = useUserStoreWithOut()

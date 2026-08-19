@@ -119,7 +119,8 @@ public class SystemMenuServiceImpl implements SystemMenuService {
             }
             MenuRouteRespVO parent = routeMap.get(menu.getParentId());
             if (parent == null) {
-                roots.add(route);
+                // Ignore orphan routes. A disabled parent must never promote its relative-path
+                // children to root routes, otherwise Vue Router rejects paths such as "dept".
                 continue;
             }
             if (parent.getChildren() == null) {
