@@ -6,12 +6,18 @@ import cn.iocoder.yudao.module.dataplatform.controller.admin.metadata.vo.*;
 import cn.iocoder.yudao.module.dataplatform.service.metadata.DataPlatformMetadataService;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotNull;
+import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.Map;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
+import org.springframework.web.multipart.MultipartFile;
 
 @RestController
 @RequestMapping("/admin-api/data-platform/data-dictionary")
@@ -58,5 +64,24 @@ public class DataPlatformMetadataController {
     public CommonResult<Boolean> updateField(@Valid @RequestBody MetadataFieldUpdateReqVO reqVO) {
         service.updateField(reqVO);
         return CommonResult.success(true);
+    }
+
+    @GetMapping("/export-review")
+    @PreAuthorize("@ss.hasPermission('data-platform:data-dictionary:query')")
+    public void exportReview(@RequestParam("dataSourceId") @NotNull Long dataSourceId,
+                             HttpServletResponse response) throws Exception {
+        String filename = URLEncoder.encode("字段数据字典审核.tsv", StandardCharsets.UTF_8)
+                .replace("+", "%20");
+        response.setContentType("text/tab-separated-values;charset=UTF-8");
+        response.setHeader(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename*=UTF-8''" + filename);
+        service.exportReviewTsv(dataSourceId, response.getOutputStream());
+    }
+
+    @PostMapping(value = "/import-review", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @PreAuthorize("@ss.hasPermission('data-platform:data-dictionary:update')")
+    public CommonResult<MetadataImportRespVO> importReview(
+            @RequestParam("dataSourceId") @NotNull Long dataSourceId,
+            @RequestPart("file") MultipartFile file) {
+        return CommonResult.success(service.importReviewTsv(dataSourceId, file));
     }
 }

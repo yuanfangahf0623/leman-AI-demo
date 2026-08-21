@@ -45,3 +45,16 @@ For Factory Daren, the scan excludes the same 14 technical log tables used by
 the synchronization inventory, links every discovered table to its Doris ODS
 table, and marks the watermark columns of active incremental jobs as increment
 field candidates.
+
+The review workflow exports a UTF-8 TSV file containing source coordinates,
+business definitions, classification, sensitivity, increment flags, review
+status, and definition source. Import accepts at most 50,000 rows and only
+applies rows explicitly marked `CONFIRMED`; every update is also scoped to the
+selected data source and an existing field ID. Definitions are tagged as
+`RULE`, `SOURCE`, `ERP_CONFIG`, `MANUAL`, or `IMPORT` so generated suggestions
+remain distinguishable from evidence-backed or reviewed content.
+
+Factory Daren also reads non-empty definitions from `dbo.HrmFormulaField`.
+Configured aliases are accepted only when they resolve to a verified physical
+column in the same table; unresolved configuration is ignored rather than
+being promoted to a confirmed definition.

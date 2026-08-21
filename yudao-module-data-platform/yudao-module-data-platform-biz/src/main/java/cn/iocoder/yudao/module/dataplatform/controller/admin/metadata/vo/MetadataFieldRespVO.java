@@ -24,5 +24,6 @@ public class MetadataFieldRespVO {
     private String sensitivityLevel;
     private Boolean incrementalCandidate;
     private String definitionStatus;
+    private String definitionSource;
     private LocalDateTime lastScanTime;
 }

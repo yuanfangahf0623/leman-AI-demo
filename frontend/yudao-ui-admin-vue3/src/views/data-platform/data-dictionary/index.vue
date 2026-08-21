@@ -21,6 +21,21 @@
         >
           <Icon icon="ep:refresh" class="mr-5px" />扫描源库
         </el-button>
+        <el-button
+          v-hasPermi="['data-platform:data-dictionary:query']"
+          type="success"
+          plain
+          :loading="exporting"
+          @click="exportReview"
+        ><Icon icon="ep:download" class="mr-5px" />导出审核表</el-button>
+        <el-button
+          v-hasPermi="['data-platform:data-dictionary:update']"
+          type="warning"
+          plain
+          :loading="importing"
+          @click="openImport"
+        ><Icon icon="ep:upload" class="mr-5px" />导入审核结果</el-button>
+        <input ref="importInput" type="file" accept=".tsv,text/tab-separated-values" class="hidden" @change="importReview" />
       </el-form-item>
       <el-form-item><span class="text-12px text-gray-500">扫描只读取元数据，不读取业务数据，也不会覆盖已确认定义</span></el-form-item>
     </el-form>
@@ -92,6 +107,7 @@
           <el-table-column label="定义" width="78">
             <template #default="scope"><el-tag size="small" :type="scope.row.definitionStatus === 'CONFIRMED' ? 'success' : 'info'">{{ scope.row.definitionStatus === 'CONFIRMED' ? '已确认' : '待确认' }}</el-tag></template>
           </el-table-column>
+          <el-table-column label="来源" width="78"><template #default="scope">{{ sourceLabel(scope.row.definitionSource) }}</template></el-table-column>
           <el-table-column label="敏感" width="72"><template #default="scope"><el-tag size="small" :type="sensitivityType(scope.row.sensitivityLevel)">{{ sensitivityLabel(scope.row.sensitivityLevel) }}</el-tag></template></el-table-column>
           <el-table-column label="增量" width="58" align="center"><template #default="scope">{{ scope.row.incrementalCandidate ? '是' : '-' }}</template></el-table-column>
           <el-table-column label="操作" width="60" fixed="right"><template #default="scope"><el-button link type="primary" @click="openFieldEdit(scope.row)">维护</el-button></template></el-table-column>
@@ -128,6 +144,7 @@
 
 <script setup lang="ts">
 import { DataPlatformApi, DataSourceVO, MetadataFieldVO, MetadataSummaryVO, MetadataTableVO } from '@/api/data-platform'
+import download from '@/utils/download'
 
 defineOptions({ name: 'DataPlatformDataDictionary' })
 const message = useMessage()
@@ -139,6 +156,7 @@ const selectedTable = ref<MetadataTableVO>()
 const summary = ref<MetadataSummaryVO>({ tableCount: 0, fieldCount: 0, sourceCommentCount: 0, namedCount: 0, describedCount: 0, confirmedCount: 0, sensitiveCount: 0, confirmedCoverage: 0, descriptionCoverage: 0 })
 const tableTotal = ref(0), fieldTotal = ref(0)
 const tableLoading = ref(false), fieldLoading = ref(false), refreshing = ref(false), saving = ref(false)
+const exporting = ref(false), importing = ref(false), importInput = ref<HTMLInputElement>()
 const tableDialog = ref(false), fieldDialog = ref(false)
 const tableQuery = reactive({ pageNo: 1, pageSize: 20, keyword: '', definitionStatus: '' })
 const fieldQuery = reactive({ pageNo: 1, pageSize: 20, keyword: '', definitionStatus: '', sensitivityLevel: '' })
@@ -188,6 +206,27 @@ const refreshDictionary = async () => {
     await Promise.all([loadSummary(), loadTables()])
   } finally { refreshing.value = false }
 }
+const exportReview = async () => {
+  if (!selectedDataSourceId.value) return
+  exporting.value = true
+  try {
+    const data = await DataPlatformApi.exportMetadataReview(selectedDataSourceId.value)
+    download.excel(data, `字段数据字典审核-${selectedDataSourceId.value}.tsv`)
+  } finally { exporting.value = false }
+}
+const openImport = () => { if (importInput.value) { importInput.value.value = ''; importInput.value.click() } }
+const importReview = async (event: Event) => {
+  const file = (event.target as HTMLInputElement).files?.[0]
+  if (!file || !selectedDataSourceId.value) return
+  await message.confirm('只会导入“确认状态”为 CONFIRMED 或“已确认”的行，并按字段 ID 更新业务定义。是否继续？')
+  importing.value = true
+  try {
+    const result = await DataPlatformApi.importMetadataReview(selectedDataSourceId.value, file)
+    const errorText = result.errors?.length ? `；错误：${result.errors.join('；')}` : ''
+    message.alert(`读取 ${result.totalRows} 行，更新 ${result.updatedRows} 行，跳过 ${result.skippedRows} 行${errorText}`)
+    await Promise.all([loadFields(), loadSummary(), loadTables()])
+  } finally { importing.value = false }
+}
 const openTableEdit = (row: MetadataTableVO) => { Object.assign(tableForm, row); tableDialog.value = true }
 const openFieldEdit = (row: MetadataFieldVO) => { Object.assign(fieldForm, row); fieldDialog.value = true }
 const saveTable = async () => {
@@ -208,6 +247,7 @@ const saveField = async () => {
 const formatType = (field: MetadataFieldVO) => field.columnSize && field.columnSize > 0 ? `${field.dataType}(${field.columnSize}${field.decimalDigits ? `,${field.decimalDigits}` : ''})` : field.dataType || '-'
 const sensitivityLabel = (level: string) => ({ PUBLIC: '公开', INTERNAL: '内部', SENSITIVE: '敏感', RESTRICTED: '受限' }[level] || level)
 const sensitivityType = (level: string) => ({ PUBLIC: 'success', INTERNAL: 'info', SENSITIVE: 'warning', RESTRICTED: 'danger' }[level] as any)
+const sourceLabel = (source: string) => ({ RULE: '规则', SOURCE: '源备注', ERP_CONFIG: 'ERP配置', MANUAL: '人工', IMPORT: '导入' }[source] || source || '-')
 
 onMounted(async () => {
   const page = await DataPlatformApi.getDataSourcePage({ pageNo: 1, pageSize: 100, category: 'DATABASE', status: 0 })

@@ -46,6 +46,8 @@ public class DataPlatformMetadataFieldDO {
     private Boolean incrementalCandidate;
     @TableField("definition_status")
     private String definitionStatus;
+    @TableField("definition_source")
+    private String definitionSource;
     private Integer status;
     @TableField("last_scan_time")
     private LocalDateTime lastScanTime;

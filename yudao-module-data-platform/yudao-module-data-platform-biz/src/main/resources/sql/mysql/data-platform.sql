@@ -136,6 +136,7 @@ CREATE TABLE IF NOT EXISTS `dp_metadata_field` (
   `sensitivity_level` varchar(16) NOT NULL DEFAULT 'INTERNAL' COMMENT '敏感等级：PUBLIC/INTERNAL/SENSITIVE/RESTRICTED',
   `incremental_candidate` bit(1) NOT NULL DEFAULT b'0' COMMENT '是否适合作为增量时间字段',
   `definition_status` varchar(16) NOT NULL DEFAULT 'GENERATED' COMMENT '定义状态：GENERATED/CONFIRMED',
+  `definition_source` varchar(16) NOT NULL DEFAULT 'RULE' COMMENT '定义来源：RULE/SOURCE/ERP_CONFIG/MANUAL/IMPORT',
   `status` tinyint NOT NULL DEFAULT 0 COMMENT '发现状态：0 有效，1 已失效',
   `last_scan_time` datetime DEFAULT NULL COMMENT '最近扫描时间',
   `creator` varchar(64) NOT NULL DEFAULT '' COMMENT '创建者',
@@ -149,6 +150,17 @@ CREATE TABLE IF NOT EXISTS `dp_metadata_field` (
   KEY `idx_dp_metadata_field_definition` (`definition_status`),
   KEY `idx_dp_metadata_field_sensitivity` (`sensitivity_level`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='业务字段数据字典';
+
+SET @dp_definition_source_exists := (
+  SELECT COUNT(*) FROM information_schema.COLUMNS
+  WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'dp_metadata_field' AND COLUMN_NAME = 'definition_source'
+);
+SET @dp_definition_source_ddl := IF(@dp_definition_source_exists = 0,
+  'ALTER TABLE `dp_metadata_field` ADD COLUMN `definition_source` varchar(16) NOT NULL DEFAULT ''RULE'' COMMENT ''定义来源：RULE/SOURCE/ERP_CONFIG/MANUAL/IMPORT'' AFTER `definition_status`',
+  'SELECT 1');
+PREPARE dp_definition_source_stmt FROM @dp_definition_source_ddl;
+EXECUTE dp_definition_source_stmt;
+DEALLOCATE PREPARE dp_definition_source_stmt;
 
 INSERT INTO `system_menu`
 (`id`, `name`, `permission`, `type`, `sort`, `parent_id`, `path`, `icon`, `component`, `component_name`, `status`, `visible`, `keep_alive`, `always_show`, `creator`, `create_time`, `updater`, `update_time`, `deleted`)

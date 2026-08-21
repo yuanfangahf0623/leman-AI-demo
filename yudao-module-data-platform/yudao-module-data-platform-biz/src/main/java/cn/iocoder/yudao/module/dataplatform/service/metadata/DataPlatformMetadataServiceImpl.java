@@ -17,7 +17,10 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
+import org.springframework.web.multipart.MultipartFile;
 
+import java.io.*;
+import java.nio.charset.StandardCharsets;
 import java.sql.*;
 import java.time.LocalDateTime;
 import java.util.*;
@@ -106,17 +109,20 @@ public class DataPlatformMetadataServiceImpl implements DataPlatformMetadataServ
             props.setProperty("user", dataSource.getUsername());
             props.setProperty("password", dataSourceService.decryptPassword(dataSource));
             List<DiscoveredTable> discovered;
+            Map<ColumnKey, EvidenceDefinition> evidenceDefinitions;
             try (Connection connection = DriverManager.getConnection(dataSourceService.buildJdbcUrl(dataSource), props)) {
                 discovered = type == DataSourceTypeEnum.SQLSERVER
                         ? scanSqlServer(connection, isFactoryDaren(dataSource))
                         : scanGeneric(connection);
+                evidenceDefinitions = type == DataSourceTypeEnum.SQLSERVER
+                        ? loadSqlServerEvidenceDefinitions(connection, discovered) : Map.of();
             }
-            RefreshCounters counters = persist(dataSource, discovered, scanTime);
-            log.info("数据字典扫描完成, dataSourceId={}, code={}, tables={}, fields={}, sourceComments={}",
+            RefreshCounters counters = persist(dataSource, discovered, evidenceDefinitions, scanTime);
+            log.info("数据字典扫描完成, dataSourceId={}, code={}, tables={}, fields={}, sourceComments={}, erpDefinitions={}",
                     dataSourceId, dataSource.getCode(), counters.tableCount, counters.fieldCount,
-                    counters.sourceCommentCount);
+                    counters.sourceCommentCount, counters.erpConfigDefinitionCount);
             return new MetadataRefreshRespVO(counters.tableCount, counters.fieldCount,
-                    counters.sourceCommentCount, counters.generatedNameCount);
+                    counters.sourceCommentCount, counters.erpConfigDefinitionCount, counters.generatedNameCount);
         } catch (ServiceException ex) {
             throw ex;
         } catch (Exception ex) {
@@ -152,7 +158,111 @@ public class DataPlatformMetadataServiceImpl implements DataPlatformMetadataServ
         update.setSensitivityLevel(reqVO.getSensitivityLevel());
         update.setIncrementalCandidate(Boolean.TRUE.equals(reqVO.getIncrementalCandidate()));
         update.setDefinitionStatus("CONFIRMED");
+        update.setDefinitionSource("MANUAL");
         fieldMapper.updateById(update);
+    }
+
+    @Override
+    public void exportReviewTsv(Long dataSourceId, OutputStream outputStream) {
+        dataSourceService.requireDataSource(dataSourceId);
+        String sql = "SELECT f.id,t.source_schema,t.source_table,f.source_column,f.data_type,f.business_name," +
+                "f.description,f.classification,f.sensitivity_level,f.incremental_candidate,f.definition_status," +
+                "f.definition_source FROM dp_metadata_field f JOIN dp_metadata_table t ON t.id=f.metadata_table_id " +
+                "WHERE t.data_source_id=? AND t.status=0 AND f.status=0 AND t.deleted=b'0' AND f.deleted=b'0' " +
+                "ORDER BY t.source_table,f.ordinal_position";
+        try (BufferedWriter writer = new BufferedWriter(new OutputStreamWriter(outputStream, StandardCharsets.UTF_8))) {
+            writer.write('\ufeff');
+            writer.write("字段ID\t源Schema\t源表\t源字段\t数据类型\t业务中文名\t业务口径\t数据分类\t敏感等级\t增量字段\t确认状态\t定义来源");
+            writer.newLine();
+            jdbcTemplate.query(sql, rs -> {
+                try {
+                    writeTsvRow(writer, rs.getLong("id"), rs.getString("source_schema"),
+                            rs.getString("source_table"), rs.getString("source_column"), rs.getString("data_type"),
+                            rs.getString("business_name"), rs.getString("description"), rs.getString("classification"),
+                            rs.getString("sensitivity_level"), rs.getBoolean("incremental_candidate") ? "是" : "否",
+                            rs.getString("definition_status"), rs.getString("definition_source"));
+                } catch (IOException ex) {
+                    throw new UncheckedIOException(ex);
+                }
+            }, dataSourceId);
+            writer.flush();
+        } catch (IOException | UncheckedIOException ex) {
+            throw new ServiceException(METADATA_SCAN_FAILED, "导出字段审核表失败");
+        }
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public MetadataImportRespVO importReviewTsv(Long dataSourceId, MultipartFile file) {
+        dataSourceService.requireDataSource(dataSourceId);
+        if (file == null || file.isEmpty()) {
+            throw new ServiceException(METADATA_SCAN_FAILED, "请选择字段审核 TSV 文件");
+        }
+        if (file.getSize() > 20L * 1024 * 1024) {
+            throw new ServiceException(METADATA_SCAN_FAILED, "字段审核文件不能超过 20 MB");
+        }
+        List<Object[]> updates = new ArrayList<>();
+        List<String> errors = new ArrayList<>();
+        int totalRows = 0;
+        int skippedRows = 0;
+        try (BufferedReader reader = new BufferedReader(new InputStreamReader(file.getInputStream(), StandardCharsets.UTF_8))) {
+            String header = reader.readLine();
+            if (header == null || !header.replace("\ufeff", "").startsWith("字段ID\t源Schema\t源表\t源字段")) {
+                throw new ServiceException(METADATA_SCAN_FAILED, "文件格式错误，请使用数据字典导出的 TSV 审核表");
+            }
+            String line;
+            int lineNo = 1;
+            while ((line = reader.readLine()) != null) {
+                lineNo++;
+                if (line.isBlank()) continue;
+                totalRows++;
+                if (totalRows > 50_000) {
+                    throw new ServiceException(METADATA_SCAN_FAILED, "审核文件不能超过 50000 行");
+                }
+                String[] cells = line.split("\\t", -1);
+                if (cells.length < 12) {
+                    addImportError(errors, lineNo, "列数不足");
+                    continue;
+                }
+                String definitionStatus = cleanImportedCell(cells[10]).toUpperCase(Locale.ROOT);
+                if (!"CONFIRMED".equals(definitionStatus) && !"已确认".equals(cleanImportedCell(cells[10]))) {
+                    skippedRows++;
+                    continue;
+                }
+                try {
+                    long fieldId = Long.parseLong(cleanImportedCell(cells[0]));
+                    String businessName = requireImportValue(cells[5], 128, "业务中文名");
+                    String description = importValue(cells[6], 1000);
+                    String classification = importValue(cells[7], 64);
+                    String sensitivity = normalizeSensitivity(cells[8]);
+                    boolean incremental = normalizeBoolean(cells[9]);
+                    updates.add(new Object[]{businessName, description, classification, sensitivity, incremental,
+                            fieldId, dataSourceId});
+                } catch (IllegalArgumentException ex) {
+                    addImportError(errors, lineNo, ex.getMessage());
+                }
+            }
+        } catch (ServiceException ex) {
+            throw ex;
+        } catch (IOException ex) {
+            throw new ServiceException(METADATA_SCAN_FAILED, "读取字段审核文件失败");
+        }
+        String sql = "UPDATE dp_metadata_field f JOIN dp_metadata_table t ON t.id=f.metadata_table_id " +
+                "SET f.business_name=?,f.description=?,f.classification=?,f.sensitivity_level=?," +
+                "f.incremental_candidate=?,f.definition_status='CONFIRMED',f.definition_source='IMPORT'," +
+                "f.updater='dictionary-import' WHERE f.id=? AND t.data_source_id=? " +
+                "AND t.deleted=b'0' AND f.deleted=b'0'";
+        int updatedRows = 0;
+        if (!updates.isEmpty()) {
+            int[] results = jdbcTemplate.batchUpdate(sql, updates);
+            for (int result : results) {
+                if (result > 0 || result == Statement.SUCCESS_NO_INFO) updatedRows++;
+                else skippedRows++;
+            }
+        }
+        log.info("字段字典审核导入完成, dataSourceId={}, totalRows={}, updatedRows={}, skippedRows={}, errors={}",
+                dataSourceId, totalRows, updatedRows, skippedRows, errors.size());
+        return new MetadataImportRespVO(totalRows, updatedRows, skippedRows, errors);
     }
 
     private List<DiscoveredTable> scanSqlServer(Connection connection, boolean excludeTechnicalLogs) throws SQLException {
@@ -214,7 +324,53 @@ public class DataPlatformMetadataServiceImpl implements DataPlatformMetadataServ
         return tables;
     }
 
+    private Map<ColumnKey, EvidenceDefinition> loadSqlServerEvidenceDefinitions(Connection connection,
+                                                                                 List<DiscoveredTable> discovered)
+            throws SQLException {
+        String existsSql = "SELECT COUNT(*) FROM sys.tables t JOIN sys.schemas s ON s.schema_id=t.schema_id " +
+                "WHERE s.name='dbo' AND t.name='HrmFormulaField'";
+        try (Statement statement = connection.createStatement(); ResultSet rs = statement.executeQuery(existsSql)) {
+            if (!rs.next() || rs.getInt(1) == 0) return Map.of();
+        }
+        Map<String, List<String>> actualColumns = new HashMap<>();
+        discovered.forEach(table -> actualColumns.put(table.name.toLowerCase(Locale.ROOT),
+                table.fields.stream().map(DiscoveredField::name).toList()));
+        Map<ColumnKey, EvidenceDefinition> definitions = new HashMap<>();
+        String sql = "SELECT TableName,FieldName,DisPlayName FROM dbo.HrmFormulaField " +
+                "WHERE NULLIF(LTRIM(RTRIM(TableName)),'') IS NOT NULL " +
+                "AND NULLIF(LTRIM(RTRIM(FieldName)),'') IS NOT NULL " +
+                "AND NULLIF(LTRIM(RTRIM(DisPlayName)),'') IS NOT NULL";
+        try (Statement statement = connection.createStatement(); ResultSet rs = statement.executeQuery(sql)) {
+            while (rs.next()) {
+                String table = rs.getString("TableName").trim();
+                String field = rs.getString("FieldName").trim();
+                String displayName = rs.getString("DisPlayName").trim();
+                String actualField = resolveEvidenceField(table, field,
+                        actualColumns.getOrDefault(table.toLowerCase(Locale.ROOT), List.of()));
+                if (actualField == null) continue;
+                definitions.putIfAbsent(columnKey(table, actualField),
+                        new EvidenceDefinition(displayName, "ERP_CONFIG"));
+            }
+        }
+        return definitions;
+    }
+
+    static String resolveEvidenceField(String table, String configuredField, Collection<String> actualFields) {
+        String exact = actualFields.stream().filter(field -> field.equalsIgnoreCase(configuredField))
+                .findFirst().orElse(null);
+        if (exact != null) return exact;
+        if (!configuredField.regionMatches(true, 0, table, 0, table.length())) return null;
+        int modulePrefixEnd = 1;
+        while (modulePrefixEnd < table.length() && Character.isLowerCase(table.charAt(modulePrefixEnd))) {
+            modulePrefixEnd++;
+        }
+        if (modulePrefixEnd >= table.length()) return null;
+        String candidate = table.substring(modulePrefixEnd) + configuredField.substring(table.length());
+        return actualFields.stream().filter(field -> field.equalsIgnoreCase(candidate)).findFirst().orElse(null);
+    }
+
     private RefreshCounters persist(DataPlatformDataSourceDO dataSource, List<DiscoveredTable> discovered,
+                                    Map<ColumnKey, EvidenceDefinition> evidenceDefinitions,
                                     LocalDateTime scanTime) {
         jdbcTemplate.update("UPDATE dp_metadata_field f JOIN dp_metadata_table t ON t.id=f.metadata_table_id " +
                 "SET f.status=1 WHERE t.data_source_id=? AND f.deleted=b'0'", dataSource.getId());
@@ -248,16 +404,23 @@ public class DataPlatformMetadataServiceImpl implements DataPlatformMetadataServ
         String upsert = "INSERT INTO dp_metadata_field " +
                 "(metadata_table_id,source_column,target_column,data_type,jdbc_type,column_size,decimal_digits,nullable," +
                 "primary_key,ordinal_position,source_comment,business_name,description,classification,sensitivity_level," +
-                "incremental_candidate,definition_status,status,last_scan_time,creator,updater,deleted) " +
-                "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,'metadata-scan','metadata-scan',b'0') " +
+                "incremental_candidate,definition_status,definition_source,status,last_scan_time,creator,updater,deleted) " +
+                "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,'metadata-scan','metadata-scan',b'0') " +
                 "ON DUPLICATE KEY UPDATE target_column=VALUES(target_column),data_type=VALUES(data_type)," +
                 "jdbc_type=VALUES(jdbc_type),column_size=VALUES(column_size),decimal_digits=VALUES(decimal_digits)," +
                 "nullable=VALUES(nullable),primary_key=VALUES(primary_key),ordinal_position=VALUES(ordinal_position)," +
-                "source_comment=VALUES(source_comment),business_name=IF(business_name IS NULL OR business_name='',VALUES(business_name),business_name)," +
-                "description=IF(definition_status='GENERATED' AND (description IS NULL OR description=''),VALUES(description),description)," +
+                "source_comment=VALUES(source_comment)," +
+                "business_name=IF(definition_status='GENERATED' AND VALUES(definition_status)='CONFIRMED'," +
+                "VALUES(business_name),IF(business_name IS NULL OR business_name='',VALUES(business_name),business_name))," +
+                "description=IF(definition_status='GENERATED' AND VALUES(definition_status)='CONFIRMED'," +
+                "VALUES(description),IF(definition_status='GENERATED' AND (description IS NULL OR description=''),VALUES(description),description))," +
                 "classification=IF(classification IS NULL OR classification='',VALUES(classification),classification)," +
                 "sensitivity_level=IF(definition_status='GENERATED',VALUES(sensitivity_level),sensitivity_level)," +
                 "incremental_candidate=IF(definition_status='GENERATED',VALUES(incremental_candidate),incremental_candidate)," +
+                "definition_source=IF(definition_status='GENERATED' AND VALUES(definition_status)='CONFIRMED'," +
+                "VALUES(definition_source),definition_source)," +
+                "definition_status=IF(definition_status='GENERATED' AND VALUES(definition_status)='CONFIRMED'," +
+                "'CONFIRMED',definition_status)," +
                 "status=0,last_scan_time=VALUES(last_scan_time),updater='metadata-scan'";
         List<Object[]> batch = new ArrayList<>(BATCH_SIZE);
         RefreshCounters counters = new RefreshCounters();
@@ -265,16 +428,23 @@ public class DataPlatformMetadataServiceImpl implements DataPlatformMetadataServ
         for (DiscoveredTable table : discovered) {
             Long tableId = ids.get(new TableKey(table.schema, table.name));
             for (DiscoveredField field : table.fields) {
-                String businessName = suggester.suggestFieldName(field.name, field.comment);
-                String definitionStatus = field.comment == null ? "GENERATED" : "CONFIRMED";
+                EvidenceDefinition evidence = evidenceDefinitions.get(columnKey(table.name, field.name));
+                String businessName = field.comment != null ? field.comment
+                        : evidence != null ? evidence.businessName : suggester.suggestFieldName(field.name, null);
+                String definitionStatus = field.comment != null || evidence != null ? "CONFIRMED" : "GENERATED";
+                String definitionSource = field.comment != null ? "SOURCE"
+                        : evidence != null ? evidence.source : "RULE";
                 batch.add(new Object[]{tableId, field.name, field.name, field.dataType, field.jdbcType,
                         field.columnSize, field.decimalDigits, field.nullable, field.primaryKey, field.ordinal,
                         field.comment, businessName, field.comment, suggester.suggestClassification(field.name),
                         suggester.suggestSensitivity(field.name),
-                        suggester.isIncrementalCandidate(field.name, field.dataType), definitionStatus, 0,
+                        suggester.isIncrementalCandidate(field.name, field.dataType), definitionStatus,
+                        definitionSource, 0,
                         Timestamp.valueOf(scanTime)});
                 counters.fieldCount++;
-                if (field.comment != null) counters.sourceCommentCount++; else counters.generatedNameCount++;
+                if (field.comment != null) counters.sourceCommentCount++;
+                else if (evidence != null) counters.erpConfigDefinitionCount++;
+                else counters.generatedNameCount++;
                 if (batch.size() == BATCH_SIZE) {
                     jdbcTemplate.batchUpdate(upsert, batch);
                     batch.clear();
@@ -353,8 +523,71 @@ public class DataPlatformMetadataServiceImpl implements DataPlatformMetadataServ
         resp.setSensitivityLevel(item.getSensitivityLevel());
         resp.setIncrementalCandidate(item.getIncrementalCandidate());
         resp.setDefinitionStatus(item.getDefinitionStatus());
+        resp.setDefinitionSource(item.getDefinitionSource());
         resp.setLastScanTime(item.getLastScanTime());
         return resp;
+    }
+
+    private void writeTsvRow(BufferedWriter writer, Object... values) throws IOException {
+        for (int index = 0; index < values.length; index++) {
+            if (index > 0) writer.write('\t');
+            writer.write(tsvCell(values[index]));
+        }
+        writer.newLine();
+    }
+
+    private String tsvCell(Object value) {
+        if (value == null) return "";
+        String text = String.valueOf(value).replace('\t', ' ').replace('\r', ' ').replace('\n', ' ');
+        if (!text.isEmpty() && "=+-@".indexOf(text.charAt(0)) >= 0) return "'" + text;
+        return text;
+    }
+
+    private String cleanImportedCell(String value) {
+        String text = value == null ? "" : value.trim();
+        if (text.length() > 1 && text.charAt(0) == '\'' && "=+-@".indexOf(text.charAt(1)) >= 0) {
+            return text.substring(1);
+        }
+        return text;
+    }
+
+    private String requireImportValue(String value, int maxLength, String label) {
+        String result = importValue(value, maxLength);
+        if (!StringUtils.hasText(result)) throw new IllegalArgumentException(label + "不能为空");
+        return result;
+    }
+
+    private String importValue(String value, int maxLength) {
+        String result = cleanImportedCell(value);
+        if (result.length() > maxLength) throw new IllegalArgumentException("内容超过 " + maxLength + " 个字符");
+        return result.isEmpty() ? null : result;
+    }
+
+    private String normalizeSensitivity(String value) {
+        String normalized = cleanImportedCell(value).toUpperCase(Locale.ROOT);
+        return switch (normalized) {
+            case "PUBLIC", "公开" -> "PUBLIC";
+            case "INTERNAL", "内部" -> "INTERNAL";
+            case "SENSITIVE", "敏感" -> "SENSITIVE";
+            case "RESTRICTED", "受限" -> "RESTRICTED";
+            default -> throw new IllegalArgumentException("敏感等级非法");
+        };
+    }
+
+    private boolean normalizeBoolean(String value) {
+        return switch (cleanImportedCell(value).toLowerCase(Locale.ROOT)) {
+            case "是", "true", "1", "yes", "y" -> true;
+            case "否", "false", "0", "no", "n", "" -> false;
+            default -> throw new IllegalArgumentException("增量字段只能填写是或否");
+        };
+    }
+
+    private void addImportError(List<String> errors, int lineNo, String message) {
+        if (errors.size() < 20) errors.add("第 " + lineNo + " 行：" + message);
+    }
+
+    private ColumnKey columnKey(String table, String field) {
+        return new ColumnKey(table.toLowerCase(Locale.ROOT), field.toLowerCase(Locale.ROOT));
     }
 
     private boolean isFactoryDaren(DataPlatformDataSourceDO source) {
@@ -403,6 +636,12 @@ public class DataPlatformMetadataServiceImpl implements DataPlatformMetadataServ
     private record TableKey(String schema, String table) {
     }
 
+    private record ColumnKey(String table, String field) {
+    }
+
+    private record EvidenceDefinition(String businessName, String source) {
+    }
+
     private static final class DiscoveredTable {
         private final String schema;
         private final String name;
@@ -423,6 +662,7 @@ public class DataPlatformMetadataServiceImpl implements DataPlatformMetadataServ
         private int tableCount;
         private int fieldCount;
         private int sourceCommentCount;
+        private int erpConfigDefinitionCount;
         private int generatedNameCount;
     }
 }

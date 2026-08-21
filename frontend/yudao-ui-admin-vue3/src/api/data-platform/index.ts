@@ -119,6 +119,7 @@ export interface MetadataFieldVO {
   sensitivityLevel: 'PUBLIC' | 'INTERNAL' | 'SENSITIVE' | 'RESTRICTED'
   incrementalCandidate: boolean
   definitionStatus: 'GENERATED' | 'CONFIRMED'
+  definitionSource: 'RULE' | 'SOURCE' | 'ERP_CONFIG' | 'MANUAL' | 'IMPORT'
   lastScanTime?: string
 }
 
@@ -172,5 +173,17 @@ export const DataPlatformApi = {
   updateMetadataTable: (data: Pick<MetadataTableVO, 'id' | 'businessName' | 'businessDomain' | 'description'>) =>
     request.put({ url: '/data-platform/data-dictionary/table/update', data }),
   updateMetadataField: (data: Pick<MetadataFieldVO, 'id' | 'businessName' | 'description' | 'classification' | 'sensitivityLevel' | 'incrementalCandidate'>) =>
-    request.put({ url: '/data-platform/data-dictionary/field/update', data })
+    request.put({ url: '/data-platform/data-dictionary/field/update', data }),
+  exportMetadataReview: (dataSourceId: number) =>
+    request.download({ url: '/data-platform/data-dictionary/export-review', params: { dataSourceId } }),
+  importMetadataReview: (dataSourceId: number, file: File) => {
+    const data = new FormData()
+    data.append('file', file)
+    return request.post({
+      url: '/data-platform/data-dictionary/import-review',
+      params: { dataSourceId },
+      data,
+      headers: { 'Content-Type': 'multipart/form-data' }
+    })
+  }
 }
