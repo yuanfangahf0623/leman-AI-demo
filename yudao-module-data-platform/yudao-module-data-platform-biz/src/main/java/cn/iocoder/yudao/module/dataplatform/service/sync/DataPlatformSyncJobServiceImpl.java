@@ -5,14 +5,17 @@ import cn.iocoder.yudao.framework.common.pojo.PageResult;
 import cn.iocoder.yudao.module.dataplatform.controller.admin.sync.vo.JobRunPageReqVO;
 import cn.iocoder.yudao.module.dataplatform.controller.admin.sync.vo.SyncJobPageReqVO;
 import cn.iocoder.yudao.module.dataplatform.controller.admin.sync.vo.SyncJobSaveReqVO;
+import cn.iocoder.yudao.module.dataplatform.controller.admin.sync.vo.SyncJobRespVO;
 import cn.iocoder.yudao.module.dataplatform.dal.dataobject.DataPlatformJobRunDO;
 import cn.iocoder.yudao.module.dataplatform.dal.dataobject.DataPlatformSyncJobDO;
 import cn.iocoder.yudao.module.dataplatform.dal.mysql.DataPlatformJobRunMapper;
 import cn.iocoder.yudao.module.dataplatform.dal.mysql.DataPlatformSyncJobMapper;
 import cn.iocoder.yudao.module.dataplatform.service.datasource.DataPlatformDataSourceService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.BeanUtils;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.util.StringUtils;
 
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -33,6 +36,7 @@ public class DataPlatformSyncJobServiceImpl implements DataPlatformSyncJobServic
     private final DataPlatformJobRunMapper runMapper;
     private final DataPlatformDataSourceService dataSourceService;
     private final SeaTunnelJobExecutor executor;
+    private final SyncFieldMappingSqlBuilder mappingSqlBuilder;
 
     @Override
     @Transactional(rollbackFor = Exception.class)
@@ -67,13 +71,14 @@ public class DataPlatformSyncJobServiceImpl implements DataPlatformSyncJobServic
     }
 
     @Override
-    public DataPlatformSyncJobDO get(Long id) {
-        return requireJob(id);
+    public SyncJobRespVO get(Long id) {
+        return toResp(requireJob(id));
     }
 
     @Override
-    public PageResult<DataPlatformSyncJobDO> page(SyncJobPageReqVO reqVO) {
-        return jobMapper.selectPage(reqVO);
+    public PageResult<SyncJobRespVO> page(SyncJobPageReqVO reqVO) {
+        PageResult<DataPlatformSyncJobDO> page = jobMapper.selectPage(reqVO);
+        return new PageResult<>(page.getList().stream().map(this::toResp).toList(), page.getTotal());
     }
 
     @Override
@@ -92,7 +97,7 @@ public class DataPlatformSyncJobServiceImpl implements DataPlatformSyncJobServic
                 + "_ods_" + job.getCode());
         run.setTriggerType("MANUAL");
         run.setStatus("PENDING");
-        run.setCreator(creator == null ? "system" : creator);
+        run.setCreator(normalizeCreator(creator));
         runMapper.insert(run);
         executor.executeAsync(run.getId());
         return run.getId();
@@ -142,6 +147,11 @@ public class DataPlatformSyncJobServiceImpl implements DataPlatformSyncJobServic
                 (reqVO.getWatermarkColumn() == null || reqVO.getWatermarkColumn().isBlank())) {
             throw new ServiceException(SYNC_JOB_CONFIG_INVALID, "增量任务必须配置水位字段");
         }
+        mappingSqlBuilder.validate(reqVO.getFieldMappings());
+        if ((reqVO.getFieldMappings() == null || reqVO.getFieldMappings().isEmpty())
+                && !StringUtils.hasText(reqVO.getSinkSql())) {
+            throw new ServiceException(SYNC_JOB_CONFIG_INVALID, "未配置字段映射时必须填写 Sink SQL");
+        }
     }
 
     private DataPlatformSyncJobDO requireJob(Long id) {
@@ -162,7 +172,10 @@ public class DataPlatformSyncJobServiceImpl implements DataPlatformSyncJobServic
         job.setTargetDataSourceId(reqVO.getTargetDataSourceId());
         job.setTargetDatabase(reqVO.getTargetDatabase().trim());
         job.setTargetTable(reqVO.getTargetTable().trim());
-        job.setSinkSql(reqVO.getSinkSql().trim());
+        String mappingConfig = mappingSqlBuilder.serialize(reqVO.getFieldMappings());
+        job.setMappingConfig(mappingConfig);
+        job.setSinkSql(mappingSqlBuilder.buildSinkSql(reqVO.getTargetDatabase().trim(), reqVO.getTargetTable().trim(),
+                mappingConfig, reqVO.getSinkSql() == null ? null : reqVO.getSinkSql().trim()));
         job.setSyncMode(reqVO.getSyncMode());
         job.setWatermarkColumn(reqVO.getWatermarkColumn());
         job.setWatermarkValue(reqVO.getWatermarkValue());
@@ -170,5 +183,17 @@ public class DataPlatformSyncJobServiceImpl implements DataPlatformSyncJobServic
         job.setStatus(reqVO.getStatus());
         job.setRemark(reqVO.getRemark());
         return job;
+    }
+
+    private SyncJobRespVO toResp(DataPlatformSyncJobDO job) {
+        SyncJobRespVO respVO = new SyncJobRespVO();
+        BeanUtils.copyProperties(job, respVO);
+        respVO.setFieldMappings(mappingSqlBuilder.deserialize(job.getMappingConfig()));
+        return respVO;
+    }
+
+    private String normalizeCreator(String creator) {
+        String value = StringUtils.hasText(creator) ? creator.trim() : "system";
+        return value.length() <= 64 ? value : value.substring(0, 64);
     }
 }

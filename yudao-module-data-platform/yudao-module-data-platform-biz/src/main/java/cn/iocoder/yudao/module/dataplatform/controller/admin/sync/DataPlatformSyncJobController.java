@@ -5,8 +5,8 @@ import cn.iocoder.yudao.framework.common.pojo.PageResult;
 import cn.iocoder.yudao.module.dataplatform.controller.admin.sync.vo.JobRunPageReqVO;
 import cn.iocoder.yudao.module.dataplatform.controller.admin.sync.vo.SyncJobPageReqVO;
 import cn.iocoder.yudao.module.dataplatform.controller.admin.sync.vo.SyncJobSaveReqVO;
+import cn.iocoder.yudao.module.dataplatform.controller.admin.sync.vo.SyncJobRespVO;
 import cn.iocoder.yudao.module.dataplatform.dal.dataobject.DataPlatformJobRunDO;
-import cn.iocoder.yudao.module.dataplatform.dal.dataobject.DataPlatformSyncJobDO;
 import cn.iocoder.yudao.module.dataplatform.service.sync.DataPlatformSyncJobService;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Max;
@@ -28,13 +28,13 @@ public class DataPlatformSyncJobController {
 
     @GetMapping("/page")
     @PreAuthorize("@ss.hasPermission('data-platform:sync-job:query')")
-    public CommonResult<PageResult<DataPlatformSyncJobDO>> page(@Valid SyncJobPageReqVO reqVO) {
+    public CommonResult<PageResult<SyncJobRespVO>> page(@Valid SyncJobPageReqVO reqVO) {
         return CommonResult.success(service.page(reqVO));
     }
 
     @GetMapping("/get")
     @PreAuthorize("@ss.hasPermission('data-platform:sync-job:query')")
-    public CommonResult<DataPlatformSyncJobDO> get(@RequestParam("id") @NotNull Long id) {
+    public CommonResult<SyncJobRespVO> get(@RequestParam("id") @NotNull Long id) {
         return CommonResult.success(service.get(id));
     }
 

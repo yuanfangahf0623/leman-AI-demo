@@ -5,6 +5,7 @@ import cn.iocoder.yudao.framework.common.pojo.PageResult;
 import cn.iocoder.yudao.module.dataplatform.controller.admin.datasource.vo.DataSourcePageReqVO;
 import cn.iocoder.yudao.module.dataplatform.controller.admin.datasource.vo.DataSourceRespVO;
 import cn.iocoder.yudao.module.dataplatform.controller.admin.datasource.vo.DataSourceSaveReqVO;
+import cn.iocoder.yudao.module.dataplatform.controller.admin.datasource.vo.DataSourceColumnRespVO;
 import cn.iocoder.yudao.module.dataplatform.dal.dataobject.DataPlatformDataSourceDO;
 import cn.iocoder.yudao.module.dataplatform.dal.mysql.DataPlatformDataSourceMapper;
 import cn.iocoder.yudao.module.dataplatform.enums.DataSourceTypeEnum;
@@ -25,11 +26,16 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.sql.Connection;
 import java.sql.DriverManager;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.ResultSetMetaData;
 import java.time.Duration;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
+import java.util.ArrayList;
+import java.util.regex.Pattern;
 
 import static cn.iocoder.yudao.module.dataplatform.enums.DataPlatformErrorCodeConstants.DATA_SOURCE_CONNECT_FAILED;
 import static cn.iocoder.yudao.module.dataplatform.enums.DataPlatformErrorCodeConstants.DATA_SOURCE_NOT_EXISTS;
@@ -42,6 +48,9 @@ public class DataPlatformDataSourceServiceImpl implements DataPlatformDataSource
 
     private static final String TWO_HAO_HR_TOKEN_PATH = "/api/home/get_token/";
     private static final int TWO_HAO_HR_TIMEOUT_SECONDS = 30;
+    private static final Pattern UNSAFE_QUERY = Pattern.compile(
+            "(?i)\\b(insert|update|delete|drop|alter|truncate|create|grant|revoke|call|execute|merge|replace|load|outfile|dumpfile)\\b");
+    private static final Pattern READ_ONLY_QUERY_START = Pattern.compile("(?is)^(select|with)\\b");
     private static final HttpClient HTTP_CLIENT = HttpClient.newBuilder()
             .connectTimeout(Duration.ofSeconds(10))
             .build();
@@ -144,6 +153,59 @@ public class DataPlatformDataSourceServiceImpl implements DataPlatformDataSource
             return base;
         }
         return base + ((type == DataSourceTypeEnum.SQLSERVER) ? ";" : "&") + dataSource.getJdbcParams().trim();
+    }
+
+    @Override
+    public List<DataSourceColumnRespVO> listQueryColumns(Long dataSourceId, String sourceSql) {
+        DataPlatformDataSourceDO dataSource = requireDataSource(dataSourceId);
+        DataSourceTypeEnum type = validateType(dataSource.getType());
+        if (!type.isJdbc()) {
+            throw new ServiceException(DATA_SOURCE_TYPE_UNSUPPORTED, "API 数据源需要选择接口对象后读取字段");
+        }
+        validateMetadataQuery(sourceSql);
+        try {
+            Class.forName(type.getDriverClassName());
+            Properties props = new Properties();
+            props.setProperty("user", dataSource.getUsername());
+            props.setProperty("password", decryptPassword(dataSource));
+            try (Connection connection = DriverManager.getConnection(buildJdbcUrl(dataSource), props);
+                 PreparedStatement statement = connection.prepareStatement(sourceSql.strip())) {
+                statement.setMaxRows(1);
+                ResultSetMetaData metadata = statement.getMetaData();
+                if (metadata != null) {
+                    return toColumns(metadata);
+                }
+                try (ResultSet resultSet = statement.executeQuery()) {
+                    return toColumns(resultSet.getMetaData());
+                }
+            }
+        } catch (ServiceException ex) {
+            throw ex;
+        } catch (Exception ex) {
+            log.warn("读取源字段失败, dataSourceId={}, code={}, type={}, errorType={}", dataSource.getId(),
+                    dataSource.getCode(), dataSource.getType(), ex.getClass().getSimpleName());
+            throw new ServiceException(DATA_SOURCE_CONNECT_FAILED, "读取源字段失败，请检查查询 SQL 和数据源连接");
+        }
+    }
+
+    private List<DataSourceColumnRespVO> toColumns(ResultSetMetaData metadata) throws Exception {
+        List<DataSourceColumnRespVO> columns = new ArrayList<>();
+        for (int index = 1; index <= metadata.getColumnCount(); index++) {
+            String label = metadata.getColumnLabel(index);
+            String name = StringUtils.hasText(label) ? label : metadata.getColumnName(index);
+            columns.add(new DataSourceColumnRespVO(name, label, metadata.getColumnTypeName(index),
+                    metadata.getColumnType(index), metadata.isNullable(index) != ResultSetMetaData.columnNoNulls, index));
+        }
+        return columns;
+    }
+
+    private void validateMetadataQuery(String sourceSql) {
+        String normalized = sourceSql == null ? "" : sourceSql.strip();
+        if (!READ_ONLY_QUERY_START.matcher(normalized).find()
+                || normalized.contains(";") || normalized.contains("--") || normalized.contains("/*")
+                || normalized.contains("#") || UNSAFE_QUERY.matcher(normalized).find()) {
+            throw new ServiceException(DATA_SOURCE_TYPE_UNSUPPORTED, "字段读取只允许单条只读 SELECT 查询");
+        }
     }
 
     private void testConnection(DataPlatformDataSourceDO dataSource) {

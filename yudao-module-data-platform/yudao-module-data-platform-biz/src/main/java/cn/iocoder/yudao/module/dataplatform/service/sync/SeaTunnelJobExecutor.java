@@ -33,6 +33,7 @@ public class SeaTunnelJobExecutor {
     private final DataPlatformJobRunMapper runMapper;
     private final DataPlatformDataSourceService dataSourceService;
     private final DataPlatformProperties properties;
+    private final SyncFieldMappingSqlBuilder mappingSqlBuilder;
 
     @Async("dataPlatformTaskExecutor")
     public void executeAsync(Long runId) {
@@ -113,13 +114,15 @@ public class SeaTunnelJobExecutor {
                 + "    driver = \"" + escape(sourceType.getDriverClassName()) + "\"\n"
                 + "    user = \"" + escape(source.getUsername()) + "\"\n"
                 + "    password = \"" + escape(sourcePassword) + "\"\n"
-                + "    query = \"\"\"" + safeSql(job.getSourceSql()) + "\"\"\"\n"
+                + "    query = \"\"\"" + safeSql(mappingSqlBuilder.buildSourceSql(job.getSourceSql(), sourceType,
+                        job.getMappingConfig())) + "\"\"\"\n"
                 + "  }\n}\n\nsink {\n  Jdbc {\n"
                 + "    url = \"" + escape(dataSourceService.buildJdbcUrl(target)) + "\"\n"
                 + "    driver = \"" + escape(targetType.getDriverClassName()) + "\"\n"
                 + "    user = \"" + escape(target.getUsername()) + "\"\n"
                 + "    password = \"" + escape(targetPassword) + "\"\n"
-                + "    query = \"\"\"" + safeSql(job.getSinkSql()) + "\"\"\"\n"
+                + "    query = \"\"\"" + safeSql(mappingSqlBuilder.buildSinkSql(job.getTargetDatabase(),
+                        job.getTargetTable(), job.getMappingConfig(), job.getSinkSql())) + "\"\"\"\n"
                 + "  }\n}\n";
     }
 

@@ -11,6 +11,9 @@ public final class DataPlatformErrorCodeConstants {
     public static final int SYNC_JOB_CONFIG_INVALID = 1_520_103;
     public static final int SYNC_JOB_EXECUTE_FAILED = 1_520_104;
     public static final int WAREHOUSE_CONNECT_FAILED = 1_520_201;
+    public static final int METADATA_TABLE_NOT_EXISTS = 1_520_301;
+    public static final int METADATA_FIELD_NOT_EXISTS = 1_520_302;
+    public static final int METADATA_SCAN_FAILED = 1_520_303;
 
     private DataPlatformErrorCodeConstants() {
     }

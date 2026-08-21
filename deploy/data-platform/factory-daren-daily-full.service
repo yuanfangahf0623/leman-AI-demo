@@ -1,0 +1,11 @@
+[Unit]
+Description=Factory Daren ERP daily full synchronization for tables without a reliable watermark
+After=network-online.target data-platform.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=root
+ExecStart=/opt/data-platform/shared/bin/factory-daren-sync.sh daily-full
+TimeoutStartSec=8h
+Nice=10

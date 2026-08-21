@@ -4,7 +4,10 @@ import cn.iocoder.yudao.framework.common.pojo.PageResult;
 import cn.iocoder.yudao.module.dataplatform.controller.admin.datasource.vo.DataSourcePageReqVO;
 import cn.iocoder.yudao.module.dataplatform.controller.admin.datasource.vo.DataSourceRespVO;
 import cn.iocoder.yudao.module.dataplatform.controller.admin.datasource.vo.DataSourceSaveReqVO;
+import cn.iocoder.yudao.module.dataplatform.controller.admin.datasource.vo.DataSourceColumnRespVO;
 import cn.iocoder.yudao.module.dataplatform.dal.dataobject.DataPlatformDataSourceDO;
+
+import java.util.List;
 
 public interface DataPlatformDataSourceService {
     Long create(DataSourceSaveReqVO reqVO);
@@ -17,4 +20,5 @@ public interface DataPlatformDataSourceService {
     DataPlatformDataSourceDO requireDataSource(Long id);
     String decryptPassword(DataPlatformDataSourceDO dataSource);
     String buildJdbcUrl(DataPlatformDataSourceDO dataSource);
+    List<DataSourceColumnRespVO> listQueryColumns(Long dataSourceId, String sourceSql);
 }

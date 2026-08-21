@@ -10,36 +10,35 @@ import lombok.Data;
 import java.time.LocalDateTime;
 
 @Data
-@TableName("dp_sync_job")
-public class DataPlatformSyncJobDO {
+@TableName("dp_metadata_table")
+public class DataPlatformMetadataTableDO {
 
     @TableId(value = "id", type = IdType.AUTO)
     private Long id;
-    private String name;
-    private String code;
-    @TableField("source_data_source_id")
-    private Long sourceDataSourceId;
-    @TableField("source_sql")
-    private String sourceSql;
-    @TableField("target_data_source_id")
-    private Long targetDataSourceId;
+    @TableField("data_source_id")
+    private Long dataSourceId;
+    @TableField("source_schema")
+    private String sourceSchema;
+    @TableField("source_table")
+    private String sourceTable;
+    @TableField("business_name")
+    private String businessName;
+    @TableField("business_domain")
+    private String businessDomain;
+    private String description;
     @TableField("target_database")
     private String targetDatabase;
     @TableField("target_table")
     private String targetTable;
-    @TableField("sink_sql")
-    private String sinkSql;
-    @TableField("mapping_config")
-    private String mappingConfig;
-    @TableField("sync_mode")
-    private String syncMode;
-    @TableField("watermark_column")
-    private String watermarkColumn;
-    @TableField("watermark_value")
-    private String watermarkValue;
-    private Integer parallelism;
+    @TableField("field_count")
+    private Integer fieldCount;
+    @TableField("commented_field_count")
+    private Integer commentedFieldCount;
+    @TableField("definition_status")
+    private String definitionStatus;
     private Integer status;
-    private String remark;
+    @TableField("last_scan_time")
+    private LocalDateTime lastScanTime;
     private String creator;
     @TableField("create_time")
     private LocalDateTime createTime;

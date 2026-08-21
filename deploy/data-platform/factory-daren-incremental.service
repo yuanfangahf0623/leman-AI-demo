@@ -1,0 +1,11 @@
+[Unit]
+Description=Factory Daren ERP rolling incremental synchronization
+After=network-online.target data-platform.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=root
+ExecStart=/opt/data-platform/shared/bin/factory-daren-sync.sh incremental
+TimeoutStartSec=6h
+Nice=10

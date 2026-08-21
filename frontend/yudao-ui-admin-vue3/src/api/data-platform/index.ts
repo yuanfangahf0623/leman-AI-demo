@@ -29,6 +29,7 @@ export interface SyncJobVO {
   targetDatabase: string
   targetTable: string
   sinkSql: string
+  fieldMappings?: SyncFieldMappingVO[]
   syncMode: 'FULL' | 'INCREMENTAL'
   watermarkColumn?: string
   watermarkValue?: string
@@ -36,6 +37,26 @@ export interface SyncJobVO {
   status: number
   remark?: string
   createTime?: string
+}
+
+export interface SyncFieldMappingVO {
+  sourceField: string
+  sourceType?: string
+  targetField: string
+  targetType?: string
+  enabled: boolean
+  required?: boolean
+  defaultValue?: string
+  transform: 'NONE' | 'TRIM' | 'HEX'
+}
+
+export interface DataSourceColumnVO {
+  name: string
+  label?: string
+  type: string
+  jdbcType: number
+  nullable: boolean
+  ordinal: number
 }
 
 export interface JobRunVO {
@@ -61,6 +82,58 @@ export interface WarehouseColumnVO {
   comment?: string
 }
 
+export interface MetadataTableVO {
+  id: number
+  dataSourceId: number
+  dataSourceName?: string
+  sourceSchema: string
+  sourceTable: string
+  businessName?: string
+  businessDomain?: string
+  description?: string
+  targetDatabase?: string
+  targetTable?: string
+  fieldCount: number
+  commentedFieldCount: number
+  confirmedFieldCount: number
+  definitionStatus: 'GENERATED' | 'CONFIRMED'
+  lastScanTime?: string
+}
+
+export interface MetadataFieldVO {
+  id: number
+  metadataTableId: number
+  sourceColumn: string
+  targetColumn?: string
+  dataType: string
+  jdbcType?: number
+  columnSize?: number
+  decimalDigits?: number
+  nullable: boolean
+  primaryKey: boolean
+  ordinalPosition: number
+  sourceComment?: string
+  businessName?: string
+  description?: string
+  classification?: string
+  sensitivityLevel: 'PUBLIC' | 'INTERNAL' | 'SENSITIVE' | 'RESTRICTED'
+  incrementalCandidate: boolean
+  definitionStatus: 'GENERATED' | 'CONFIRMED'
+  lastScanTime?: string
+}
+
+export interface MetadataSummaryVO {
+  tableCount: number
+  fieldCount: number
+  sourceCommentCount: number
+  namedCount: number
+  describedCount: number
+  confirmedCount: number
+  sensitiveCount: number
+  confirmedCoverage: number
+  descriptionCoverage: number
+}
+
 export const DataPlatformApi = {
   getDataSourcePage: (params: any) => request.get({ url: '/data-platform/datasource/page', params }),
   getDataSource: (id: number) => request.get({ url: '/data-platform/datasource/get', params: { id } }),
@@ -68,6 +141,8 @@ export const DataPlatformApi = {
   updateDataSource: (data: DataSourceVO) => request.put({ url: '/data-platform/datasource/update', data }),
   deleteDataSource: (id: number) => request.delete({ url: '/data-platform/datasource/delete', params: { id } }),
   testDataSource: (data: DataSourceVO) => request.post({ url: '/data-platform/datasource/test', data }),
+  getDataSourceQueryColumns: (dataSourceId: number, sourceSql: string) =>
+    request.post({ url: '/data-platform/datasource/metadata/columns', data: { dataSourceId, sourceSql } }),
 
   getSyncJobPage: (params: any) => request.get({ url: '/data-platform/sync-job/page', params }),
   getSyncJob: (id: number) => request.get({ url: '/data-platform/sync-job/get', params: { id } }),
@@ -84,5 +159,18 @@ export const DataPlatformApi = {
   getWarehouseTables: (database: string) =>
     request.get({ url: '/data-platform/warehouse/table/list', params: { database } }),
   getWarehouseColumns: (database: string, table: string) =>
-    request.get({ url: '/data-platform/warehouse/column/list', params: { database, table } })
+    request.get({ url: '/data-platform/warehouse/column/list', params: { database, table } }),
+
+  getMetadataTablePage: (params: any) =>
+    request.get({ url: '/data-platform/data-dictionary/table/page', params }),
+  getMetadataFieldPage: (params: any) =>
+    request.get({ url: '/data-platform/data-dictionary/field/page', params }),
+  getMetadataSummary: (dataSourceId: number) =>
+    request.get({ url: '/data-platform/data-dictionary/summary', params: { dataSourceId } }),
+  refreshMetadata: (dataSourceId: number) =>
+    request.post({ url: '/data-platform/data-dictionary/refresh', params: { dataSourceId } }),
+  updateMetadataTable: (data: Pick<MetadataTableVO, 'id' | 'businessName' | 'businessDomain' | 'description'>) =>
+    request.put({ url: '/data-platform/data-dictionary/table/update', data }),
+  updateMetadataField: (data: Pick<MetadataFieldVO, 'id' | 'businessName' | 'description' | 'classification' | 'sensitivityLevel' | 'incrementalCandidate'>) =>
+    request.put({ url: '/data-platform/data-dictionary/field/update', data })
 }

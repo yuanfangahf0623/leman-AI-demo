@@ -5,6 +5,8 @@ import cn.iocoder.yudao.framework.common.pojo.PageResult;
 import cn.iocoder.yudao.module.dataplatform.controller.admin.datasource.vo.DataSourcePageReqVO;
 import cn.iocoder.yudao.module.dataplatform.controller.admin.datasource.vo.DataSourceRespVO;
 import cn.iocoder.yudao.module.dataplatform.controller.admin.datasource.vo.DataSourceSaveReqVO;
+import cn.iocoder.yudao.module.dataplatform.controller.admin.datasource.vo.DataSourceMetadataReqVO;
+import cn.iocoder.yudao.module.dataplatform.controller.admin.datasource.vo.DataSourceColumnRespVO;
 import cn.iocoder.yudao.module.dataplatform.service.datasource.DataPlatformDataSourceService;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotNull;
@@ -12,6 +14,8 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
+
+import java.util.List;
 
 @RestController
 @RequestMapping("/admin-api/data-platform/datasource")
@@ -58,5 +62,11 @@ public class DataPlatformDataSourceController {
     public CommonResult<Boolean> test(@Valid @RequestBody DataSourceSaveReqVO reqVO) {
         service.testConnection(reqVO);
         return CommonResult.success(true);
+    }
+
+    @PostMapping("/metadata/columns")
+    @PreAuthorize("@ss.hasPermission('data-platform:datasource:query')")
+    public CommonResult<List<DataSourceColumnRespVO>> columns(@Valid @RequestBody DataSourceMetadataReqVO reqVO) {
+        return CommonResult.success(service.listQueryColumns(reqVO.getDataSourceId(), reqVO.getSourceSql()));
     }
 }

@@ -14,3 +14,34 @@ Secrets are generated on the server and stored below
 
 Releases live in `/opt/data-platform/releases/<timestamp>`. The
 `/opt/data-platform/current` symlink makes application and UI rollback atomic.
+
+## Factory Daren ERP synchronization
+
+`factory-daren-sync.sh` triggers data-platform jobs through the authenticated
+admin API, so every scheduled execution is recorded in the platform run log.
+Install the script under `/opt/data-platform/shared/bin` and the accompanying
+service/timer units under `/etc/systemd/system`.
+
+- Rolling incremental jobs run every two hours and re-read the most recent
+  three business days. Doris unique keys make the overlap idempotent.
+- Tables without a reliable business-date watermark are fully refreshed every
+  night.
+- Incremental tables receive a full reconciliation every Sunday so late edits
+  and source-side deletions are eventually reflected.
+- All schedules share one `flock` lock and use four workers by default, avoiding
+  overlapping ERP scans. Set `FACTORY_DAREN_SYNC_PARALLELISM` in the protected
+  production environment to override this value.
+
+## Business data dictionary
+
+The `数据字典` menu scans JDBC metadata into `dp_metadata_table` and
+`dp_metadata_field`. A refresh updates structural information but preserves
+definitions already confirmed by a user. Source comments are preferred when
+available; otherwise the platform creates an explicitly unconfirmed business
+name suggestion. Sensitivity labels are conservative candidates and must be
+reviewed by a data owner.
+
+For Factory Daren, the scan excludes the same 14 technical log tables used by
+the synchronization inventory, links every discovered table to its Doris ODS
+table, and marks the watermark columns of active incremental jobs as increment
+field candidates.

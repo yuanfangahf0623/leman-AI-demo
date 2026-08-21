@@ -6,7 +6,10 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
+import jakarta.validation.Valid;
 import lombok.Data;
+
+import java.util.List;
 
 @Data
 public class SyncJobSaveReqVO {
@@ -29,8 +32,11 @@ public class SyncJobSaveReqVO {
     @NotBlank
     @Pattern(regexp = "^[A-Za-z0-9_]{1,128}$", message = "目标表名包含非法字符")
     private String targetTable;
-    @NotBlank @Size(max = 8000)
+    @Size(max = 8000)
     private String sinkSql;
+    @Valid
+    @Size(max = 500)
+    private List<SyncFieldMappingVO> fieldMappings;
     @NotBlank
     @Pattern(regexp = "FULL|INCREMENTAL", message = "同步模式只能为 FULL 或 INCREMENTAL")
     private String syncMode;
