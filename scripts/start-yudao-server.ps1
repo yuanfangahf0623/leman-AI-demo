@@ -129,7 +129,7 @@ if ($missing.Count -gt 0) {
 }
 
 $oldServers = Get-CimInstance Win32_Process -Filter "Name = 'java.exe'" |
-    Where-Object { $_.CommandLine -like "*yudao-server-1.0.0-SNAPSHOT.jar*" }
+    Where-Object { $_.CommandLine -like "*yudao-server-1.0.0-SNAPSHOT*.jar*" }
 foreach ($server in $oldServers) {
     Stop-Process -Id $server.ProcessId -Force -ErrorAction SilentlyContinue
 }
@@ -141,9 +141,14 @@ if ($Build) {
     }
 }
 
-$jarPath = Join-Path $repoRoot "yudao-server\target\yudao-server-1.0.0-SNAPSHOT.jar"
+$execJarPath = Join-Path $repoRoot "yudao-server\target\yudao-server-1.0.0-SNAPSHOT-exec.jar"
+$plainJarPath = Join-Path $repoRoot "yudao-server\target\yudao-server-1.0.0-SNAPSHOT.jar"
+$jarPath = @($execJarPath, $plainJarPath) |
+    Where-Object { Test-Path $_ } |
+    Sort-Object { (Get-Item $_).LastWriteTimeUtc } -Descending |
+    Select-Object -First 1
 if (-not (Test-Path $jarPath)) {
-    throw "Backend JAR not found: $jarPath. Run: .\scripts\start-yudao-server.ps1 -Build"
+    throw "Backend JAR not found. Run: .\scripts\start-yudao-server.ps1 -Build"
 }
 
 $javaHomeCandidate = Join-Path $env:USERPROFILE ".codex\dev-env\tools\jdk-17\bin\java.exe"

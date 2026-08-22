@@ -7,4 +7,3 @@ target/
 .env
 .env.*
 !.env.example
-.codex-*

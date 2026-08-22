@@ -212,7 +212,7 @@ const getKnowledgeOptions = async () => {
 const getDataSourceOptions = async () => {
   const data = await AiDataSourceApi.getDataSourcePage({
     pageNo: 1,
-    pageSize: 200
+    pageSize: 100
   })
   dataSourceOptions.value = data.list
 }

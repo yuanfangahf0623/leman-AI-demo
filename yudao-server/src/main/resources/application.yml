@@ -30,8 +30,6 @@ spring:
         - classpath:sql/mysql/ai-module-upgrade-20260604-finance-invoice.sql
         - classpath:sql/mysql/ai-module-upgrade-20260624-rfq-email-automation.sql
         - classpath:sql/mysql/ai-module-upgrade-20260709-lead-agent.sql
-        # Must run last: applies the minimal single-tenant menu profile after legacy scripts.
-        - classpath:sql/mysql/data-platform.sql
 
 mybatis-plus:
   configuration:
@@ -45,19 +43,6 @@ mybatis-plus:
 logging:
   level:
     cn.iocoder.yudao: info
-
-data-platform:
-  # Base64 of a 32-byte random key; required in production and never committed.
-  secret-key: ${DATA_PLATFORM_SECRET_KEY:}
-  warehouse:
-    jdbc-url: ${DATA_PLATFORM_DORIS_JDBC_URL:jdbc:mysql://127.0.0.1:9030/information_schema?useUnicode=true&characterEncoding=utf8&useSSL=false&connectTimeout=5000&socketTimeout=15000}
-    username: ${DATA_PLATFORM_DORIS_USERNAME:root}
-    password: ${DATA_PLATFORM_DORIS_PASSWORD:}
-  seatunnel:
-    command: ${DATA_PLATFORM_SEATUNNEL_COMMAND:/opt/data-platform/shared/bin/seatunnel-submit.sh}
-    job-directory: ${DATA_PLATFORM_SEATUNNEL_JOB_DIR:/opt/data-platform/seatunnel/jobs}
-    log-directory: ${DATA_PLATFORM_JOB_LOG_DIR:/var/log/data-platform/jobs}
-    timeout-seconds: ${DATA_PLATFORM_SEATUNNEL_TIMEOUT_SECONDS:3600}
 
 ai:
   model:

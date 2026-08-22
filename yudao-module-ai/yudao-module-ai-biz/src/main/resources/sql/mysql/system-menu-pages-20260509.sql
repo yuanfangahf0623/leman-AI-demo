@@ -79,6 +79,7 @@ VALUES
 (910604, '同步任务', 'ai:sync-job:query', 2, 4, 910600, 'sync-job', 'ep:refresh', 'ai/knowledge-base/sync-job/index', 'AiKnowledgeSyncJob', 0, b'1', b'1', b'1', 'admin', NOW(), 'admin', NOW(), b'0'),
 (910605, 'AI问答', 'ai:chat:test', 2, 5, 910600, 'chat-test', 'ep:chat-dot-round', 'ai/knowledge-base/chat-test/index', 'AiKnowledgeChatTest', 0, b'1', b'1', b'1', 'admin', NOW(), 'admin', NOW(), b'0'),
 (910606, '问答记录', 'ai:chat-record:query', 2, 6, 910600, 'chat-record', 'ep:chat-line-round', 'ai/knowledge-base/chat-record/index', 'AiKnowledgeChatRecord', 0, b'1', b'1', b'1', 'admin', NOW(), 'admin', NOW(), b'0'),
+(910608, 'FastGPT', '', 2, 7, 910600, 'http://192.168.19.36:13000', 'ep:link', NULL, NULL, 0, b'1', b'1', b'1', 'admin', NOW(), 'admin', NOW(), b'0'),
 
 -- 组织管理按钮权限
 (910010, '部门查询', 'system:dept:query', 3, 1, 910001, '', '', '', NULL, 0, b'1', b'1', b'1', 'admin', NOW(), 'admin', NOW(), b'0'),
@@ -194,6 +195,29 @@ VALUES
 (910660, '问答记录查询', 'ai:chat-record:query', 3, 1, 910606, '', '', '', NULL, 0, b'1', b'1', b'1', 'admin', NOW(), 'admin', NOW(), b'0')
 ON DUPLICATE KEY UPDATE
   `id` = `id`;
+
+-- 独立 AI 服务必须收回 AI 菜单归属。数据中台曾复用同一数据库，可能改写这些记录。
+UPDATE `system_menu`
+SET `status` = 0,
+    `visible` = b'1',
+    `deleted` = b'0',
+    `updater` = 'admin',
+    `update_time` = NOW()
+WHERE `id` BETWEEN 910600 AND 910699;
+
+UPDATE `system_menu`
+SET `parent_id` = 910600,
+    `updater` = 'admin',
+    `update_time` = NOW()
+WHERE `id` IN (910601, 910602, 910603, 910604, 910605, 910606, 910608);
+
+-- 数据中台已拆分到独立工程，本服务仅隐藏其遗留菜单，不删除历史配置和数据。
+UPDATE `system_menu`
+SET `status` = 1,
+    `visible` = b'0',
+    `updater` = 'admin',
+    `update_time` = NOW()
+WHERE `id` BETWEEN 920000 AND 920099;
 
 -- 系统配置项：用于管理 ai.rag.engine 等运行期参数。
 INSERT INTO `system_menu`

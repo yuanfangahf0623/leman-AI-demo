@@ -13,11 +13,8 @@
     <description>Leman AI demo parent project.</description>
 
     <modules>
-        <module>yudao-framework/yudao-common</module>
         <module>yudao-module-ai/yudao-module-ai-api</module>
         <module>yudao-module-ai/yudao-module-ai-biz</module>
-        <module>yudao-module-data-platform/yudao-module-data-platform-api</module>
-        <module>yudao-module-data-platform/yudao-module-data-platform-biz</module>
         <module>yudao-server</module>
     </modules>
 
@@ -31,7 +28,6 @@
         <jsoup.version>1.17.2</jsoup.version>
         <mysql.version>8.4.0</mysql.version>
         <minio.version>9.0.1</minio.version>
-        <mssql-jdbc.version>12.8.1.jre11</mssql-jdbc.version>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
         <maven.compiler.release>${java.version}</maven.compiler.release>
@@ -39,11 +35,6 @@
 
     <dependencyManagement>
         <dependencies>
-            <dependency>
-                <groupId>cn.iocoder.yudao</groupId>
-                <artifactId>yudao-common</artifactId>
-                <version>${project.version}</version>
-            </dependency>
             <dependency>
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-dependencies</artifactId>
@@ -54,11 +45,6 @@
             <dependency>
                 <groupId>cn.iocoder.yudao</groupId>
                 <artifactId>yudao-module-ai-api</artifactId>
-                <version>${project.version}</version>
-            </dependency>
-            <dependency>
-                <groupId>cn.iocoder.yudao</groupId>
-                <artifactId>yudao-module-data-platform-api</artifactId>
                 <version>${project.version}</version>
             </dependency>
         </dependencies>
