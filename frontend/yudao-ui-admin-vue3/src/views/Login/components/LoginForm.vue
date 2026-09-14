@@ -131,6 +131,17 @@
       </el-col>
     </el-row>
   </el-form>
+  <el-dialog v-model="firstPasswordDialog" title="首次登录，请修改初始密码" :close-on-click-modal="false" :close-on-press-escape="false" :show-close="false" width="420px">
+    <el-form label-position="top">
+      <el-form-item label="新密码（至少8位，包含字母和数字）">
+        <el-input v-model="firstNewPassword" type="password" show-password autocomplete="new-password" />
+      </el-form-item>
+      <el-form-item label="确认新密码">
+        <el-input v-model="firstConfirmPassword" type="password" show-password autocomplete="new-password" />
+      </el-form-item>
+      <el-button type="primary" :loading="firstPasswordSaving" @click="submitFirstPassword">修改并登录</el-button>
+    </el-form>
+  </el-dialog>
 </template>
 <script lang="ts" setup>
 import { ElLoading } from 'element-plus'
@@ -230,6 +241,29 @@ const getTenantByWebsite = async () => {
     }
   }
 }
+const firstPasswordDialog = ref(false)
+const firstNewPassword = ref('')
+const firstConfirmPassword = ref('')
+const firstPasswordSaving = ref(false)
+const firstLoginToken = ref('')
+const submitFirstPassword = async () => {
+  if (firstNewPassword.value !== firstConfirmPassword.value) { message.error('两次密码不一致'); return }
+  firstPasswordSaving.value = true
+  try {
+    const response = await fetch(`${import.meta.env.VITE_BASE_URL || ''}${import.meta.env.VITE_API_URL || '/admin-api'}/system/user/profile/update-password`, {
+      method: 'PUT', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${firstLoginToken.value}`, 'tenant-id': String(authUtil.getTenantId() || 1) },
+      body: JSON.stringify({ oldPassword: loginData.loginForm.password, newPassword: firstNewPassword.value })
+    })
+    const result = await response.json()
+    if (!response.ok || result.code !== 0) { message.error(result.msg || '修改密码失败'); return }
+    loginData.loginForm.password = firstNewPassword.value
+    loginData.loginForm.rememberMe = false
+    firstNewPassword.value = ''; firstConfirmPassword.value = ''; firstLoginToken.value = ''
+    firstPasswordDialog.value = false
+    await handleLogin({})
+  } finally { firstPasswordSaving.value = false }
+}
+
 const loading = ref() // ElLoading.service 返回的实例
 // 登录
 const handleLogin = async (params: any) => {
@@ -245,6 +279,16 @@ const handleLogin = async (params: any) => {
     const res = await LoginApi.login(loginDataLoginForm)
     if (!res) {
       return
+    }
+    if (res.requiresPasswordChange) {
+      authUtil.removeLoginForm()
+      firstLoginToken.value = res.accessToken
+      firstPasswordDialog.value = true
+      return
+    }
+    if (res.administrator === false) {
+      loginDataLoginForm.rememberMe = false
+      redirect.value = '/user/profile'
     }
     loading.value = ElLoading.service({
       lock: true,
@@ -268,7 +312,7 @@ const handleLogin = async (params: any) => {
     }
   } finally {
     loginLoading.value = false
-    loading.value.close()
+    loading.value?.close()
   }
 }
 

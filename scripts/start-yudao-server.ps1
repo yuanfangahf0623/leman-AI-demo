@@ -141,14 +141,9 @@ if ($Build) {
     }
 }
 
-$execJarPath = Join-Path $repoRoot "yudao-server\target\yudao-server-1.0.0-SNAPSHOT-exec.jar"
-$plainJarPath = Join-Path $repoRoot "yudao-server\target\yudao-server-1.0.0-SNAPSHOT.jar"
-$jarPath = @($execJarPath, $plainJarPath) |
-    Where-Object { Test-Path $_ } |
-    Sort-Object { (Get-Item $_).LastWriteTimeUtc } -Descending |
-    Select-Object -First 1
+$jarPath = Join-Path $repoRoot "yudao-server\target\yudao-server-1.0.0-SNAPSHOT.jar"
 if (-not (Test-Path $jarPath)) {
-    throw "Backend JAR not found. Run: .\scripts\start-yudao-server.ps1 -Build"
+    throw "Executable backend JAR not found. Run: .\scripts\start-yudao-server.ps1 -Build"
 }
 
 $javaHomeCandidate = Join-Path $env:USERPROFILE ".codex\dev-env\tools\jdk-17\bin\java.exe"
@@ -178,4 +173,5 @@ Write-Host "AI_MODEL_PROVIDER=$env:AI_MODEL_PROVIDER"
 Write-Host "AI_VECTOR_STORE_TYPE=$env:AI_VECTOR_STORE_TYPE"
 Write-Host "AI_RAG_ENGINE=$env:AI_RAG_ENGINE"
 Write-Host "Java opts: $($javaOpts -join ' ')"
+Write-Host "JAR: $jarPath"
 Write-Host "Log: $stdout"

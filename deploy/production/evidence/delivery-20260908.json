@@ -1,0 +1,21 @@
+{
+  "date": "2026-09-08",
+  "url": "http://192.168.19.239:18081",
+  "release": "/opt/data-center/apps/knowledge/releases/20260908_dify_v1",
+  "frontend_build": "success",
+  "backend_build": "success",
+  "tests": {"total": 149, "passed": 144, "skipped": 5, "failed": 0},
+  "browser_login": true,
+  "browser_history_and_answers_visible": true,
+  "browser_final_dify_menu_visible": true,
+  "frontend_index_sha256": "157f676fb88f51743356f43596f008e703facbd6c39527b9cb58d038f0d8e8d1",
+  "frontend_local_server_hash_match": true,
+  "backup": "host/20260908_183523",
+  "backup_upload_and_readback_verified": true,
+  "monitoring_service_up": true,
+  "existing_data_platform_and_dify_active": true,
+  "historical_data_migrated": false,
+  "employee_rbac_verified": false,
+  "local_document_to_dify_sync_implemented": false,
+  "deployment_complete": true
+}

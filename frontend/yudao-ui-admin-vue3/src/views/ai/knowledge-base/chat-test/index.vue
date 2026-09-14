@@ -14,7 +14,7 @@
           class="!w-1/1"
           @change="handleKnowledgeFilterChange"
         >
-          <el-option label="FastGPT" :value="FASTGPT_KNOWLEDGE_BASE_ID" />
+          <el-option :label="FASTGPT_KNOWLEDGE_BASE_NAME" :value="FASTGPT_KNOWLEDGE_BASE_ID" />
           <el-option
             v-for="item in knowledgeOptions"
             :key="item.id"
@@ -117,7 +117,7 @@
             @change="handleActiveKnowledgeChange"
           >
             <el-option label="全部知识库" :value="ALL_KNOWLEDGE_BASE_ID" />
-            <el-option label="FastGPT" :value="FASTGPT_KNOWLEDGE_BASE_ID" />
+            <el-option :label="FASTGPT_KNOWLEDGE_BASE_NAME" :value="FASTGPT_KNOWLEDGE_BASE_ID" />
             <el-option
               v-for="item in knowledgeOptions"
               :key="item.id"
@@ -311,7 +311,7 @@ type ConversationCommand = 'rename' | 'pin' | 'archive' | 'delete'
 const FALLBACK_ANSWER = '根据当前知识库资料无法确认'
 const ALL_KNOWLEDGE_BASE_ID = 0
 const FASTGPT_KNOWLEDGE_BASE_ID = -1
-const FASTGPT_KNOWLEDGE_BASE_NAME = 'FastGPT'
+const FASTGPT_KNOWLEDGE_BASE_NAME = import.meta.env.VITE_RAG_ENGINE === 'dify' ? 'Dify' : 'FastGPT'
 
 const message = useMessage()
 

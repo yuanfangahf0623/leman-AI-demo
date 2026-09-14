@@ -1,0 +1,115 @@
+{
+  "source_tables": {
+    "system_users": {
+      "count": 6,
+      "active": 3
+    },
+    "system_dept": {
+      "count": 3,
+      "active": 1
+    },
+    "system_role": {
+      "count": 3,
+      "active": 2
+    },
+    "system_user_role": {
+      "count": 1,
+      "active": 1
+    },
+    "system_user_post": {
+      "count": 1,
+      "active": 1
+    },
+    "system_post": {
+      "count": 1,
+      "active": 1
+    },
+    "ai_knowledge_base": {
+      "count": 12,
+      "active": 3
+    },
+    "ai_knowledge_directory": {
+      "count": 2,
+      "active": 2
+    },
+    "ai_document": {
+      "count": 86,
+      "active": 68
+    },
+    "ai_document_chunk": {
+      "count": 45294,
+      "active": 2819
+    },
+    "ai_data_source": {
+      "count": 7,
+      "active": 7
+    },
+    "ai_data_source_raw_record": {
+      "count": 54925,
+      "active": 54925
+    },
+    "ai_sync_job": {
+      "count": 26,
+      "active": 26
+    },
+    "ai_sync_record": {
+      "count": 399,
+      "active": 399
+    },
+    "ai_twohaohr_attendance_record": {
+      "count": 50355,
+      "active": 50355
+    },
+    "ai_chat_conversation": {
+      "count": 48,
+      "active": 39
+    },
+    "ai_chat_message": {
+      "count": 152,
+      "active": 152
+    },
+    "ai_chat_citation": {
+      "count": 579,
+      "active": 579
+    }
+  },
+  "available_files": 53,
+  "missing_file_document_ids": [
+    2,
+    3,
+    4,
+    30,
+    31,
+    32,
+    33,
+    36,
+    43,
+    45,
+    56,
+    57,
+    65,
+    66,
+    67,
+    68,
+    69,
+    70,
+    71,
+    72,
+    73,
+    74,
+    75,
+    76,
+    77,
+    78,
+    79,
+    80,
+    84,
+    85,
+    86,
+    87,
+    88
+  ],
+  "active_missing_file_count": 30,
+  "source_bucket_versioning_enabled": false,
+  "alternate_local_file_hash_matches": 0
+}

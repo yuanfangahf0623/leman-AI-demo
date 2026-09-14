@@ -97,6 +97,10 @@ class RagServiceImplTest {
     @Mock
     private FastGptRagClient fastGptRagClient;
     @Mock
+    private cn.iocoder.yudao.module.ai.service.rag.dify.DifyRagClient difyRagClient;
+    @Mock
+    private cn.iocoder.yudao.module.ai.dal.mysql.AiDifyConversationMapper difyConversationMapper;
+    @Mock
     private AiRagEngineConfigService ragEngineConfigService;
     @Mock
     private TwoHaoHrAttendanceStatService twoHaoHrAttendanceStatService;
@@ -116,13 +120,33 @@ class RagServiceImplTest {
         ragService = new RagServiceImpl(knowledgeBaseMapper, chatConversationMapper, chatMessageMapper,
                 chatCitationMapper, chatQuestionCacheMapper, documentChunkMapper, aiEmbeddingService,
                 knowledgeVectorStore, webSearchService, new PromptBuilder(aiProperties), new RetrievalPlanner(),
-                aiChatModelService, fastGptRagClient, ragEngineConfigService, twoHaoHrAttendanceStatService,
+                aiChatModelService, fastGptRagClient, difyRagClient, difyConversationMapper, ragEngineConfigService, twoHaoHrAttendanceStatService,
                 twoHaoHrLeaveEmployeeListService, objectMapper, aiProperties, new PersonalSensitiveDataPolicy(null));
     }
 
     @AfterEach
     void tearDown() {
         AiUserContextHolder.clear();
+    }
+
+    @Test
+    void difyEntryShouldIgnoreUnboundImportedKnowledgeBases() {
+        when(ragEngineConfigService.getEngine()).thenReturn(AiRagEngineConfigService.ENGINE_DIFY);
+        when(knowledgeBaseMapper.selectListByTenantId(1L)).thenReturn(List.of(
+                buildKnowledge(10L, "Dify", "*"), buildKnowledge(13L, "历史人事", "*")));
+        when(difyRagClient.isBound(1L, 10L)).thenReturn(true);
+        mockConversationAndMessageIds();
+        when(difyRagClient.chat(any())).thenReturn(new cn.iocoder.yudao.module.ai.service.rag.dify.DifyRagClient.Result(
+                "external-history-test", AiChatModelResponse.builder().model("dify").content("answer").build(), List.of()));
+
+        RagChatResponse response = ragService.chat(RagChatRequest.builder()
+                .knowledgeBaseId(0L).question("开票信息").build());
+
+        assertEquals("answer", response.getAnswer());
+        var request = ArgumentCaptor.forClass(cn.iocoder.yudao.module.ai.service.rag.dify.DifyRagClient.Request.class);
+        verify(difyRagClient).chat(request.capture());
+        assertEquals(10L, request.getValue().knowledgeBaseId());
+        verifyNoInteractions(knowledgeVectorStore, aiEmbeddingService);
     }
 
     @Test

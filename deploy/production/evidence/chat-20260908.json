@@ -1,0 +1,13 @@
+{
+  "checked_at": "2026-09-08T18:22:07.050404",
+  "unauthenticated_rejected": true,
+  "login": true,
+  "menus_loaded": true,
+  "knowledge_base_bound": true,
+  "rag_answer": true,
+  "citation_count": 1,
+  "conversation_id": 1,
+  "followup_memory": true,
+  "stored_messages": 4,
+  "successful": true
+}

@@ -36,6 +36,7 @@ public class AdminAuthServiceImpl implements AdminAuthService {
     private final SystemMenuService menuService;
     private final PasswordEncoder passwordEncoder;
     private final TokenStore tokenStore;
+    private final cn.iocoder.yudao.module.system.service.user.HrIdentityService hrIdentityService;
 
     @Override
     public AuthLoginRespVO login(AuthLoginReqVO reqVO, String loginIp, Long tenantId) {
@@ -48,7 +49,7 @@ public class AdminAuthServiceImpl implements AdminAuthService {
             throw new ServiceException(1001001001, "账号已被禁用");
         }
         userService.updateLoginInfo(user.getId(), loginIp);
-        return buildTokenResp(tokenStore.create(buildLoginUser(user, menuService.getAllPermissions())));
+        return buildTokenResp(tokenStore.create(buildLoginUser(user, hrIdentityService.isAdministrator(user.getTenantId(), user.getId()) ? menuService.getAllPermissions() : Set.of())));
     }
 
     @Override
@@ -56,6 +57,10 @@ public class AdminAuthServiceImpl implements AdminAuthService {
         TokenSession session = tokenStore.refresh(refreshToken);
         if (session == null) {
             throw new ServiceException(401, "无效的刷新令牌");
+        }
+        if (!hrIdentityService.isEnabled(session.getLoginUser())) {
+            tokenStore.removeByAccessToken(session.getAccessToken());
+            throw new ServiceException(401, "账号已失效");
         }
         return buildTokenResp(session);
     }
@@ -83,9 +88,9 @@ public class AdminAuthServiceImpl implements AdminAuthService {
                         .sex(0)
                         .avatar("")
                         .build())
-                .roles(List.of("admin"))
+                .roles(List.of(loginUser.isAdmin() ? "admin" : "employee"))
                 .permissions(loginUser.getPermissions())
-                .menus(menuService.getRouteMenus())
+                .menus(loginUser.isAdmin() ? menuService.getRouteMenus() : List.of())
                 .build();
     }
 
@@ -96,7 +101,7 @@ public class AdminAuthServiceImpl implements AdminAuthService {
                 .nickname(user.getNickname())
                 .tenantId(user.getTenantId())
                 .deptId(user.getDeptId())
-                .admin(true)
+                .admin(hrIdentityService.isAdministrator(user.getTenantId(), user.getId()))
                 .permissions(permissions)
                 .build();
     }
@@ -110,6 +115,8 @@ public class AdminAuthServiceImpl implements AdminAuthService {
                 .userType(USER_TYPE_ADMIN)
                 .clientId(CLIENT_ID)
                 .expiresTime(session.getExpiresTime())
+                .requiresPasswordChange(hrIdentityService.requiresChange(session.getLoginUser().getTenantId(),session.getLoginUser().getId()))
+                .administrator(session.getLoginUser().isAdmin())
                 .build();
     }
 

@@ -35,6 +35,8 @@ import cn.iocoder.yudao.module.ai.service.datasource.twohaohr.TwoHaoHrLeaveEmplo
 import cn.iocoder.yudao.module.ai.service.embedding.AiEmbeddingService;
 import cn.iocoder.yudao.module.ai.service.rag.config.AiRagEngineConfigService;
 import cn.iocoder.yudao.module.ai.service.rag.fastgpt.FastGptRagClient;
+import cn.iocoder.yudao.module.ai.service.rag.dify.DifyRagClient;
+import cn.iocoder.yudao.module.ai.dal.mysql.AiDifyConversationMapper;
 import cn.iocoder.yudao.module.ai.service.rag.fastgpt.FastGptRagRequest;
 import cn.iocoder.yudao.module.ai.service.rag.fastgpt.FastGptRagResult;
 import cn.iocoder.yudao.module.ai.service.rag.retrieval.RetrievalModeEnum;
@@ -177,6 +179,8 @@ public class RagServiceImpl implements RagService {
     private final RetrievalPlanner retrievalPlanner;
     private final AiChatModelService aiChatModelService;
     private final FastGptRagClient fastGptRagClient;
+    private final DifyRagClient difyRagClient;
+    private final AiDifyConversationMapper difyConversationMapper;
     private final AiRagEngineConfigService ragEngineConfigService;
     private final TwoHaoHrAttendanceStatService twoHaoHrAttendanceStatService;
     private final TwoHaoHrLeaveEmployeeListService twoHaoHrLeaveEmployeeListService;
@@ -237,6 +241,11 @@ public class RagServiceImpl implements RagService {
                 normalizedEffectiveQuestion);
         if (attendanceStatResponse != null) {
             return attendanceStatResponse;
+        }
+
+        if (AiRagEngineConfigService.ENGINE_DIFY.equals(ragEngineConfigService.getEngine())) {
+            return chatWithDify(request, conversation, userMessage, knowledgeBases, tenantId, departmentId,
+                    userId, startNanos);
         }
 
         if (isFastGptEngine()) {
@@ -377,6 +386,9 @@ public class RagServiceImpl implements RagService {
         if (isAllKnowledgeBase(knowledgeBaseId)) {
             List<AiKnowledgeBaseDO> knowledgeBases = knowledgeBaseMapper.selectListByTenantId(tenantId).stream()
                     .filter(knowledgeBase -> isDepartmentAllowed(knowledgeBase, departmentId))
+                    // The Dify entry point must keep its explicitly bound scope after history imports.
+                    .filter(knowledgeBase -> !AiRagEngineConfigService.ENGINE_DIFY.equals(ragEngineConfigService.getEngine())
+                            || difyRagClient.isBound(tenantId, knowledgeBase.getId()))
                     .toList();
             if (knowledgeBases.isEmpty()) {
                 throw new ServiceException(RAG_KNOWLEDGE_NOT_EXISTS, "暂无可访问的知识库");
@@ -583,6 +595,31 @@ public class RagServiceImpl implements RagService {
 
     private boolean isFastGptEngine() {
         return ragEngineConfigService.isFastGptEngine();
+    }
+
+    private RagChatResponse chatWithDify(RagChatRequest request, AiChatConversationDO conversation,
+                                        AiChatMessageDO userMessage, List<AiKnowledgeBaseDO> knowledgeBases,
+                                        Long tenantId, Long departmentId, Long userId, long startNanos) {
+        if (knowledgeBases.size() != 1 || !difyRagClient.isBound(tenantId, knowledgeBases.get(0).getId())) {
+            throw new ServiceException(RAG_KNOWLEDGE_ACCESS_DENIED, "请选择已绑定 Dify 的知识库进行问答");
+        }
+        Long knowledgeBaseId = knowledgeBases.get(0).getId();
+        String externalId = difyConversationMapper.find(tenantId, knowledgeBaseId, userId, conversation.getId());
+        long modelStart = System.nanoTime();
+        DifyRagClient.Result result = difyRagClient.chat(new DifyRagClient.Request(tenantId, knowledgeBaseId,
+                userId, conversation.getId(), externalId, request.getQuestion()));
+        difyConversationMapper.save(tenantId, knowledgeBaseId, userId, conversation.getId(), result.conversationId());
+        AiChatMessageDO assistantMessage = saveMessage(tenantId, departmentId, conversation.getId(), userId,
+                ChatMessageRoleEnum.ASSISTANT.getCode(), result.modelResponse().getContent(), result.modelResponse(),
+                elapsedMillis(modelStart));
+        List<RagChatCitation> citations = saveExternalCitations(tenantId, departmentId, assistantMessage.getId(),
+                knowledgeBaseId, result.citations());
+        updateConversationLastMessageTime(conversation.getId(), tenantId, departmentId);
+        log.info("Dify chat completed, tenantId={}, knowledgeBaseId={}, conversationId={}, citationCount={}, elapsedMs={}",
+                tenantId, knowledgeBaseId, conversation.getId(), citations.size(), elapsedMillis(startNanos));
+        return RagChatResponse.builder().conversationId(conversation.getId()).userMessageId(userMessage.getId())
+                .assistantMessageId(assistantMessage.getId()).answer(result.modelResponse().getContent())
+                .noContext(citations.isEmpty()).citations(citations).debugInfo("ragEngine=dify").build();
     }
 
     private RagChatResponse chatWithFastGpt(RagChatRequest request, AiChatConversationDO conversation,

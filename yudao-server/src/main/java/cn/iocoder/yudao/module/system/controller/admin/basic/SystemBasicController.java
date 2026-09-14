@@ -87,6 +87,8 @@ public class SystemBasicController {
 
     private final SimpleAdminDataService dataService;
     private final PasswordEncoder passwordEncoder;
+    private final cn.iocoder.yudao.module.system.service.user.HrIdentityService hrIdentityService;
+    private final cn.iocoder.yudao.server.framework.security.TokenStore tokenStore;
     private final JdbcTemplate jdbcTemplate;
 
     @GetMapping("/dept/simple-list")
@@ -381,6 +383,7 @@ public class SystemBasicController {
         return CommonResult.success(true);
     }
 
+    @org.springframework.transaction.annotation.Transactional
     @PutMapping("/user/profile/update-password")
     public CommonResult<Boolean> updateUserProfilePassword(@RequestBody Map<String, Object> reqVO) {
         Long userId = requireLoginUserId();
@@ -390,11 +393,19 @@ public class SystemBasicController {
             throw new ServiceException(400, "密码不能为空");
         }
         String encodedPassword = jdbcTemplate.queryForObject(
-                "SELECT password FROM system_users WHERE id = ? AND deleted = 0", String.class, userId);
+                "SELECT password FROM system_users WHERE id = ? AND tenant_id = ? AND deleted = 0", String.class,
+                userId, SecurityFrameworkUtils.getLoginUser().getTenantId());
         if (!passwordEncoder.matches(oldPassword, encodedPassword)) {
             throw new ServiceException(400, "旧密码不正确");
         }
+        if (newPassword.length() < 8 || newPassword.getBytes(java.nio.charset.StandardCharsets.UTF_8).length > 72
+                || !newPassword.matches(".*[A-Za-z].*") || !newPassword.matches(".*[0-9].*")
+                || passwordEncoder.matches(newPassword, encodedPassword)) {
+            throw new ServiceException(400, "新密码需至少8位、包含字母和数字，并且不同于原密码");
+        }
         dataService.updateColumns("system_users", userId, Map.of("password", passwordEncoder.encode(newPassword)));
+        hrIdentityService.passwordChanged(SecurityFrameworkUtils.getLoginUser().getTenantId(), userId);
+        tokenStore.revokeUser(SecurityFrameworkUtils.getLoginUser().getTenantId(), userId);
         return CommonResult.success(true);
     }
 

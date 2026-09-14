@@ -1,0 +1,16 @@
+{
+  "login": true,
+  "knowledge_bases": [
+    1,
+    10,
+    12,
+    13
+  ],
+  "preview_files": 37,
+  "dify_default_entry": true,
+  "verification_conversation_id": 1000055,
+  "citation_count": 1,
+  "historical_conversations_read": 39,
+  "historical_messages_read": 132,
+  "access_policy": "existing_same_tenant_admin_scope"
+}

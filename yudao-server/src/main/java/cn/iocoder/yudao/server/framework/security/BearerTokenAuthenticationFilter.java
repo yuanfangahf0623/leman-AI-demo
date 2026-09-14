@@ -22,9 +22,11 @@ public class BearerTokenAuthenticationFilter extends OncePerRequestFilter {
     private static final String BEARER_PREFIX = "Bearer ";
 
     private final TokenStore tokenStore;
+    private final cn.iocoder.yudao.module.system.service.user.HrIdentityService hrIdentityService;
 
-    public BearerTokenAuthenticationFilter(TokenStore tokenStore) {
+    public BearerTokenAuthenticationFilter(TokenStore tokenStore, cn.iocoder.yudao.module.system.service.user.HrIdentityService hrIdentityService) {
         this.tokenStore = tokenStore;
+        this.hrIdentityService = hrIdentityService;
     }
 
     @Override
@@ -36,6 +38,16 @@ public class BearerTokenAuthenticationFilter extends OncePerRequestFilter {
                 TokenSession session = tokenStore.getByAccessToken(token);
                 if (session != null) {
                     LoginUser loginUser = session.getLoginUser();
+                    if (!hrIdentityService.isEnabled(loginUser)) {
+                        response.sendError(401); return;
+                    }
+                    boolean needsChange = hrIdentityService.requiresChange(loginUser.getTenantId(),loginUser.getId());
+                    if (!loginUser.isAdmin() && !cn.iocoder.yudao.module.system.service.user.HrIdentityService.allowedEmployeeRequest(
+                            request.getMethod(), request.getRequestURI(), needsChange)) {
+                        response.setStatus(403); response.setContentType("application/json;charset=UTF-8");
+                        response.getWriter().write("{\"code\":403,\"msg\":\"" + (needsChange ? "请先修改初始密码" : "没有访问权限") + "\",\"data\":null}");
+                        return;
+                    }
                     UsernamePasswordAuthenticationToken authentication = new UsernamePasswordAuthenticationToken(
                             loginUser, null, loginUser.getPermissions().stream()
                             .map(SimpleGrantedAuthority::new)

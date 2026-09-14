@@ -30,6 +30,7 @@ spring:
         - classpath:sql/mysql/ai-module-upgrade-20260604-finance-invoice.sql
         - classpath:sql/mysql/ai-module-upgrade-20260624-rfq-email-automation.sql
         - classpath:sql/mysql/ai-module-upgrade-20260709-lead-agent.sql
+        - classpath:sql/mysql/system-menu-runtime-repair-20260828.sql
 
 mybatis-plus:
   configuration:

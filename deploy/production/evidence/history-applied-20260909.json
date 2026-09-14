@@ -1,0 +1,20 @@
+{
+  "ai_chat_citation": 579,
+  "ai_chat_conversation": 48,
+  "ai_chat_message": 152,
+  "ai_data_source": 7,
+  "ai_data_source_raw_record": 54925,
+  "ai_document": 86,
+  "ai_document_chunk": 45294,
+  "ai_knowledge_base": 12,
+  "ai_knowledge_directory": 2,
+  "ai_sync_job": 26,
+  "ai_sync_record": 399,
+  "ai_twohaohr_attendance_record": 50355,
+  "system_dept": 2,
+  "system_users": 5,
+  "conversation_references_verified": true,
+  "vectors": 38821,
+  "vector_content_checksum_verified": true,
+  "files": 53
+}

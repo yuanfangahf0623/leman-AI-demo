@@ -1,0 +1,36 @@
+[Unit]
+Description=Leman AI Knowledge Backend
+Wants=network-online.target
+After=network-online.target mysql.service data-center-dify.service
+Requires=mysql.service data-center-dify.service
+RequiresMountsFor=/opt/data-center /data/ai /var/log/data-center
+
+[Service]
+Type=simple
+User=leman-knowledge
+Group=leman-knowledge
+WorkingDirectory=/opt/data-center/apps/knowledge/current
+EnvironmentFile=/opt/data-center/secrets/knowledge.env
+EnvironmentFile=-/run/leman-knowledge/model.env
+RuntimeDirectory=leman-knowledge
+RuntimeDirectoryMode=0700
+ExecStartPre=+/usr/bin/python3 /opt/data-center/apps/knowledge/current/deploy/production/prepare-model-env.py
+ExecStart=/usr/lib/jvm/java-17-openjdk-amd64/bin/java -Xms512m -Xmx6g -XX:+ExitOnOutOfMemoryError -jar app.jar
+Restart=on-failure
+RestartSec=15
+TimeoutStartSec=240
+TimeoutStopSec=90
+UMask=0077
+MemoryHigh=8G
+MemoryMax=12G
+MemorySwapMax=0
+CPUQuota=400%
+TasksMax=1024
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=strict
+ReadWritePaths=/data/ai/knowledge /var/log/data-center/knowledge /run/leman-knowledge
+
+[Install]
+WantedBy=multi-user.target

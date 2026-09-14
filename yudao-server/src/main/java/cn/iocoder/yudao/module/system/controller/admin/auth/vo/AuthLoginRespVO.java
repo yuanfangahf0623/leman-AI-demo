@@ -17,5 +17,7 @@ public class AuthLoginRespVO {
     private Integer userType;
     private String clientId;
     private Long expiresTime;
+    private boolean requiresPasswordChange;
+    private boolean administrator;
 
 }

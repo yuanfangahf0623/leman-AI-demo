@@ -7,3 +7,4 @@ target/
 .env
 .env.*
 !.env.example
+!frontend/yudao-ui-admin-vue3/.env.server

@@ -1,0 +1,110 @@
+-- RFQ email automation tables.
+
+CREATE TABLE IF NOT EXISTS `rfq` (
+  `id` bigint NOT NULL AUTO_INCREMENT,
+  `tenant_id` bigint NOT NULL DEFAULT 0 COMMENT 'Tenant id',
+  `customer` varchar(255) COLLATE utf8mb4_unicode_ci DEFAULT NULL COMMENT 'Customer name',
+  `product` varchar(512) COLLATE utf8mb4_unicode_ci DEFAULT NULL COMMENT 'Primary product',
+  `products_json` json DEFAULT NULL COMMENT 'Hermes products array',
+  `status` varchar(32) COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'NEW' COMMENT 'NEW / ANALYZING / COSTING / QUOTED / SENT',
+  `risk_score` decimal(10,2) DEFAULT NULL COMMENT 'Hermes risk score',
+  `confidence` decimal(5,4) DEFAULT NULL COMMENT 'Hermes confidence, 0-1',
+  `message_id` varchar(512) COLLATE utf8mb4_unicode_ci NOT NULL COMMENT 'Email Message-ID or stable account UID fallback',
+  `source_account` varchar(255) COLLATE utf8mb4_unicode_ci DEFAULT NULL COMMENT 'Mailbox account key',
+  `email_from` varchar(512) COLLATE utf8mb4_unicode_ci DEFAULT NULL COMMENT 'Email sender',
+  `email_subject` varchar(512) COLLATE utf8mb4_unicode_ci DEFAULT NULL COMMENT 'Email subject',
+  `received_time` datetime DEFAULT NULL COMMENT 'Email received time',
+  `missing_info_json` json DEFAULT NULL COMMENT 'Hermes missing info array',
+  `next_actions_json` json DEFAULT NULL COMMENT 'Hermes next actions array',
+  `raw_result_json` json DEFAULT NULL COMMENT 'Hermes strict JSON output',
+  `creator` varchar(64) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `create_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updater` varchar(64) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `update_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  `deleted` bit(1) NOT NULL DEFAULT b'0',
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_rfq_message_id` (`message_id`),
+  KEY `idx_rfq_tenant_status` (`tenant_id`, `status`, `create_time`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='RFQ';
+
+CREATE TABLE IF NOT EXISTS `rfq_task` (
+  `id` bigint NOT NULL AUTO_INCREMENT,
+  `tenant_id` bigint NOT NULL DEFAULT 0 COMMENT 'Tenant id',
+  `rfq_id` bigint NOT NULL COMMENT 'RFQ id',
+  `task_type` varchar(32) COLLATE utf8mb4_unicode_ci NOT NULL COMMENT 'ENGINEERING / COSTING / PROCUREMENT / SALES',
+  `status` varchar(32) COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'PENDING' COMMENT 'PENDING / PROCESSING / DONE / CANCELLED',
+  `owner` varchar(128) COLLATE utf8mb4_unicode_ci DEFAULT NULL COMMENT 'Owner role or user',
+  `title` varchar(255) COLLATE utf8mb4_unicode_ci DEFAULT NULL COMMENT 'Task title',
+  `detail` text COLLATE utf8mb4_unicode_ci COMMENT 'Task detail',
+  `due_date` date DEFAULT NULL COMMENT 'Due date',
+  `creator` varchar(64) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `create_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updater` varchar(64) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `update_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  `deleted` bit(1) NOT NULL DEFAULT b'0',
+  PRIMARY KEY (`id`),
+  KEY `idx_rfq_task_rfq` (`tenant_id`, `rfq_id`, `task_type`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='RFQ task';
+
+CREATE TABLE IF NOT EXISTS `rfq_mailbox_account` (
+  `id` bigint NOT NULL AUTO_INCREMENT,
+  `tenant_id` bigint NOT NULL DEFAULT 0 COMMENT 'Tenant id',
+  `account` varchar(255) COLLATE utf8mb4_unicode_ci NOT NULL COMMENT 'Stable mailbox account key',
+  `email_address` varchar(255) COLLATE utf8mb4_unicode_ci NOT NULL COMMENT 'Mailbox email address',
+  `host` varchar(255) COLLATE utf8mb4_unicode_ci NOT NULL COMMENT 'IMAP host',
+  `port` int NOT NULL DEFAULT 993 COMMENT 'IMAP SSL port',
+  `username` varchar(255) COLLATE utf8mb4_unicode_ci NOT NULL COMMENT 'IMAP username',
+  `password_ciphertext` varchar(2048) COLLATE utf8mb4_unicode_ci NOT NULL COMMENT 'Encrypted IMAP authorization password',
+  `password_mask` varchar(128) COLLATE utf8mb4_unicode_ci NOT NULL COMMENT 'Masked password for display',
+  `folder` varchar(128) COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'INBOX' COMMENT 'IMAP folder',
+  `enabled` bit(1) NOT NULL DEFAULT b'1' COMMENT 'Whether this mailbox is enabled',
+  `creator` varchar(64) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `create_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updater` varchar(64) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `update_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  `deleted` bit(1) NOT NULL DEFAULT b'0',
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_rfq_mailbox_account` (`tenant_id`, `account`),
+  KEY `idx_rfq_mailbox_enabled` (`tenant_id`, `enabled`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='RFQ mailbox account';
+
+CREATE TABLE IF NOT EXISTS `email_attachment` (
+  `id` bigint NOT NULL AUTO_INCREMENT,
+  `tenant_id` bigint NOT NULL DEFAULT 0 COMMENT 'Tenant id',
+  `account` varchar(255) COLLATE utf8mb4_unicode_ci DEFAULT NULL COMMENT 'Mailbox account key',
+  `message_id` varchar(512) COLLATE utf8mb4_unicode_ci NOT NULL COMMENT 'Email Message-ID or stable account UID fallback',
+  `message_hash` varchar(64) COLLATE utf8mb4_unicode_ci NOT NULL COMMENT 'SHA-256 hash of message_id',
+  `uid` bigint DEFAULT NULL COMMENT 'IMAP UID',
+  `rfq_id` bigint DEFAULT NULL COMMENT 'Linked RFQ id when the email is classified as RFQ',
+  `file_name` varchar(512) COLLATE utf8mb4_unicode_ci NOT NULL COMMENT 'Original attachment file name for display',
+  `content_type` varchar(255) COLLATE utf8mb4_unicode_ci DEFAULT NULL COMMENT 'Attachment content type',
+  `file_size` bigint DEFAULT NULL COMMENT 'Attachment size in bytes',
+  `object_key` varchar(1024) COLLATE utf8mb4_unicode_ci NOT NULL COMMENT 'Object storage key for the raw attachment file',
+  `source_uri` varchar(1024) COLLATE utf8mb4_unicode_ci DEFAULT NULL COMMENT 'Object storage URI for the raw attachment file',
+  `content_hash` varchar(64) COLLATE utf8mb4_unicode_ci NOT NULL COMMENT 'SHA-256 hash of raw attachment content',
+  `extracted_text` mediumtext COLLATE utf8mb4_unicode_ci COMMENT 'Clean extracted attachment text, raw binary is not stored in DB',
+  `creator` varchar(64) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `create_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updater` varchar(64) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `update_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  `deleted` bit(1) NOT NULL DEFAULT b'0',
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_email_attachment_msg_file_hash` (`tenant_id`, `message_hash`, `content_hash`, `deleted`),
+  KEY `idx_email_attachment_rfq` (`tenant_id`, `rfq_id`, `id`),
+  KEY `idx_email_attachment_message` (`tenant_id`, `message_hash`, `id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='Email attachment';
+
+CREATE TABLE IF NOT EXISTS `email_sync_state` (
+  `id` bigint NOT NULL AUTO_INCREMENT,
+  `tenant_id` bigint NOT NULL DEFAULT 0 COMMENT 'Tenant id',
+  `account` varchar(255) COLLATE utf8mb4_unicode_ci NOT NULL COMMENT 'Mailbox account key',
+  `last_uid` bigint NOT NULL DEFAULT 0 COMMENT 'Last processed IMAP UID',
+  `last_sync_time` datetime DEFAULT NULL COMMENT 'Last sync time',
+  `creator` varchar(64) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `create_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updater` varchar(64) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `update_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  `deleted` bit(1) NOT NULL DEFAULT b'0',
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_email_sync_state_account` (`tenant_id`, `account`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='Email sync state';

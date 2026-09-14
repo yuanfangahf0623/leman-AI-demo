@@ -75,6 +75,12 @@ public class TokenStore {
         }
     }
 
+    public void revokeUser(Long tenantId, Long userId) {
+        accessTokenSessions.values().stream()
+                .filter(s -> tenantId.equals(s.getLoginUser().getTenantId()) && userId.equals(s.getLoginUser().getId()))
+                .map(TokenSession::getAccessToken).toList().forEach(this::removeByAccessToken);
+    }
+
     private String generateToken() {
         return UUID.randomUUID().toString().replace("-", "");
     }

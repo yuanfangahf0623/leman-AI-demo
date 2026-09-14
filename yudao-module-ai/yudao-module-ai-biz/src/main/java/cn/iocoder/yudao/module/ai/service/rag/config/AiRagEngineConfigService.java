@@ -23,8 +23,9 @@ public class AiRagEngineConfigService {
     public static final String CONFIG_KEY_RAG_ENGINE = "ai.rag.engine";
     public static final String ENGINE_LOCAL = "local";
     public static final String ENGINE_FASTGPT = "fastgpt";
+    public static final String ENGINE_DIFY = "dify";
 
-    private static final Set<String> SUPPORTED_ENGINES = Set.of(ENGINE_LOCAL, ENGINE_FASTGPT);
+    private static final Set<String> SUPPORTED_ENGINES = Set.of(ENGINE_LOCAL, ENGINE_FASTGPT, ENGINE_DIFY);
 
     private final ObjectProvider<JdbcTemplate> jdbcTemplateProvider;
     private final AiProperties aiProperties;

@@ -15,10 +15,17 @@ import java.time.LocalDateTime;
 public class SystemUserServiceImpl implements SystemUserService {
 
     private final SystemUserMapper userMapper;
+    private final HrIdentityService hrIdentityService;
 
     @Override
     public SystemUserDO getUserByUsername(Long tenantId, String username) {
-        return userMapper.selectByTenantIdAndUsername(tenantId, username);
+        Long id = hrIdentityService.resolveNationalId(tenantId, username);
+        if (id != null) {
+            SystemUserDO user = userMapper.selectById(id);
+            return user != null && tenantId.equals(user.getTenantId()) ? user : null;
+        }
+        SystemUserDO user = userMapper.selectByTenantIdAndUsername(tenantId, username);
+        return user != null && !hrIdentityService.isImported(tenantId,user.getId()) ? user : null;
     }
 
     @Override
